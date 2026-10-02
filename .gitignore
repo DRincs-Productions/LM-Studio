@@ -20,7 +20,6 @@ apps/bionic/.internal/lm-link-config.json
 apps/bionic/.internal/model-data.json
 apps/bionic/.internal/model-index-cache.json
 apps/bionic/.internal/ng-cloud-models.json
-apps/bionic/.internal/ng-mcp.json
 apps/bionic/.internal/ng-sessions.sqlite
 apps/bionic/.internal/ootb-onboarding-initialization.json
 apps/bionic/.internal/persistent-extension-pack-state.json

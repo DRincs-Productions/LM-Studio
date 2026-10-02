@@ -1,0 +1,19 @@
+{
+  "servers": [
+    {
+      "id": "691b6444-5951-471f-b86e-c496514f4c38",
+      "name": "image-worker",
+      "enabled": true,
+      "connection": {
+        "type": "stdio",
+        "command": "node",
+        "args": [
+          "C:\\AI\\image-worker\\mcp\\server.mjs"
+        ],
+        "cwd": "C:\\AI\\image-worker",
+        "env": {},
+        "timeoutMs": 300000
+      }
+    }
+  ]
+}
