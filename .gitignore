@@ -32,3 +32,6 @@ apps/bionic/.internal/ui-guidance-state.json
 apps/bionic/projects
 apps/bionic/server-logs
 apps/bionic/settings.json
+image-worker/mcp/node_modules
+image-worker/output
+image-worker/work
