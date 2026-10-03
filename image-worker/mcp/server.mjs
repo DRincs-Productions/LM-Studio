@@ -30,6 +30,11 @@ const ADULT_MODEL = path.join(
 
 const CODEX = "codex";
 
+const RCLONE = "rclone";
+const RCLONE_REMOTE = "imagecloud:";
+const RCLONE_FINAL_DIR = "ImageWorker/final";
+const RCLONE_TIMEOUT_MS = 120000;
+
 // Maximum time allowed for one Codex review.
 const CODEX_TIMEOUT_MS = 120000;
 
@@ -213,7 +218,7 @@ function parseRetryHint(text) {
 server.tool(
   "system_status",
 
-  "Check the installed Image Worker components.",
+  "Check the installed Image Worker components and cloud transport configuration.",
 
   {},
 
@@ -232,7 +237,11 @@ server.tool(
       work_directory: WORK,
       final_directory: FINAL,
 
-      codex_command: CODEX
+      codex_command: CODEX,
+
+      rclone_command: RCLONE,
+      rclone_remote: RCLONE_REMOTE,
+      rclone_final_directory: RCLONE_FINAL_DIR
     };
 
     return {
@@ -832,6 +841,231 @@ ERROR: ${error.message}`
 `SUCCESS
 FINAL_PATH: ${destination}
 FILE_SIZE_BYTES: ${stats.size}`
+      }]
+    };
+  }
+);
+
+// =========================================================
+// TOOL 6 — publish_image
+// =========================================================
+
+server.tool(
+  "publish_image",
+
+  "Upload a finalized image to the configured cloud transport using rclone and verify that the remote file exists.",
+
+  {
+    local_path: z.string().min(1)
+  },
+
+  async ({ local_path }) => {
+    await ensureDirectories();
+
+    const source = path.resolve(local_path);
+    const finalRoot = path.resolve(FINAL).toLowerCase();
+
+    // ---------------------------------------------
+    // Only finalized images may be published
+    // ---------------------------------------------
+
+    if (
+      source.toLowerCase() !== finalRoot &&
+      !source.toLowerCase().startsWith(
+        finalRoot + path.sep.toLowerCase()
+      )
+    ) {
+      return {
+        content: [{
+          type: "text",
+          text:
+`PUBLISH_FAILED
+REASON: only files inside the final directory may be published
+PATH: ${source}`
+        }]
+      };
+    }
+
+    // ---------------------------------------------
+    // Verify local file
+    // ---------------------------------------------
+
+    if (!(await exists(source))) {
+      return {
+        content: [{
+          type: "text",
+          text:
+`PUBLISH_FAILED
+REASON: local file does not exist
+PATH: ${source}`
+        }]
+      };
+    }
+
+    const filename = path.basename(source);
+
+    const remoteRelativePath =
+      `${RCLONE_FINAL_DIR}/${filename}`;
+
+    const remoteTarget =
+      `${RCLONE_REMOTE}${remoteRelativePath}`;
+
+    // ---------------------------------------------
+    // Upload
+    // ---------------------------------------------
+
+    const upload = await runProcess(
+      RCLONE,
+      [
+        "copyto",
+        source,
+        remoteTarget
+      ],
+      {
+        timeoutMs: RCLONE_TIMEOUT_MS
+      }
+    );
+
+    if (upload.timedOut) {
+      return {
+        content: [{
+          type: "text",
+          text:
+`PUBLISH_FAILED
+REASON: rclone upload timed out
+REMOTE_PATH: ${remoteRelativePath}`
+        }]
+      };
+    }
+
+    if (upload.exitCode !== 0) {
+      return {
+        content: [{
+          type: "text",
+          text:
+`PUBLISH_FAILED
+REASON: rclone upload failed
+EXIT_CODE: ${upload.exitCode}
+
+STDOUT:
+${upload.stdout}
+
+STDERR:
+${upload.stderr}`
+        }]
+      };
+    }
+
+    // ---------------------------------------------
+    // Verify remote object
+    // ---------------------------------------------
+
+    const verify = await runProcess(
+      RCLONE,
+      [
+        "lsjson",
+        remoteTarget
+      ],
+      {
+        timeoutMs: RCLONE_TIMEOUT_MS
+      }
+    );
+
+    if (
+      verify.timedOut ||
+      verify.exitCode !== 0
+    ) {
+      return {
+        content: [{
+          type: "text",
+          text:
+`PUBLISH_FAILED
+REASON: upload completed but remote verification failed
+REMOTE_PATH: ${remoteRelativePath}
+
+STDOUT:
+${verify.stdout}
+
+STDERR:
+${verify.stderr}`
+        }]
+      };
+    }
+
+    let remoteInfo;
+
+    try {
+      remoteInfo =
+        JSON.parse(verify.stdout);
+    } catch {
+      return {
+        content: [{
+          type: "text",
+          text:
+`PUBLISH_FAILED
+REASON: invalid rclone verification response
+REMOTE_PATH: ${remoteRelativePath}`
+        }]
+      };
+    }
+
+    // rclone lsjson may return either one object or an array.
+    if (Array.isArray(remoteInfo)) {
+      remoteInfo = remoteInfo[0];
+    }
+
+    if (!remoteInfo) {
+      return {
+        content: [{
+          type: "text",
+          text:
+`PUBLISH_FAILED
+REASON: remote file was not found after upload
+REMOTE_PATH: ${remoteRelativePath}`
+        }]
+      };
+    }
+
+    const localStats =
+      await fs.stat(source);
+
+    const remoteSize =
+      Number(remoteInfo.Size);
+
+    // ---------------------------------------------
+    // Verify size
+    // ---------------------------------------------
+
+    if (
+      Number.isFinite(remoteSize) &&
+      remoteSize !== localStats.size
+    ) {
+      return {
+        content: [{
+          type: "text",
+          text:
+`PUBLISH_FAILED
+REASON: remote file size does not match local file
+LOCAL_SIZE_BYTES: ${localStats.size}
+REMOTE_SIZE_BYTES: ${remoteSize}
+REMOTE_PATH: ${remoteRelativePath}`
+        }]
+      };
+    }
+
+    // ---------------------------------------------
+    // Success
+    // ---------------------------------------------
+
+    return {
+      content: [{
+        type: "text",
+        text:
+`PUBLISH_SUCCESS
+FILENAME: ${filename}
+REMOTE_PATH: ${remoteRelativePath}
+REMOTE: ${RCLONE_REMOTE}
+FILE_SIZE_BYTES: ${localStats.size}`
       }]
     };
   }
