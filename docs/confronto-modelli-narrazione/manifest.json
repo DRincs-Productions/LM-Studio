@@ -1,0 +1,1315 @@
+{
+  "title": "Confronto modelli di narrazione",
+  "startedAt": "2026-10-04T14:54:57.048Z",
+  "finishedAt": "2026-10-04T15:29:15.592Z",
+  "range": {
+    "minimumNarrativeWords": 250,
+    "maximumNarrativeWords": 400,
+    "exactTarget": null
+  },
+  "reviewer": "Qwen3 8B Narrative Reviewer using the configured Project Worker review prompt",
+  "codex": "Independent final review against the full Project File; Codex artifacts and decisions recorded per candidate.",
+  "writerSystemSha256": "1dc7853d57152a9c32be9f0e8bdf1b0a47128d25043b09fa179308597fe8597a",
+  "briefSha256": "73d0b16d738d552369f7a2780123c32579f49443e9f086b346f90022abf63df9",
+  "rows": [
+    {
+      "slug": "qwen-writer",
+      "model": "Qwen3.5 27B Writer v2 Uncensored Heretic",
+      "identifier": "llmfan46/Qwen3.5-27B-Writer-V2-uncensored-heretic-GGUF/Qwen3.5-27B-Writer-V2-uncensored-heretic-Q4_K_M.gguf",
+      "fileBytes": 17478544864,
+      "quantization": "Q4_K_M",
+      "settings": {
+        "temperature": 0.78,
+        "repeatPenalty": 1.02,
+        "contextLength": 8192
+      },
+      "stages": [
+        {
+          "stage": "writer",
+          "event": "load_requested",
+          "model": "llmfan46/Qwen3.5-27B-Writer-V2-uncensored-heretic-GGUF/Qwen3.5-27B-Writer-V2-uncensored-heretic-Q4_K_M.gguf"
+        },
+        {
+          "stage": "writer",
+          "event": "input_ready",
+          "systemSha256": "1dc7853d57152a9c32be9f0e8bdf1b0a47128d25043b09fa179308597fe8597a",
+          "instructionSha256": "4ae55f993305747cf3dbe00d2130993a6ded6281bed6865ee65f6371b0075014"
+        },
+        {
+          "stage": "writer",
+          "event": "prediction_complete",
+          "model": "llmfan46/Qwen3.5-27B-Writer-V2-uncensored-heretic-GGUF/Qwen3.5-27B-Writer-V2-uncensored-heretic-Q4_K_M.gguf",
+          "responseSha256": "c16685da7f95687ed2aeda30ad441e29827fa9fb17afe075bd3466d44588a35d",
+          "apiStats": {
+            "input_tokens": 716,
+            "total_output_tokens": 524,
+            "reasoning_output_tokens": 0,
+            "tokens_per_second": 6.773804333519951,
+            "time_to_first_token_seconds": 3.959071
+          },
+          "responseIdStored": false
+        },
+        {
+          "stage": "writer",
+          "event": "unloaded",
+          "identifier": "production-writer-comparison-qwen-writer-base-writer-2c63926d-8f16-4096-9296-5de23bfe2bee"
+        },
+        {
+          "stage": "writer",
+          "event": "load_requested",
+          "model": "llmfan46/Qwen3.5-27B-Writer-V2-uncensored-heretic-GGUF/Qwen3.5-27B-Writer-V2-uncensored-heretic-Q4_K_M.gguf"
+        },
+        {
+          "stage": "writer",
+          "event": "input_ready",
+          "systemSha256": "1dc7853d57152a9c32be9f0e8bdf1b0a47128d25043b09fa179308597fe8597a",
+          "instructionSha256": "4ae55f993305747cf3dbe00d2130993a6ded6281bed6865ee65f6371b0075014"
+        },
+        {
+          "stage": "writer",
+          "event": "prediction_complete",
+          "model": "llmfan46/Qwen3.5-27B-Writer-V2-uncensored-heretic-GGUF/Qwen3.5-27B-Writer-V2-uncensored-heretic-Q4_K_M.gguf",
+          "responseSha256": "7cea45ee120a0320b374d44035f63ba8169d40278f599bd7d2123936ee05e099",
+          "apiStats": {
+            "input_tokens": 716,
+            "total_output_tokens": 441,
+            "reasoning_output_tokens": 0,
+            "tokens_per_second": 6.7732851535192795,
+            "time_to_first_token_seconds": 4.054235
+          },
+          "responseIdStored": false
+        },
+        {
+          "stage": "writer",
+          "event": "unloaded",
+          "identifier": "production-writer-comparison-qwen-writer-full-writer-1-399aed33-3e53-4328-9cf9-2802b4514f1c"
+        },
+        {
+          "stage": "reviewer",
+          "event": "load_requested",
+          "model": "Qwen/Qwen3-8B-GGUF/Qwen3-8B-Q4_K_M (Narrative Reviewer).gguf"
+        },
+        {
+          "stage": "reviewer",
+          "event": "input_ready",
+          "systemSha256": "e7fb6fc66c6569ac2a49c4b1d47a043694d35ca8083b75ac18748632b650905d",
+          "instructionSha256": "37daf8086ede17c665fcd99794597ba952039afb84a77f0f89943adf02f684ab"
+        },
+        {
+          "stage": "reviewer",
+          "event": "prediction_complete",
+          "model": "Qwen/Qwen3-8B-GGUF/Qwen3-8B-Q4_K_M (Narrative Reviewer).gguf",
+          "responseSha256": "1f419ecaf00d6da2e3d4f30e87f9c033f122b26b6b50a06576704d5a22031613",
+          "apiStats": {
+            "input_tokens": 1674,
+            "total_output_tokens": 881,
+            "reasoning_output_tokens": 683,
+            "tokens_per_second": 60.098813376247534,
+            "time_to_first_token_seconds": 0.8740739999999999
+          },
+          "responseIdStored": false
+        },
+        {
+          "stage": "reviewer",
+          "event": "unloaded",
+          "identifier": "production-reviewer-comparison-qwen-writer-reviewer-1-cd7a50d7-c343-4ea8-bee8-6bb98a84360a"
+        },
+        {
+          "stage": "writer",
+          "event": "load_requested",
+          "model": "llmfan46/Qwen3.5-27B-Writer-V2-uncensored-heretic-GGUF/Qwen3.5-27B-Writer-V2-uncensored-heretic-Q4_K_M.gguf"
+        },
+        {
+          "stage": "writer",
+          "event": "input_ready",
+          "systemSha256": "1dc7853d57152a9c32be9f0e8bdf1b0a47128d25043b09fa179308597fe8597a",
+          "instructionSha256": "8a45a39ab0a7be8707857ade0ae45c609d4d20d37d8dbb17240f89e704d961d2"
+        },
+        {
+          "stage": "writer",
+          "event": "prediction_complete",
+          "model": "llmfan46/Qwen3.5-27B-Writer-V2-uncensored-heretic-GGUF/Qwen3.5-27B-Writer-V2-uncensored-heretic-Q4_K_M.gguf",
+          "responseSha256": "7cea45ee120a0320b374d44035f63ba8169d40278f599bd7d2123936ee05e099",
+          "apiStats": {
+            "input_tokens": 1489,
+            "total_output_tokens": 441,
+            "reasoning_output_tokens": 0,
+            "tokens_per_second": 6.573372484140655,
+            "time_to_first_token_seconds": 5.806882
+          },
+          "responseIdStored": false
+        },
+        {
+          "stage": "writer",
+          "event": "unloaded",
+          "identifier": "production-writer-comparison-qwen-writer-writer-revision-1-1189a56a-ce3e-4644-a7d3-d97bc386dbc6"
+        },
+        {
+          "stage": "reviewer",
+          "event": "load_requested",
+          "model": "Qwen/Qwen3-8B-GGUF/Qwen3-8B-Q4_K_M (Narrative Reviewer).gguf"
+        },
+        {
+          "stage": "reviewer",
+          "event": "input_ready",
+          "systemSha256": "e7fb6fc66c6569ac2a49c4b1d47a043694d35ca8083b75ac18748632b650905d",
+          "instructionSha256": "62cc7b9acb2ae1696c858ad6f074d0ad724ee37ed7b5abded9015b7fc9250a4a"
+        },
+        {
+          "stage": "reviewer",
+          "event": "prediction_complete",
+          "model": "Qwen/Qwen3-8B-GGUF/Qwen3-8B-Q4_K_M (Narrative Reviewer).gguf",
+          "responseSha256": "8023f5e18066411e621aab9f7bd62265cb832ba9fe2f77d8439e53917787632b",
+          "apiStats": {
+            "input_tokens": 1583,
+            "total_output_tokens": 827,
+            "reasoning_output_tokens": 589,
+            "tokens_per_second": 57.413305387557536,
+            "time_to_first_token_seconds": 0.776934
+          },
+          "responseIdStored": false
+        },
+        {
+          "stage": "reviewer",
+          "event": "unloaded",
+          "identifier": "production-reviewer-comparison-qwen-writer-reviewer-2-90b8dce1-17c4-4706-8baf-9cd2ab2029ab"
+        },
+        {
+          "stage": "writer",
+          "event": "load_requested",
+          "model": "llmfan46/Qwen3.5-27B-Writer-V2-uncensored-heretic-GGUF/Qwen3.5-27B-Writer-V2-uncensored-heretic-Q4_K_M.gguf"
+        },
+        {
+          "stage": "writer",
+          "event": "input_ready",
+          "systemSha256": "1dc7853d57152a9c32be9f0e8bdf1b0a47128d25043b09fa179308597fe8597a",
+          "instructionSha256": "2d72afa647ec240c0a648f78b27be6c66fe08e9d5f202af372518a5c44e2333b"
+        },
+        {
+          "stage": "writer",
+          "event": "prediction_complete",
+          "model": "llmfan46/Qwen3.5-27B-Writer-V2-uncensored-heretic-GGUF/Qwen3.5-27B-Writer-V2-uncensored-heretic-Q4_K_M.gguf",
+          "responseSha256": "7cea45ee120a0320b374d44035f63ba8169d40278f599bd7d2123936ee05e099",
+          "apiStats": {
+            "input_tokens": 1516,
+            "total_output_tokens": 441,
+            "reasoning_output_tokens": 0,
+            "tokens_per_second": 6.649407826407416,
+            "time_to_first_token_seconds": 5.878518
+          },
+          "responseIdStored": false
+        },
+        {
+          "stage": "writer",
+          "event": "unloaded",
+          "identifier": "production-writer-comparison-qwen-writer-writer-revision-2-9dea0969-02d5-4706-8573-b1c0d7a13a08"
+        },
+        {
+          "stage": "reviewer",
+          "event": "load_requested",
+          "model": "Qwen/Qwen3-8B-GGUF/Qwen3-8B-Q4_K_M (Narrative Reviewer).gguf"
+        },
+        {
+          "stage": "reviewer",
+          "event": "input_ready",
+          "systemSha256": "e7fb6fc66c6569ac2a49c4b1d47a043694d35ca8083b75ac18748632b650905d",
+          "instructionSha256": "62cc7b9acb2ae1696c858ad6f074d0ad724ee37ed7b5abded9015b7fc9250a4a"
+        },
+        {
+          "stage": "reviewer",
+          "event": "prediction_complete",
+          "model": "Qwen/Qwen3-8B-GGUF/Qwen3-8B-Q4_K_M (Narrative Reviewer).gguf",
+          "responseSha256": "8ad6f84a220e74a7f8b6681562c62e2e421fa61a50fe7323acbda891a1e13b16",
+          "apiStats": {
+            "input_tokens": 1583,
+            "total_output_tokens": 967,
+            "reasoning_output_tokens": 768,
+            "tokens_per_second": 65.27829773661357,
+            "time_to_first_token_seconds": 0.652614
+          },
+          "responseIdStored": false
+        },
+        {
+          "stage": "reviewer",
+          "event": "unloaded",
+          "identifier": "production-reviewer-comparison-qwen-writer-reviewer-3-c36bc4d1-ae8f-41fd-8d06-ed353b8a3518"
+        },
+        {
+          "stage": "writer",
+          "event": "load_requested",
+          "model": "llmfan46/Qwen3.5-27B-Writer-V2-uncensored-heretic-GGUF/Qwen3.5-27B-Writer-V2-uncensored-heretic-Q4_K_M.gguf"
+        },
+        {
+          "stage": "writer",
+          "event": "input_ready",
+          "systemSha256": "1dc7853d57152a9c32be9f0e8bdf1b0a47128d25043b09fa179308597fe8597a",
+          "instructionSha256": "d44813026272c57558147ec593384ccfe559185b41a502be6f271d5a726a701b"
+        },
+        {
+          "stage": "writer",
+          "event": "prediction_complete",
+          "model": "llmfan46/Qwen3.5-27B-Writer-V2-uncensored-heretic-GGUF/Qwen3.5-27B-Writer-V2-uncensored-heretic-Q4_K_M.gguf",
+          "responseSha256": "7cea45ee120a0320b374d44035f63ba8169d40278f599bd7d2123936ee05e099",
+          "apiStats": {
+            "input_tokens": 1477,
+            "total_output_tokens": 441,
+            "reasoning_output_tokens": 0,
+            "tokens_per_second": 6.6830801088965375,
+            "time_to_first_token_seconds": 5.565378
+          },
+          "responseIdStored": false
+        },
+        {
+          "stage": "writer",
+          "event": "unloaded",
+          "identifier": "production-writer-comparison-qwen-writer-writer-revision-3-f3352dfe-24f2-4adb-810e-103ef83552c9"
+        }
+      ],
+      "status": "codex-not-approved-short",
+      "base": {
+        "file": "C:\\Users\\Shadow\\.lmstudio\\docs\\confronto-modelli-narrazione\\qwen-writer\\base.md",
+        "narrativeWords": 235,
+        "contentChecks": [
+          "Missing ## Narrative / ## Italian Summary structure"
+        ],
+        "presentationChecks": [
+          "Missing narrative section; Codex cannot safely normalize the artifact"
+        ],
+        "sha256": "c16685da7f95687ed2aeda30ad441e29827fa9fb17afe075bd3466d44588a35d"
+      },
+      "full": {
+        "cycles": [
+          {
+            "draft": {
+              "file": "C:\\Users\\Shadow\\.lmstudio\\docs\\confronto-modelli-narrazione\\qwen-writer\\full-writer-1.md",
+              "narrativeWords": 189,
+              "contentChecks": [
+                "Narrative body is incomplete at 189 words (minimum 250)"
+              ],
+              "presentationChecks": [
+                "Missing scene heading or Italian production metadata",
+                "Move acting directions out of bold speaker labels and into prose"
+              ],
+              "sha256": "7cea45ee120a0320b374d44035f63ba8169d40278f599bd7d2123936ee05e099"
+            },
+            "review": {
+              "file": "C:\\Users\\Shadow\\.lmstudio\\docs\\confronto-modelli-narrazione\\qwen-writer\\reviewer-1.md",
+              "narrativeWords": 0,
+              "contentChecks": [
+                "Missing ## Narrative / ## Italian Summary structure"
+              ],
+              "presentationChecks": [
+                "Missing narrative section; Codex cannot safely normalize the artifact"
+              ],
+              "sha256": "1f419ecaf00d6da2e3d4f30e87f9c033f122b26b6b50a06576704d5a22031613",
+              "verdict": "PASS",
+              "evidenceChecks": [],
+              "mechanicallyFlagged": [
+                "Narrative body is incomplete at 189 words (minimum 250)"
+              ]
+            },
+            "revision": {
+              "file": "C:\\Users\\Shadow\\.lmstudio\\docs\\confronto-modelli-narrazione\\qwen-writer\\writer-revision-1.md",
+              "narrativeWords": 189,
+              "contentChecks": [
+                "Narrative body is incomplete at 189 words (minimum 250)"
+              ],
+              "presentationChecks": [
+                "Missing scene heading or Italian production metadata",
+                "Move acting directions out of bold speaker labels and into prose"
+              ],
+              "sha256": "7cea45ee120a0320b374d44035f63ba8169d40278f599bd7d2123936ee05e099",
+              "scopeChecks": [],
+              "changedFromPreviousSha256": "7cea45ee120a0320b374d44035f63ba8169d40278f599bd7d2123936ee05e099"
+            }
+          },
+          {
+            "draft": {
+              "file": "C:\\Users\\Shadow\\.lmstudio\\docs\\confronto-modelli-narrazione\\qwen-writer\\full-writer-2.md",
+              "narrativeWords": 189,
+              "contentChecks": [
+                "Narrative body is incomplete at 189 words (minimum 250)"
+              ],
+              "presentationChecks": [
+                "Missing scene heading or Italian production metadata",
+                "Move acting directions out of bold speaker labels and into prose"
+              ],
+              "sha256": "7cea45ee120a0320b374d44035f63ba8169d40278f599bd7d2123936ee05e099"
+            },
+            "review": {
+              "file": "C:\\Users\\Shadow\\.lmstudio\\docs\\confronto-modelli-narrazione\\qwen-writer\\reviewer-2.md",
+              "narrativeWords": 0,
+              "contentChecks": [
+                "Missing ## Narrative / ## Italian Summary structure"
+              ],
+              "presentationChecks": [
+                "Missing narrative section; Codex cannot safely normalize the artifact"
+              ],
+              "sha256": "8023f5e18066411e621aab9f7bd62265cb832ba9fe2f77d8439e53917787632b",
+              "verdict": "PASS",
+              "evidenceChecks": [],
+              "mechanicallyFlagged": [
+                "Narrative body is incomplete at 189 words (minimum 250)"
+              ]
+            },
+            "revision": {
+              "file": "C:\\Users\\Shadow\\.lmstudio\\docs\\confronto-modelli-narrazione\\qwen-writer\\writer-revision-2.md",
+              "narrativeWords": 189,
+              "contentChecks": [
+                "Narrative body is incomplete at 189 words (minimum 250)"
+              ],
+              "presentationChecks": [
+                "Missing scene heading or Italian production metadata",
+                "Move acting directions out of bold speaker labels and into prose"
+              ],
+              "sha256": "7cea45ee120a0320b374d44035f63ba8169d40278f599bd7d2123936ee05e099",
+              "scopeChecks": [],
+              "changedFromPreviousSha256": "7cea45ee120a0320b374d44035f63ba8169d40278f599bd7d2123936ee05e099"
+            }
+          },
+          {
+            "draft": {
+              "file": "C:\\Users\\Shadow\\.lmstudio\\docs\\confronto-modelli-narrazione\\qwen-writer\\full-writer-3.md",
+              "narrativeWords": 189,
+              "contentChecks": [
+                "Narrative body is incomplete at 189 words (minimum 250)"
+              ],
+              "presentationChecks": [
+                "Missing scene heading or Italian production metadata",
+                "Move acting directions out of bold speaker labels and into prose"
+              ],
+              "sha256": "7cea45ee120a0320b374d44035f63ba8169d40278f599bd7d2123936ee05e099"
+            },
+            "review": {
+              "file": "C:\\Users\\Shadow\\.lmstudio\\docs\\confronto-modelli-narrazione\\qwen-writer\\reviewer-3.md",
+              "narrativeWords": 0,
+              "contentChecks": [
+                "Missing ## Narrative / ## Italian Summary structure"
+              ],
+              "presentationChecks": [
+                "Missing narrative section; Codex cannot safely normalize the artifact"
+              ],
+              "sha256": "8ad6f84a220e74a7f8b6681562c62e2e421fa61a50fe7323acbda891a1e13b16",
+              "verdict": "PASS",
+              "evidenceChecks": [],
+              "mechanicallyFlagged": [
+                "Narrative body is incomplete at 189 words (minimum 250)"
+              ]
+            },
+            "revision": {
+              "file": "C:\\Users\\Shadow\\.lmstudio\\docs\\confronto-modelli-narrazione\\qwen-writer\\writer-revision-3.md",
+              "narrativeWords": 189,
+              "contentChecks": [
+                "Narrative body is incomplete at 189 words (minimum 250)"
+              ],
+              "presentationChecks": [
+                "Missing scene heading or Italian production metadata",
+                "Move acting directions out of bold speaker labels and into prose"
+              ],
+              "sha256": "7cea45ee120a0320b374d44035f63ba8169d40278f599bd7d2123936ee05e099",
+              "scopeChecks": [],
+              "changedFromPreviousSha256": "7cea45ee120a0320b374d44035f63ba8169d40278f599bd7d2123936ee05e099"
+            }
+          },
+          {
+            "draft": {
+              "file": "C:\\Users\\Shadow\\.lmstudio\\docs\\confronto-modelli-narrazione\\qwen-writer\\full-writer-4.md",
+              "narrativeWords": 189,
+              "contentChecks": [
+                "Narrative body is incomplete at 189 words (minimum 250)"
+              ],
+              "presentationChecks": [
+                "Missing scene heading or Italian production metadata",
+                "Move acting directions out of bold speaker labels and into prose"
+              ],
+              "sha256": "7cea45ee120a0320b374d44035f63ba8169d40278f599bd7d2123936ee05e099"
+            }
+          }
+        ],
+        "correctionCount": 3,
+        "reviewerApproved": false,
+        "finalReviewerDraft": "C:\\Users\\Shadow\\.lmstudio\\docs\\confronto-modelli-narrazione\\qwen-writer\\full-writer-4.md"
+      },
+      "codex": {
+        "decision": "not_approved",
+        "finalFile": "./docs/confronto-modelli-narrazione/qwen-writer/codex-final-draft.md",
+        "reviewFile": "./docs/confronto-modelli-narrazione/qwen-writer/codex-review.md",
+        "narrativeWords": 191,
+        "editBudget": "passed",
+        "presentation": "passed",
+        "productionGate": "blocked_below_250_words"
+      }
+    },
+    {
+      "slug": "mistral-small",
+      "model": "Mistralai Mistral Small 3.2 24B Instruct 2506",
+      "identifier": "bartowski/mistralai_Mistral-Small-3.2-24B-Instruct-2506-GGUF/mistralai_Mistral-Small-3.2-24B-Instruct-2506-Q4_K_M.gguf",
+      "fileBytes": 14333915264,
+      "quantization": "Q4_K_M",
+      "settings": {
+        "temperature": 0.78,
+        "repeatPenalty": 1.02,
+        "contextLength": 8192
+      },
+      "stages": [
+        {
+          "stage": "writer",
+          "event": "load_requested",
+          "model": "bartowski/mistralai_Mistral-Small-3.2-24B-Instruct-2506-GGUF/mistralai_Mistral-Small-3.2-24B-Instruct-2506-Q4_K_M.gguf"
+        },
+        {
+          "stage": "writer",
+          "event": "input_ready",
+          "systemSha256": "1dc7853d57152a9c32be9f0e8bdf1b0a47128d25043b09fa179308597fe8597a",
+          "instructionSha256": "4ae55f993305747cf3dbe00d2130993a6ded6281bed6865ee65f6371b0075014"
+        },
+        {
+          "stage": "writer",
+          "event": "unloaded",
+          "identifier": "production-writer-comparison-mistral-small-base-writer-65061324-1b71-404d-98e5-d9bbf6faf4ed"
+        },
+        {
+          "stage": "writer",
+          "event": "load_requested",
+          "model": "bartowski/mistralai_Mistral-Small-3.2-24B-Instruct-2506-GGUF/mistralai_Mistral-Small-3.2-24B-Instruct-2506-Q4_K_M.gguf"
+        },
+        {
+          "stage": "writer",
+          "event": "input_ready",
+          "systemSha256": "1dc7853d57152a9c32be9f0e8bdf1b0a47128d25043b09fa179308597fe8597a",
+          "instructionSha256": "4ae55f993305747cf3dbe00d2130993a6ded6281bed6865ee65f6371b0075014"
+        },
+        {
+          "stage": "writer",
+          "event": "prediction_complete",
+          "model": "bartowski/mistralai_Mistral-Small-3.2-24B-Instruct-2506-GGUF/mistralai_Mistral-Small-3.2-24B-Instruct-2506-Q4_K_M.gguf",
+          "responseSha256": "6a56acc85db1bcb71553608feb4640eeaf62cc74bcf91eabebdf6424204a2728",
+          "apiStats": {
+            "input_tokens": 717,
+            "total_output_tokens": 415,
+            "reasoning_output_tokens": 0,
+            "tokens_per_second": 8.215398542179512,
+            "time_to_first_token_seconds": 2.026419
+          },
+          "responseIdStored": false
+        },
+        {
+          "stage": "writer",
+          "event": "unloaded",
+          "identifier": "production-writer-comparison-mistral-small-base-writer-66b322a4-bfa9-4ab9-8b82-9f3c0adfd60e"
+        },
+        {
+          "stage": "writer",
+          "event": "load_requested",
+          "model": "bartowski/mistralai_Mistral-Small-3.2-24B-Instruct-2506-GGUF/mistralai_Mistral-Small-3.2-24B-Instruct-2506-Q4_K_M.gguf"
+        },
+        {
+          "stage": "writer",
+          "event": "input_ready",
+          "systemSha256": "1dc7853d57152a9c32be9f0e8bdf1b0a47128d25043b09fa179308597fe8597a",
+          "instructionSha256": "4ae55f993305747cf3dbe00d2130993a6ded6281bed6865ee65f6371b0075014"
+        },
+        {
+          "stage": "writer",
+          "event": "prediction_complete",
+          "model": "bartowski/mistralai_Mistral-Small-3.2-24B-Instruct-2506-GGUF/mistralai_Mistral-Small-3.2-24B-Instruct-2506-Q4_K_M.gguf",
+          "responseSha256": "25603c100728eb22c4ebf6c6d540fa8119d6f63b76b08fd6c7fb10e724f44e35",
+          "apiStats": {
+            "input_tokens": 717,
+            "total_output_tokens": 375,
+            "reasoning_output_tokens": 0,
+            "tokens_per_second": 8.267797041057129,
+            "time_to_first_token_seconds": 1.972241
+          },
+          "responseIdStored": false
+        },
+        {
+          "stage": "writer",
+          "event": "unloaded",
+          "identifier": "production-writer-comparison-mistral-small-full-writer-1-697e01ba-3bc5-4424-a81f-6adcb58f3bd3"
+        },
+        {
+          "stage": "reviewer",
+          "event": "load_requested",
+          "model": "Qwen/Qwen3-8B-GGUF/Qwen3-8B-Q4_K_M (Narrative Reviewer).gguf"
+        },
+        {
+          "stage": "reviewer",
+          "event": "input_ready",
+          "systemSha256": "e7fb6fc66c6569ac2a49c4b1d47a043694d35ca8083b75ac18748632b650905d",
+          "instructionSha256": "c6d7e578d4f0aecd016e1472d875637ff3b28f24cd408f379a59770145b120b9"
+        },
+        {
+          "stage": "reviewer",
+          "event": "prediction_complete",
+          "model": "Qwen/Qwen3-8B-GGUF/Qwen3-8B-Q4_K_M (Narrative Reviewer).gguf",
+          "responseSha256": "06fc851f5d1bf5e6a1617967e7257932c51f141e5093ef620a4043d0eb30c0ad",
+          "apiStats": {
+            "input_tokens": 1610,
+            "total_output_tokens": 533,
+            "reasoning_output_tokens": 408,
+            "tokens_per_second": 65.43478710078631,
+            "time_to_first_token_seconds": 0.688907
+          },
+          "responseIdStored": false
+        },
+        {
+          "stage": "reviewer",
+          "event": "unloaded",
+          "identifier": "production-reviewer-comparison-mistral-small-reviewer-1-261d5a4a-6e95-4ec8-ba2b-df36389fd62b"
+        },
+        {
+          "stage": "writer",
+          "event": "load_requested",
+          "model": "bartowski/mistralai_Mistral-Small-3.2-24B-Instruct-2506-GGUF/mistralai_Mistral-Small-3.2-24B-Instruct-2506-Q4_K_M.gguf"
+        },
+        {
+          "stage": "writer",
+          "event": "input_ready",
+          "systemSha256": "1dc7853d57152a9c32be9f0e8bdf1b0a47128d25043b09fa179308597fe8597a",
+          "instructionSha256": "940035a847c602102824bc6e799dbd4fb3cd93f83b8b8529df415a77172dda0c"
+        },
+        {
+          "stage": "writer",
+          "event": "prediction_complete",
+          "model": "bartowski/mistralai_Mistral-Small-3.2-24B-Instruct-2506-GGUF/mistralai_Mistral-Small-3.2-24B-Instruct-2506-Q4_K_M.gguf",
+          "responseSha256": "71daef106712819750e891a5e18aafce7037763c9b298b109ccf76f1584104ca",
+          "apiStats": {
+            "input_tokens": 1376,
+            "total_output_tokens": 383,
+            "reasoning_output_tokens": 0,
+            "tokens_per_second": 7.845836138767456,
+            "time_to_first_token_seconds": 3.252815
+          },
+          "responseIdStored": false
+        },
+        {
+          "stage": "writer",
+          "event": "unloaded",
+          "identifier": "production-writer-comparison-mistral-small-writer-revision-1-6cf133e5-efa6-4837-9354-f49cc14cb3a6"
+        },
+        {
+          "stage": "reviewer",
+          "event": "load_requested",
+          "model": "Qwen/Qwen3-8B-GGUF/Qwen3-8B-Q4_K_M (Narrative Reviewer).gguf"
+        },
+        {
+          "stage": "reviewer",
+          "event": "input_ready",
+          "systemSha256": "e7fb6fc66c6569ac2a49c4b1d47a043694d35ca8083b75ac18748632b650905d",
+          "instructionSha256": "03b1d7684b5202041e1274c8c2a27a021e4a21af45f0975093821aa6ae712277"
+        },
+        {
+          "stage": "reviewer",
+          "event": "prediction_complete",
+          "model": "Qwen/Qwen3-8B-GGUF/Qwen3-8B-Q4_K_M (Narrative Reviewer).gguf",
+          "responseSha256": "4d5c547cacd61159407b9c1d265ac57f8c4b6d5459d4ddde5ffdafb87e17148a",
+          "apiStats": {
+            "input_tokens": 1527,
+            "total_output_tokens": 564,
+            "reasoning_output_tokens": 381,
+            "tokens_per_second": 66.06656787582959,
+            "time_to_first_token_seconds": 0.605972
+          },
+          "responseIdStored": false
+        },
+        {
+          "stage": "reviewer",
+          "event": "unloaded",
+          "identifier": "production-reviewer-comparison-mistral-small-reviewer-2-5caec799-2cd4-4f52-a89f-ccd4ef84070c"
+        },
+        {
+          "stage": "writer",
+          "event": "load_requested",
+          "model": "bartowski/mistralai_Mistral-Small-3.2-24B-Instruct-2506-GGUF/mistralai_Mistral-Small-3.2-24B-Instruct-2506-Q4_K_M.gguf"
+        },
+        {
+          "stage": "writer",
+          "event": "input_ready",
+          "systemSha256": "1dc7853d57152a9c32be9f0e8bdf1b0a47128d25043b09fa179308597fe8597a",
+          "instructionSha256": "c8504c9e3b8dfbf42b63451446453e86d90a2d7d6b0d444179496e36984830b7"
+        },
+        {
+          "stage": "writer",
+          "event": "prediction_complete",
+          "model": "bartowski/mistralai_Mistral-Small-3.2-24B-Instruct-2506-GGUF/mistralai_Mistral-Small-3.2-24B-Instruct-2506-Q4_K_M.gguf",
+          "responseSha256": "a3461e8d4f4dff6363e706575abb18c160f7f970cbad20fd2d66b20899619b48",
+          "apiStats": {
+            "input_tokens": 1432,
+            "total_output_tokens": 341,
+            "reasoning_output_tokens": 0,
+            "tokens_per_second": 7.981872697581869,
+            "time_to_first_token_seconds": 3.34321
+          },
+          "responseIdStored": false
+        },
+        {
+          "stage": "writer",
+          "event": "unloaded",
+          "identifier": "production-writer-comparison-mistral-small-writer-revision-2-13aac97e-1a4c-45ff-934c-37d1b34b02a3"
+        },
+        {
+          "stage": "reviewer",
+          "event": "load_requested",
+          "model": "Qwen/Qwen3-8B-GGUF/Qwen3-8B-Q4_K_M (Narrative Reviewer).gguf"
+        },
+        {
+          "stage": "reviewer",
+          "event": "input_ready",
+          "systemSha256": "e7fb6fc66c6569ac2a49c4b1d47a043694d35ca8083b75ac18748632b650905d",
+          "instructionSha256": "d495a4328d3c95de9a70f196585a5dc35dba92d1eb9ebb16d7f4f6d95269dbb6"
+        },
+        {
+          "stage": "reviewer",
+          "event": "prediction_complete",
+          "model": "Qwen/Qwen3-8B-GGUF/Qwen3-8B-Q4_K_M (Narrative Reviewer).gguf",
+          "responseSha256": "cfe6036062d796b571a387f9ad5e280bd6721e449d7775a2c809ede91bf7d180",
+          "apiStats": {
+            "input_tokens": 1486,
+            "total_output_tokens": 676,
+            "reasoning_output_tokens": 498,
+            "tokens_per_second": 65.66255807123677,
+            "time_to_first_token_seconds": 0.6122340000000001
+          },
+          "responseIdStored": false
+        },
+        {
+          "stage": "reviewer",
+          "event": "unloaded",
+          "identifier": "production-reviewer-comparison-mistral-small-reviewer-3-04c6516e-0da2-43c8-9ea8-91905aa4a2d6"
+        },
+        {
+          "stage": "writer",
+          "event": "load_requested",
+          "model": "bartowski/mistralai_Mistral-Small-3.2-24B-Instruct-2506-GGUF/mistralai_Mistral-Small-3.2-24B-Instruct-2506-Q4_K_M.gguf"
+        },
+        {
+          "stage": "writer",
+          "event": "input_ready",
+          "systemSha256": "1dc7853d57152a9c32be9f0e8bdf1b0a47128d25043b09fa179308597fe8597a",
+          "instructionSha256": "510970aaa0ae892673e8209e735ed5e6fe63f443cb9fdd6170bef016f9839191"
+        },
+        {
+          "stage": "writer",
+          "event": "prediction_complete",
+          "model": "bartowski/mistralai_Mistral-Small-3.2-24B-Instruct-2506-GGUF/mistralai_Mistral-Small-3.2-24B-Instruct-2506-Q4_K_M.gguf",
+          "responseSha256": "a3461e8d4f4dff6363e706575abb18c160f7f970cbad20fd2d66b20899619b48",
+          "apiStats": {
+            "input_tokens": 1361,
+            "total_output_tokens": 341,
+            "reasoning_output_tokens": 0,
+            "tokens_per_second": 8.021441218005833,
+            "time_to_first_token_seconds": 3.237774
+          },
+          "responseIdStored": false
+        },
+        {
+          "stage": "writer",
+          "event": "unloaded",
+          "identifier": "production-writer-comparison-mistral-small-writer-revision-3-406fe202-5e6b-4ac1-acd1-b431b1466d56"
+        }
+      ],
+      "status": "codex-not-approved-short",
+      "base": {
+        "file": "C:\\Users\\Shadow\\.lmstudio\\docs\\confronto-modelli-narrazione\\mistral-small\\base.md",
+        "narrativeWords": 151,
+        "contentChecks": [
+          "Narrative body is incomplete at 151 words (minimum 250)",
+          "Receptionist must explicitly clarify in spoken dialogue that she meant the room minibar/drinks/snacks, not a personal romantic offer; the Italian summary does not count",
+          "Receptionist must explicitly say in spoken dialogue that the minibar explanation is not a personal/romantic offer or invitation"
+        ],
+        "presentationChecks": [
+          "Missing scene heading or Italian production metadata",
+          "Narrative must start with > Visual:",
+          "This test requires one Visual directive and one image",
+          "Move acting directions out of bold speaker labels and into prose"
+        ],
+        "sha256": "6a56acc85db1bcb71553608feb4640eeaf62cc74bcf91eabebdf6424204a2728"
+      },
+      "full": {
+        "cycles": [
+          {
+            "draft": {
+              "file": "C:\\Users\\Shadow\\.lmstudio\\docs\\confronto-modelli-narrazione\\mistral-small\\full-writer-1.md",
+              "narrativeWords": 160,
+              "contentChecks": [
+                "Missing ## Narrative / ## Italian Summary structure"
+              ],
+              "presentationChecks": [
+                "Missing narrative section; Codex cannot safely normalize the artifact"
+              ],
+              "sha256": "25603c100728eb22c4ebf6c6d540fa8119d6f63b76b08fd6c7fb10e724f44e35"
+            },
+            "review": {
+              "file": "C:\\Users\\Shadow\\.lmstudio\\docs\\confronto-modelli-narrazione\\mistral-small\\reviewer-1.md",
+              "narrativeWords": 0,
+              "contentChecks": [
+                "Missing ## Narrative / ## Italian Summary structure"
+              ],
+              "presentationChecks": [
+                "Missing narrative section; Codex cannot safely normalize the artifact"
+              ],
+              "sha256": "06fc851f5d1bf5e6a1617967e7257932c51f141e5093ef620a4043d0eb30c0ad",
+              "verdict": "PASS",
+              "evidenceChecks": [
+                "Reviewer comic-response quote is not an Alex dialogue line"
+              ],
+              "mechanicallyFlagged": [
+                "Missing ## Narrative / ## Italian Summary structure"
+              ]
+            },
+            "revision": {
+              "file": "C:\\Users\\Shadow\\.lmstudio\\docs\\confronto-modelli-narrazione\\mistral-small\\writer-revision-1.md",
+              "narrativeWords": 165,
+              "contentChecks": [
+                "Missing ## Narrative / ## Italian Summary structure"
+              ],
+              "presentationChecks": [
+                "Missing narrative section; Codex cannot safely normalize the artifact"
+              ],
+              "sha256": "71daef106712819750e891a5e18aafce7037763c9b298b109ccf76f1584104ca",
+              "scopeChecks": [],
+              "changedFromPreviousSha256": "25603c100728eb22c4ebf6c6d540fa8119d6f63b76b08fd6c7fb10e724f44e35"
+            }
+          },
+          {
+            "draft": {
+              "file": "C:\\Users\\Shadow\\.lmstudio\\docs\\confronto-modelli-narrazione\\mistral-small\\full-writer-2.md",
+              "narrativeWords": 165,
+              "contentChecks": [
+                "Missing ## Narrative / ## Italian Summary structure"
+              ],
+              "presentationChecks": [
+                "Missing narrative section; Codex cannot safely normalize the artifact"
+              ],
+              "sha256": "71daef106712819750e891a5e18aafce7037763c9b298b109ccf76f1584104ca"
+            },
+            "review": {
+              "file": "C:\\Users\\Shadow\\.lmstudio\\docs\\confronto-modelli-narrazione\\mistral-small\\reviewer-2.md",
+              "narrativeWords": 0,
+              "contentChecks": [
+                "Missing ## Narrative / ## Italian Summary structure"
+              ],
+              "presentationChecks": [
+                "Missing narrative section; Codex cannot safely normalize the artifact"
+              ],
+              "sha256": "4d5c547cacd61159407b9c1d265ac57f8c4b6d5459d4ddde5ffdafb87e17148a",
+              "verdict": "PASS",
+              "evidenceChecks": [
+                "Reviewer misunderstanding quote does not occur verbatim in the Narrative",
+                "Reviewer comic-response quote is not an Alex dialogue line"
+              ],
+              "mechanicallyFlagged": [
+                "Missing ## Narrative / ## Italian Summary structure"
+              ]
+            },
+            "revision": {
+              "file": "C:\\Users\\Shadow\\.lmstudio\\docs\\confronto-modelli-narrazione\\mistral-small\\writer-revision-2.md",
+              "narrativeWords": 120,
+              "contentChecks": [
+                "Missing ## Narrative / ## Italian Summary structure"
+              ],
+              "presentationChecks": [
+                "Missing narrative section; Codex cannot safely normalize the artifact"
+              ],
+              "sha256": "a3461e8d4f4dff6363e706575abb18c160f7f970cbad20fd2d66b20899619b48",
+              "scopeChecks": [],
+              "changedFromPreviousSha256": "71daef106712819750e891a5e18aafce7037763c9b298b109ccf76f1584104ca"
+            }
+          },
+          {
+            "draft": {
+              "file": "C:\\Users\\Shadow\\.lmstudio\\docs\\confronto-modelli-narrazione\\mistral-small\\full-writer-3.md",
+              "narrativeWords": 120,
+              "contentChecks": [
+                "Missing ## Narrative / ## Italian Summary structure"
+              ],
+              "presentationChecks": [
+                "Missing narrative section; Codex cannot safely normalize the artifact"
+              ],
+              "sha256": "a3461e8d4f4dff6363e706575abb18c160f7f970cbad20fd2d66b20899619b48"
+            },
+            "review": {
+              "file": "C:\\Users\\Shadow\\.lmstudio\\docs\\confronto-modelli-narrazione\\mistral-small\\reviewer-3.md",
+              "narrativeWords": 0,
+              "contentChecks": [
+                "Missing ## Narrative / ## Italian Summary structure"
+              ],
+              "presentationChecks": [
+                "Missing narrative section; Codex cannot safely normalize the artifact"
+              ],
+              "sha256": "cfe6036062d796b571a387f9ad5e280bd6721e449d7775a2c809ede91bf7d180",
+              "verdict": "PASS",
+              "evidenceChecks": [],
+              "mechanicallyFlagged": [
+                "Missing ## Narrative / ## Italian Summary structure"
+              ]
+            },
+            "revision": {
+              "file": "C:\\Users\\Shadow\\.lmstudio\\docs\\confronto-modelli-narrazione\\mistral-small\\writer-revision-3.md",
+              "narrativeWords": 120,
+              "contentChecks": [
+                "Missing ## Narrative / ## Italian Summary structure"
+              ],
+              "presentationChecks": [
+                "Missing narrative section; Codex cannot safely normalize the artifact"
+              ],
+              "sha256": "a3461e8d4f4dff6363e706575abb18c160f7f970cbad20fd2d66b20899619b48",
+              "scopeChecks": [],
+              "changedFromPreviousSha256": "a3461e8d4f4dff6363e706575abb18c160f7f970cbad20fd2d66b20899619b48"
+            }
+          },
+          {
+            "draft": {
+              "file": "C:\\Users\\Shadow\\.lmstudio\\docs\\confronto-modelli-narrazione\\mistral-small\\full-writer-4.md",
+              "narrativeWords": 120,
+              "contentChecks": [
+                "Missing ## Narrative / ## Italian Summary structure"
+              ],
+              "presentationChecks": [
+                "Missing narrative section; Codex cannot safely normalize the artifact"
+              ],
+              "sha256": "a3461e8d4f4dff6363e706575abb18c160f7f970cbad20fd2d66b20899619b48"
+            }
+          }
+        ],
+        "correctionCount": 3,
+        "reviewerApproved": false,
+        "finalReviewerDraft": "C:\\Users\\Shadow\\.lmstudio\\docs\\confronto-modelli-narrazione\\mistral-small\\full-writer-4.md"
+      },
+      "codex": {
+        "decision": "not_approved",
+        "finalFile": "./docs/confronto-modelli-narrazione/mistral-small/codex-final-draft.md",
+        "reviewFile": "./docs/confronto-modelli-narrazione/mistral-small/codex-review.md",
+        "narrativeWords": 123,
+        "editBudget": "passed",
+        "presentation": "passed",
+        "productionGate": "blocked_below_250_words"
+      }
+    },
+    {
+      "slug": "hemmingway",
+      "model": "Hemmingway1 Extreme",
+      "identifier": "JohnDi/Hemmingway-1-Abliterated-Extreme-GGUF/Hemmingway1-Extreme-Q4_K_M.gguf",
+      "fileBytes": 16547400032,
+      "quantization": "Q4_K_M",
+      "settings": {
+        "temperature": 0.78,
+        "repeatPenalty": 1.02,
+        "contextLength": 8192
+      },
+      "stages": [
+        {
+          "stage": "writer",
+          "event": "load_requested",
+          "model": "JohnDi/Hemmingway-1-Abliterated-Extreme-GGUF/Hemmingway1-Extreme-Q4_K_M.gguf"
+        },
+        {
+          "stage": "writer",
+          "event": "input_ready",
+          "systemSha256": "1dc7853d57152a9c32be9f0e8bdf1b0a47128d25043b09fa179308597fe8597a",
+          "instructionSha256": "4ae55f993305747cf3dbe00d2130993a6ded6281bed6865ee65f6371b0075014"
+        },
+        {
+          "stage": "writer",
+          "event": "prediction_complete",
+          "model": "JohnDi/Hemmingway-1-Abliterated-Extreme-GGUF/Hemmingway1-Extreme-Q4_K_M.gguf",
+          "responseSha256": "c09587f8f8d63caa37b6336d6f4c4985bd0e3a42cd2523952165559045006507",
+          "apiStats": {
+            "input_tokens": 716,
+            "total_output_tokens": 581,
+            "reasoning_output_tokens": 0,
+            "tokens_per_second": 6.9613549859798916,
+            "time_to_first_token_seconds": 3.865109
+          },
+          "responseIdStored": false
+        },
+        {
+          "stage": "writer",
+          "event": "unloaded",
+          "identifier": "production-writer-comparison-hemmingway-base-writer-3499f9d9-c001-4513-b138-609d8e6a7e66"
+        },
+        {
+          "stage": "writer",
+          "event": "load_requested",
+          "model": "JohnDi/Hemmingway-1-Abliterated-Extreme-GGUF/Hemmingway1-Extreme-Q4_K_M.gguf"
+        },
+        {
+          "stage": "writer",
+          "event": "input_ready",
+          "systemSha256": "1dc7853d57152a9c32be9f0e8bdf1b0a47128d25043b09fa179308597fe8597a",
+          "instructionSha256": "4ae55f993305747cf3dbe00d2130993a6ded6281bed6865ee65f6371b0075014"
+        },
+        {
+          "stage": "writer",
+          "event": "prediction_complete",
+          "model": "JohnDi/Hemmingway-1-Abliterated-Extreme-GGUF/Hemmingway1-Extreme-Q4_K_M.gguf",
+          "responseSha256": "b8c72936931b80e5182b2dcc13d7edb091f1beda2d8a732bfcbbf4110f4647a3",
+          "apiStats": {
+            "input_tokens": 716,
+            "total_output_tokens": 471,
+            "reasoning_output_tokens": 0,
+            "tokens_per_second": 7.470335773473479,
+            "time_to_first_token_seconds": 3.533424
+          },
+          "responseIdStored": false
+        },
+        {
+          "stage": "writer",
+          "event": "unloaded",
+          "identifier": "production-writer-comparison-hemmingway-full-writer-1-abfbe173-702b-4491-b8d1-3f72368c2e4b"
+        },
+        {
+          "stage": "reviewer",
+          "event": "load_requested",
+          "model": "Qwen/Qwen3-8B-GGUF/Qwen3-8B-Q4_K_M (Narrative Reviewer).gguf"
+        },
+        {
+          "stage": "reviewer",
+          "event": "input_ready",
+          "systemSha256": "e7fb6fc66c6569ac2a49c4b1d47a043694d35ca8083b75ac18748632b650905d",
+          "instructionSha256": "85885ea977488f54662af3b334f391e3b178e7424a6ca75d9f8dca6033afe499"
+        },
+        {
+          "stage": "reviewer",
+          "event": "prediction_complete",
+          "model": "Qwen/Qwen3-8B-GGUF/Qwen3-8B-Q4_K_M (Narrative Reviewer).gguf",
+          "responseSha256": "a14c32230ae61fd729bf5e4848e46de18531ffb18247d105ed6277ae455c9f3a",
+          "apiStats": {
+            "input_tokens": 1706,
+            "total_output_tokens": 652,
+            "reasoning_output_tokens": 449,
+            "tokens_per_second": 73.25867175613753,
+            "time_to_first_token_seconds": 0.681177
+          },
+          "responseIdStored": false
+        },
+        {
+          "stage": "reviewer",
+          "event": "unloaded",
+          "identifier": "production-reviewer-comparison-hemmingway-reviewer-1-f8f12c5b-4d39-4b0e-8b5e-1f4548e40b61"
+        },
+        {
+          "stage": "writer",
+          "event": "load_requested",
+          "model": "JohnDi/Hemmingway-1-Abliterated-Extreme-GGUF/Hemmingway1-Extreme-Q4_K_M.gguf"
+        },
+        {
+          "stage": "writer",
+          "event": "input_ready",
+          "systemSha256": "1dc7853d57152a9c32be9f0e8bdf1b0a47128d25043b09fa179308597fe8597a",
+          "instructionSha256": "bad0624060310b3c6a06f39e199cb16b5005508b348caeaccbf26931bdb2b4a6"
+        },
+        {
+          "stage": "writer",
+          "event": "prediction_complete",
+          "model": "JohnDi/Hemmingway-1-Abliterated-Extreme-GGUF/Hemmingway1-Extreme-Q4_K_M.gguf",
+          "responseSha256": "adf198bfb6f1d02a64eda68a41b37b31f05d3107fcfb7d04316dcc80ed99bdd6",
+          "apiStats": {
+            "input_tokens": 1577,
+            "total_output_tokens": 578,
+            "reasoning_output_tokens": 0,
+            "tokens_per_second": 6.146043194434178,
+            "time_to_first_token_seconds": 5.851445
+          },
+          "responseIdStored": false
+        },
+        {
+          "stage": "writer",
+          "event": "unloaded",
+          "identifier": "production-writer-comparison-hemmingway-writer-revision-1-0a44b882-4969-4f4f-b51b-3f07df207b12"
+        },
+        {
+          "stage": "reviewer",
+          "event": "load_requested",
+          "model": "Qwen/Qwen3-8B-GGUF/Qwen3-8B-Q4_K_M (Narrative Reviewer).gguf"
+        },
+        {
+          "stage": "reviewer",
+          "event": "input_ready",
+          "systemSha256": "e7fb6fc66c6569ac2a49c4b1d47a043694d35ca8083b75ac18748632b650905d",
+          "instructionSha256": "b711eb7ec24ab831c15b7a2d644534801bb7fcd3d69477a9a117b43681cbe079"
+        },
+        {
+          "stage": "reviewer",
+          "event": "prediction_complete",
+          "model": "Qwen/Qwen3-8B-GGUF/Qwen3-8B-Q4_K_M (Narrative Reviewer).gguf",
+          "responseSha256": "8f7f615f0e13298d4f8cade4773adf517b970056de8341a452af54c55522dd28",
+          "apiStats": {
+            "input_tokens": 1733,
+            "total_output_tokens": 703,
+            "reasoning_output_tokens": 589,
+            "tokens_per_second": 65.10137127414048,
+            "time_to_first_token_seconds": 0.737085
+          },
+          "responseIdStored": false
+        },
+        {
+          "stage": "reviewer",
+          "event": "unloaded",
+          "identifier": "production-reviewer-comparison-hemmingway-reviewer-2-f8b03c8e-1b94-4eea-9561-2f208d7ad321"
+        },
+        {
+          "stage": "writer",
+          "event": "load_requested",
+          "model": "JohnDi/Hemmingway-1-Abliterated-Extreme-GGUF/Hemmingway1-Extreme-Q4_K_M.gguf"
+        },
+        {
+          "stage": "writer",
+          "event": "input_ready",
+          "systemSha256": "1dc7853d57152a9c32be9f0e8bdf1b0a47128d25043b09fa179308597fe8597a",
+          "instructionSha256": "d6812bae5c4ccc8186c68a9d257af970ee0dc9980e0031cf60eddf5307ee9f14"
+        },
+        {
+          "stage": "writer",
+          "event": "prediction_complete",
+          "model": "JohnDi/Hemmingway-1-Abliterated-Extreme-GGUF/Hemmingway1-Extreme-Q4_K_M.gguf",
+          "responseSha256": "adf198bfb6f1d02a64eda68a41b37b31f05d3107fcfb7d04316dcc80ed99bdd6",
+          "apiStats": {
+            "input_tokens": 1544,
+            "total_output_tokens": 578,
+            "reasoning_output_tokens": 0,
+            "tokens_per_second": 6.7396759290488495,
+            "time_to_first_token_seconds": 5.773535
+          },
+          "responseIdStored": false
+        },
+        {
+          "stage": "writer",
+          "event": "unloaded",
+          "identifier": "production-writer-comparison-hemmingway-writer-revision-2-3b73d8e6-b26c-44a5-9891-e2464fab56b6"
+        },
+        {
+          "stage": "reviewer",
+          "event": "load_requested",
+          "model": "Qwen/Qwen3-8B-GGUF/Qwen3-8B-Q4_K_M (Narrative Reviewer).gguf"
+        },
+        {
+          "stage": "reviewer",
+          "event": "input_ready",
+          "systemSha256": "e7fb6fc66c6569ac2a49c4b1d47a043694d35ca8083b75ac18748632b650905d",
+          "instructionSha256": "b711eb7ec24ab831c15b7a2d644534801bb7fcd3d69477a9a117b43681cbe079"
+        },
+        {
+          "stage": "reviewer",
+          "event": "prediction_complete",
+          "model": "Qwen/Qwen3-8B-GGUF/Qwen3-8B-Q4_K_M (Narrative Reviewer).gguf",
+          "responseSha256": "8f7f615f0e13298d4f8cade4773adf517b970056de8341a452af54c55522dd28",
+          "apiStats": {
+            "input_tokens": 1733,
+            "total_output_tokens": 585,
+            "reasoning_output_tokens": 471,
+            "tokens_per_second": 65.43124117686602,
+            "time_to_first_token_seconds": 0.727775
+          },
+          "responseIdStored": false
+        },
+        {
+          "stage": "reviewer",
+          "event": "unloaded",
+          "identifier": "production-reviewer-comparison-hemmingway-reviewer-3-c9e760f2-71b4-4d15-8634-1a0f5f66a899"
+        },
+        {
+          "stage": "writer",
+          "event": "load_requested",
+          "model": "JohnDi/Hemmingway-1-Abliterated-Extreme-GGUF/Hemmingway1-Extreme-Q4_K_M.gguf"
+        },
+        {
+          "stage": "writer",
+          "event": "input_ready",
+          "systemSha256": "1dc7853d57152a9c32be9f0e8bdf1b0a47128d25043b09fa179308597fe8597a",
+          "instructionSha256": "d6812bae5c4ccc8186c68a9d257af970ee0dc9980e0031cf60eddf5307ee9f14"
+        },
+        {
+          "stage": "writer",
+          "event": "prediction_complete",
+          "model": "JohnDi/Hemmingway-1-Abliterated-Extreme-GGUF/Hemmingway1-Extreme-Q4_K_M.gguf",
+          "responseSha256": "adf198bfb6f1d02a64eda68a41b37b31f05d3107fcfb7d04316dcc80ed99bdd6",
+          "apiStats": {
+            "input_tokens": 1544,
+            "total_output_tokens": 578,
+            "reasoning_output_tokens": 0,
+            "tokens_per_second": 6.650939864253511,
+            "time_to_first_token_seconds": 5.730956
+          },
+          "responseIdStored": false
+        },
+        {
+          "stage": "writer",
+          "event": "unloaded",
+          "identifier": "production-writer-comparison-hemmingway-writer-revision-3-cbd82a4a-eba4-4f95-978e-3f43ff9f2935"
+        }
+      ],
+      "status": "codex-narrative-pass-gate-false-positive",
+      "base": {
+        "file": "C:\\Users\\Shadow\\.lmstudio\\docs\\confronto-modelli-narrazione\\hemmingway\\base.md",
+        "narrativeWords": 292,
+        "contentChecks": [
+          "Receptionist must explicitly clarify in spoken dialogue that she meant the room minibar/drinks/snacks, not a personal romantic offer; the Italian summary does not count"
+        ],
+        "presentationChecks": [
+          "Missing scene heading or Italian production metadata"
+        ],
+        "sha256": "c09587f8f8d63caa37b6336d6f4c4985bd0e3a42cd2523952165559045006507"
+      },
+      "full": {
+        "cycles": [
+          {
+            "draft": {
+              "file": "C:\\Users\\Shadow\\.lmstudio\\docs\\confronto-modelli-narrazione\\hemmingway\\full-writer-1.md",
+              "narrativeWords": 299,
+              "contentChecks": [
+                "Receptionist must explicitly clarify in spoken dialogue that she meant the room minibar/drinks/snacks, not a personal romantic offer; the Italian summary does not count"
+              ],
+              "presentationChecks": [
+                "Missing scene heading or Italian production metadata"
+              ],
+              "sha256": "b8c72936931b80e5182b2dcc13d7edb091f1beda2d8a732bfcbbf4110f4647a3"
+            },
+            "review": {
+              "file": "C:\\Users\\Shadow\\.lmstudio\\docs\\confronto-modelli-narrazione\\hemmingway\\reviewer-1.md",
+              "narrativeWords": 0,
+              "contentChecks": [
+                "Missing ## Narrative / ## Italian Summary structure"
+              ],
+              "presentationChecks": [
+                "Missing narrative section; Codex cannot safely normalize the artifact"
+              ],
+              "sha256": "a14c32230ae61fd729bf5e4848e46de18531ffb18247d105ed6277ae455c9f3a",
+              "verdict": "PASS",
+              "evidenceChecks": [
+                "Reviewer comic response quote does not occur verbatim in the Narrative",
+                "Reviewer comic-response quote is not an Alex dialogue line"
+              ],
+              "mechanicallyFlagged": [
+                "Receptionist must explicitly clarify in spoken dialogue that she meant the room minibar/drinks/snacks, not a personal romantic offer; the Italian summary does not count"
+              ]
+            },
+            "revision": {
+              "file": "C:\\Users\\Shadow\\.lmstudio\\docs\\confronto-modelli-narrazione\\hemmingway\\writer-revision-1.md",
+              "narrativeWords": 302,
+              "contentChecks": [
+                "Receptionist must explicitly clarify in spoken dialogue that she meant the room minibar/drinks/snacks, not a personal romantic offer; the Italian summary does not count"
+              ],
+              "presentationChecks": [
+                "Missing scene heading or Italian production metadata"
+              ],
+              "sha256": "adf198bfb6f1d02a64eda68a41b37b31f05d3107fcfb7d04316dcc80ed99bdd6",
+              "scopeChecks": [],
+              "changedFromPreviousSha256": "b8c72936931b80e5182b2dcc13d7edb091f1beda2d8a732bfcbbf4110f4647a3"
+            }
+          },
+          {
+            "draft": {
+              "file": "C:\\Users\\Shadow\\.lmstudio\\docs\\confronto-modelli-narrazione\\hemmingway\\full-writer-2.md",
+              "narrativeWords": 302,
+              "contentChecks": [
+                "Receptionist must explicitly clarify in spoken dialogue that she meant the room minibar/drinks/snacks, not a personal romantic offer; the Italian summary does not count"
+              ],
+              "presentationChecks": [
+                "Missing scene heading or Italian production metadata"
+              ],
+              "sha256": "adf198bfb6f1d02a64eda68a41b37b31f05d3107fcfb7d04316dcc80ed99bdd6"
+            },
+            "review": {
+              "file": "C:\\Users\\Shadow\\.lmstudio\\docs\\confronto-modelli-narrazione\\hemmingway\\reviewer-2.md",
+              "narrativeWords": 0,
+              "contentChecks": [
+                "Missing ## Narrative / ## Italian Summary structure"
+              ],
+              "presentationChecks": [
+                "Missing narrative section; Codex cannot safely normalize the artifact"
+              ],
+              "sha256": "8f7f615f0e13298d4f8cade4773adf517b970056de8341a452af54c55522dd28",
+              "verdict": "PASS",
+              "evidenceChecks": [],
+              "mechanicallyFlagged": [
+                "Receptionist must explicitly clarify in spoken dialogue that she meant the room minibar/drinks/snacks, not a personal romantic offer; the Italian summary does not count"
+              ]
+            },
+            "revision": {
+              "file": "C:\\Users\\Shadow\\.lmstudio\\docs\\confronto-modelli-narrazione\\hemmingway\\writer-revision-2.md",
+              "narrativeWords": 302,
+              "contentChecks": [
+                "Receptionist must explicitly clarify in spoken dialogue that she meant the room minibar/drinks/snacks, not a personal romantic offer; the Italian summary does not count"
+              ],
+              "presentationChecks": [
+                "Missing scene heading or Italian production metadata"
+              ],
+              "sha256": "adf198bfb6f1d02a64eda68a41b37b31f05d3107fcfb7d04316dcc80ed99bdd6",
+              "scopeChecks": [],
+              "changedFromPreviousSha256": "adf198bfb6f1d02a64eda68a41b37b31f05d3107fcfb7d04316dcc80ed99bdd6"
+            }
+          },
+          {
+            "draft": {
+              "file": "C:\\Users\\Shadow\\.lmstudio\\docs\\confronto-modelli-narrazione\\hemmingway\\full-writer-3.md",
+              "narrativeWords": 302,
+              "contentChecks": [
+                "Receptionist must explicitly clarify in spoken dialogue that she meant the room minibar/drinks/snacks, not a personal romantic offer; the Italian summary does not count"
+              ],
+              "presentationChecks": [
+                "Missing scene heading or Italian production metadata"
+              ],
+              "sha256": "adf198bfb6f1d02a64eda68a41b37b31f05d3107fcfb7d04316dcc80ed99bdd6"
+            },
+            "review": {
+              "file": "C:\\Users\\Shadow\\.lmstudio\\docs\\confronto-modelli-narrazione\\hemmingway\\reviewer-3.md",
+              "narrativeWords": 0,
+              "contentChecks": [
+                "Missing ## Narrative / ## Italian Summary structure"
+              ],
+              "presentationChecks": [
+                "Missing narrative section; Codex cannot safely normalize the artifact"
+              ],
+              "sha256": "8f7f615f0e13298d4f8cade4773adf517b970056de8341a452af54c55522dd28",
+              "verdict": "PASS",
+              "evidenceChecks": [],
+              "mechanicallyFlagged": [
+                "Receptionist must explicitly clarify in spoken dialogue that she meant the room minibar/drinks/snacks, not a personal romantic offer; the Italian summary does not count"
+              ]
+            },
+            "revision": {
+              "file": "C:\\Users\\Shadow\\.lmstudio\\docs\\confronto-modelli-narrazione\\hemmingway\\writer-revision-3.md",
+              "narrativeWords": 302,
+              "contentChecks": [
+                "Receptionist must explicitly clarify in spoken dialogue that she meant the room minibar/drinks/snacks, not a personal romantic offer; the Italian summary does not count"
+              ],
+              "presentationChecks": [
+                "Missing scene heading or Italian production metadata"
+              ],
+              "sha256": "adf198bfb6f1d02a64eda68a41b37b31f05d3107fcfb7d04316dcc80ed99bdd6",
+              "scopeChecks": [],
+              "changedFromPreviousSha256": "adf198bfb6f1d02a64eda68a41b37b31f05d3107fcfb7d04316dcc80ed99bdd6"
+            }
+          },
+          {
+            "draft": {
+              "file": "C:\\Users\\Shadow\\.lmstudio\\docs\\confronto-modelli-narrazione\\hemmingway\\full-writer-4.md",
+              "narrativeWords": 302,
+              "contentChecks": [
+                "Receptionist must explicitly clarify in spoken dialogue that she meant the room minibar/drinks/snacks, not a personal romantic offer; the Italian summary does not count"
+              ],
+              "presentationChecks": [
+                "Missing scene heading or Italian production metadata"
+              ],
+              "sha256": "adf198bfb6f1d02a64eda68a41b37b31f05d3107fcfb7d04316dcc80ed99bdd6"
+            }
+          }
+        ],
+        "correctionCount": 3,
+        "reviewerApproved": false,
+        "finalReviewerDraft": "C:\\Users\\Shadow\\.lmstudio\\docs\\confronto-modelli-narrazione\\hemmingway\\full-writer-4.md"
+      },
+      "codex": {
+        "decision": "narrative_pass_with_mechanical_gate_false_positive",
+        "finalFile": "./docs/confronto-modelli-narrazione/hemmingway/codex-final.md",
+        "reviewFile": "./docs/confronto-modelli-narrazione/hemmingway/codex-review.md",
+        "narrativeWords": 281,
+        "editBudget": "passed",
+        "presentation": "passed",
+        "productionGate": "false_negative_on_clear_not-personal-clarification"
+      }
+    }
+  ]
+}

@@ -1,0 +1,442 @@
+{
+  "startedAt": "2026-10-04T14:21:16.231Z",
+  "taskSha256": "c7997a723250bf96f7d93a8446804434ccd47e71ee864d8ef8ef28a2da66547d",
+  "skipped": [],
+  "rows": [
+    {
+      "name": "writer-current-system",
+      "model": "Qwen3.5 27B Writer v2 Uncensored Heretic",
+      "identifier": "llmfan46/Qwen3.5-27B-Writer-V2-uncensored-heretic-GGUF/Qwen3.5-27B-Writer-V2-uncensored-heretic-Q4_K_M.gguf",
+      "outputFile": "C:\\Users\\Shadow\\.lmstudio\\production-tests\\writer-model-comparison\\writer-current-system.md",
+      "systemPromptSha256": "1e989bba81e108bce6f6549c340abb08d87c6cc3aae952a60cc72ee7e7bc377d",
+      "taskSha256": "c7997a723250bf96f7d93a8446804434ccd47e71ee864d8ef8ef28a2da66547d",
+      "words": 238,
+      "contentChecks": [
+        "Narrative body is incomplete at 131 words (minimum 250)",
+        "Receptionist must explicitly say in spoken dialogue that the minibar explanation is not a personal/romantic offer or invitation"
+      ],
+      "presentationChecks": [
+        "Move acting directions out of bold speaker labels and into prose"
+      ],
+      "events": [
+        {
+          "stage": "writer",
+          "event": "load_requested",
+          "model": "llmfan46/Qwen3.5-27B-Writer-V2-uncensored-heretic-GGUF/Qwen3.5-27B-Writer-V2-uncensored-heretic-Q4_K_M.gguf"
+        },
+        {
+          "stage": "writer",
+          "event": "input_ready",
+          "systemSha256": "1e989bba81e108bce6f6549c340abb08d87c6cc3aae952a60cc72ee7e7bc377d",
+          "instructionSha256": "c7997a723250bf96f7d93a8446804434ccd47e71ee864d8ef8ef28a2da66547d"
+        },
+        {
+          "stage": "writer",
+          "event": "prediction_complete",
+          "model": "llmfan46/Qwen3.5-27B-Writer-V2-uncensored-heretic-GGUF/Qwen3.5-27B-Writer-V2-uncensored-heretic-Q4_K_M.gguf",
+          "responseSha256": "951d5fdf2af67dc7c2ac4b40fff86ba8c70e0d92aedf535ce4fe35399e6c5678",
+          "apiStats": {
+            "input_tokens": 2083,
+            "total_output_tokens": 381,
+            "reasoning_output_tokens": 0,
+            "tokens_per_second": 7.393907400844053,
+            "time_to_first_token_seconds": 7.313707999999999
+          },
+          "responseIdStored": false
+        },
+        {
+          "stage": "writer",
+          "event": "unloaded",
+          "identifier": "production-writer-writer-benchmark-writer-current-system"
+        }
+      ]
+    },
+    {
+      "name": "writer-optimized-system",
+      "model": "Qwen3.5 27B Writer v2 Uncensored Heretic",
+      "identifier": "llmfan46/Qwen3.5-27B-Writer-V2-uncensored-heretic-GGUF/Qwen3.5-27B-Writer-V2-uncensored-heretic-Q4_K_M.gguf",
+      "outputFile": "C:\\Users\\Shadow\\.lmstudio\\production-tests\\writer-model-comparison\\writer-optimized-system.md",
+      "systemPromptSha256": "3bd52ef01738e642de0aa1d7bed68941f6e6971878a4dba3b8d23a3ae43023b9",
+      "taskSha256": "c7997a723250bf96f7d93a8446804434ccd47e71ee864d8ef8ef28a2da66547d",
+      "words": 299,
+      "contentChecks": [
+        "Narrative body is incomplete at 193 words (minimum 250)",
+        "Receptionist must explicitly say in spoken dialogue that the minibar explanation is not a personal/romantic offer or invitation"
+      ],
+      "presentationChecks": [
+        "Move acting directions out of bold speaker labels and into prose"
+      ],
+      "events": [
+        {
+          "stage": "writer",
+          "event": "load_requested",
+          "model": "llmfan46/Qwen3.5-27B-Writer-V2-uncensored-heretic-GGUF/Qwen3.5-27B-Writer-V2-uncensored-heretic-Q4_K_M.gguf"
+        },
+        {
+          "stage": "writer",
+          "event": "input_ready",
+          "systemSha256": "3bd52ef01738e642de0aa1d7bed68941f6e6971878a4dba3b8d23a3ae43023b9",
+          "instructionSha256": "c7997a723250bf96f7d93a8446804434ccd47e71ee864d8ef8ef28a2da66547d"
+        },
+        {
+          "stage": "writer",
+          "event": "prediction_complete",
+          "model": "llmfan46/Qwen3.5-27B-Writer-V2-uncensored-heretic-GGUF/Qwen3.5-27B-Writer-V2-uncensored-heretic-Q4_K_M.gguf",
+          "responseSha256": "a361546a8407c9bcc6a2aa1c4c2bba653ee448a8890d539e6a51c8c79a2b79a0",
+          "apiStats": {
+            "input_tokens": 815,
+            "total_output_tokens": 483,
+            "reasoning_output_tokens": 0,
+            "tokens_per_second": 7.683906898723206,
+            "time_to_first_token_seconds": 3.783737
+          },
+          "responseIdStored": false
+        },
+        {
+          "stage": "writer",
+          "event": "unloaded",
+          "identifier": "production-writer-writer-benchmark-writer-optimized-system"
+        }
+      ]
+    },
+    {
+      "name": "writer-optimized-thinking",
+      "model": "Qwen3.5 27B Writer v2 Uncensored Heretic",
+      "identifier": "llmfan46/Qwen3.5-27B-Writer-V2-uncensored-heretic-GGUF/Qwen3.5-27B-Writer-V2-uncensored-heretic-Q4_K_M.gguf",
+      "outputFile": "C:\\Users\\Shadow\\.lmstudio\\production-tests\\writer-model-comparison\\writer-optimized-thinking.md",
+      "systemPromptSha256": "3bd52ef01738e642de0aa1d7bed68941f6e6971878a4dba3b8d23a3ae43023b9",
+      "taskSha256": "c7997a723250bf96f7d93a8446804434ccd47e71ee864d8ef8ef28a2da66547d",
+      "words": 307,
+      "contentChecks": [
+        "Narrative body is incomplete at 165 words (minimum 250)"
+      ],
+      "presentationChecks": [
+        "Move acting directions out of bold speaker labels and into prose"
+      ],
+      "events": [
+        {
+          "stage": "writer",
+          "event": "load_requested",
+          "model": "llmfan46/Qwen3.5-27B-Writer-V2-uncensored-heretic-GGUF/Qwen3.5-27B-Writer-V2-uncensored-heretic-Q4_K_M.gguf"
+        },
+        {
+          "stage": "writer",
+          "event": "input_ready",
+          "systemSha256": "3bd52ef01738e642de0aa1d7bed68941f6e6971878a4dba3b8d23a3ae43023b9",
+          "instructionSha256": "c7997a723250bf96f7d93a8446804434ccd47e71ee864d8ef8ef28a2da66547d"
+        },
+        {
+          "stage": "writer",
+          "event": "prediction_complete",
+          "model": "llmfan46/Qwen3.5-27B-Writer-V2-uncensored-heretic-GGUF/Qwen3.5-27B-Writer-V2-uncensored-heretic-Q4_K_M.gguf",
+          "responseSha256": "3bf01d274ac02fae88a3908d10fa2122581216a2a364037f57101ccf8892bdea",
+          "apiStats": {
+            "input_tokens": 813,
+            "total_output_tokens": 754,
+            "reasoning_output_tokens": 301,
+            "tokens_per_second": 7.233514306959491,
+            "time_to_first_token_seconds": 3.8011190000000004
+          },
+          "responseIdStored": false
+        },
+        {
+          "stage": "writer",
+          "event": "unloaded",
+          "identifier": "production-writer-writer-benchmark-writer-optimized-thinking"
+        }
+      ]
+    },
+    {
+      "name": "mistral-optimized-system",
+      "model": "Mistralai Mistral Small 3.2 24B Instruct 2506",
+      "identifier": "bartowski/mistralai_Mistral-Small-3.2-24B-Instruct-2506-GGUF/mistralai_Mistral-Small-3.2-24B-Instruct-2506-Q4_K_M.gguf",
+      "outputFile": "C:\\Users\\Shadow\\.lmstudio\\production-tests\\writer-model-comparison\\mistral-optimized-system.md",
+      "systemPromptSha256": "3bd52ef01738e642de0aa1d7bed68941f6e6971878a4dba3b8d23a3ae43023b9",
+      "taskSha256": "c7997a723250bf96f7d93a8446804434ccd47e71ee864d8ef8ef28a2da66547d",
+      "words": 313,
+      "contentChecks": [
+        "Narrative body is incomplete at 170 words (minimum 250)",
+        "Receptionist must explicitly say in spoken dialogue that the minibar explanation is not a personal/romantic offer or invitation"
+      ],
+      "presentationChecks": [],
+      "events": [
+        {
+          "stage": "writer",
+          "event": "load_requested",
+          "model": "bartowski/mistralai_Mistral-Small-3.2-24B-Instruct-2506-GGUF/mistralai_Mistral-Small-3.2-24B-Instruct-2506-Q4_K_M.gguf"
+        },
+        {
+          "stage": "writer",
+          "event": "input_ready",
+          "systemSha256": "3bd52ef01738e642de0aa1d7bed68941f6e6971878a4dba3b8d23a3ae43023b9",
+          "instructionSha256": "c7997a723250bf96f7d93a8446804434ccd47e71ee864d8ef8ef28a2da66547d"
+        },
+        {
+          "stage": "writer",
+          "event": "prediction_complete",
+          "model": "bartowski/mistralai_Mistral-Small-3.2-24B-Instruct-2506-GGUF/mistralai_Mistral-Small-3.2-24B-Instruct-2506-Q4_K_M.gguf",
+          "responseSha256": "193215d5d6afeb947a1b5cdf026a994e30f40fab69d6318cbd57432bfb45e9ed",
+          "apiStats": {
+            "input_tokens": 817,
+            "total_output_tokens": 435,
+            "reasoning_output_tokens": 0,
+            "tokens_per_second": 9.354874087705781,
+            "time_to_first_token_seconds": 2.061895
+          },
+          "responseIdStored": false
+        },
+        {
+          "stage": "writer",
+          "event": "unloaded",
+          "identifier": "production-writer-writer-benchmark-mistral-optimized-system"
+        }
+      ]
+    },
+    {
+      "name": "mistral-lengthguard",
+      "model": "Mistralai Mistral Small 3.2 24B Instruct 2506",
+      "identifier": "bartowski/mistralai_Mistral-Small-3.2-24B-Instruct-2506-GGUF/mistralai_Mistral-Small-3.2-24B-Instruct-2506-Q4_K_M.gguf",
+      "outputFile": "C:\\Users\\Shadow\\.lmstudio\\production-tests\\writer-model-comparison\\mistral-lengthguard.md",
+      "systemPromptSha256": "e1e3331f88e16a17c388215382547d5b4ee8c4d5cbcaf1095757d7c6994b27fc",
+      "taskSha256": "c7997a723250bf96f7d93a8446804434ccd47e71ee864d8ef8ef28a2da66547d",
+      "words": 340,
+      "contentChecks": [
+        "Narrative body is incomplete at 198 words (minimum 250)",
+        "Receptionist must explicitly say in spoken dialogue that the minibar explanation is not a personal/romantic offer or invitation"
+      ],
+      "presentationChecks": [],
+      "events": [
+        {
+          "stage": "writer",
+          "event": "load_requested",
+          "model": "bartowski/mistralai_Mistral-Small-3.2-24B-Instruct-2506-GGUF/mistralai_Mistral-Small-3.2-24B-Instruct-2506-Q4_K_M.gguf"
+        },
+        {
+          "stage": "writer",
+          "event": "input_ready",
+          "systemSha256": "e1e3331f88e16a17c388215382547d5b4ee8c4d5cbcaf1095757d7c6994b27fc",
+          "instructionSha256": "c7997a723250bf96f7d93a8446804434ccd47e71ee864d8ef8ef28a2da66547d"
+        },
+        {
+          "stage": "writer",
+          "event": "prediction_complete",
+          "model": "bartowski/mistralai_Mistral-Small-3.2-24B-Instruct-2506-GGUF/mistralai_Mistral-Small-3.2-24B-Instruct-2506-Q4_K_M.gguf",
+          "responseSha256": "e5c1baac76310794708904a61849f97b74522dc9d15473ba42357e29e7d9fe96",
+          "apiStats": {
+            "input_tokens": 886,
+            "total_output_tokens": 488,
+            "reasoning_output_tokens": 0,
+            "tokens_per_second": 8.660026921480817,
+            "time_to_first_token_seconds": 2.106274
+          },
+          "responseIdStored": false
+        },
+        {
+          "stage": "writer",
+          "event": "unloaded",
+          "identifier": "production-writer-writer-benchmark-mistral-lengthguard"
+        }
+      ]
+    },
+    {
+      "name": "writer-lengthguard",
+      "model": "Qwen3.5 27B Writer v2 Uncensored Heretic",
+      "identifier": "llmfan46/Qwen3.5-27B-Writer-V2-uncensored-heretic-GGUF/Qwen3.5-27B-Writer-V2-uncensored-heretic-Q4_K_M.gguf",
+      "outputFile": "C:\\Users\\Shadow\\.lmstudio\\production-tests\\writer-model-comparison\\writer-lengthguard.md",
+      "systemPromptSha256": "e1e3331f88e16a17c388215382547d5b4ee8c4d5cbcaf1095757d7c6994b27fc",
+      "taskSha256": "c7997a723250bf96f7d93a8446804434ccd47e71ee864d8ef8ef28a2da66547d",
+      "words": 202,
+      "contentChecks": [
+        "Narrative body is incomplete at 138 words (minimum 250)",
+        "Receptionist must explicitly say in spoken dialogue that the minibar explanation is not a personal/romantic offer or invitation"
+      ],
+      "presentationChecks": [
+        "Move acting directions out of bold speaker labels and into prose"
+      ],
+      "events": [
+        {
+          "stage": "writer",
+          "event": "load_requested",
+          "model": "llmfan46/Qwen3.5-27B-Writer-V2-uncensored-heretic-GGUF/Qwen3.5-27B-Writer-V2-uncensored-heretic-Q4_K_M.gguf"
+        },
+        {
+          "stage": "writer",
+          "event": "input_ready",
+          "systemSha256": "e1e3331f88e16a17c388215382547d5b4ee8c4d5cbcaf1095757d7c6994b27fc",
+          "instructionSha256": "c7997a723250bf96f7d93a8446804434ccd47e71ee864d8ef8ef28a2da66547d"
+        },
+        {
+          "stage": "writer",
+          "event": "prediction_complete",
+          "model": "llmfan46/Qwen3.5-27B-Writer-V2-uncensored-heretic-GGUF/Qwen3.5-27B-Writer-V2-uncensored-heretic-Q4_K_M.gguf",
+          "responseSha256": "ff39ce31e6185306e75b183ceec6720bbff3c5a6d79ce15495e88917d5ab78ab",
+          "apiStats": {
+            "input_tokens": 882,
+            "total_output_tokens": 306,
+            "reasoning_output_tokens": 0,
+            "tokens_per_second": 7.308586093394912,
+            "time_to_first_token_seconds": 3.857746
+          },
+          "responseIdStored": false
+        },
+        {
+          "stage": "writer",
+          "event": "unloaded",
+          "identifier": "production-writer-writer-benchmark-writer-lengthguard"
+        }
+      ]
+    },
+    {
+      "name": "mistral-lengthguard-lowtemp",
+      "model": "Mistralai Mistral Small 3.2 24B Instruct 2506",
+      "identifier": "bartowski/mistralai_Mistral-Small-3.2-24B-Instruct-2506-GGUF/mistralai_Mistral-Small-3.2-24B-Instruct-2506-Q4_K_M.gguf",
+      "outputFile": "C:\\Users\\Shadow\\.lmstudio\\production-tests\\writer-model-comparison\\mistral-lengthguard-lowtemp.md",
+      "settings": {
+        "llm.prediction.temperature": 0.15
+      },
+      "systemPromptSha256": "e1e3331f88e16a17c388215382547d5b4ee8c4d5cbcaf1095757d7c6994b27fc",
+      "taskSha256": "c7997a723250bf96f7d93a8446804434ccd47e71ee864d8ef8ef28a2da66547d",
+      "words": 281,
+      "contentChecks": [
+        "Narrative body is incomplete at 146 words (minimum 250)",
+        "Receptionist must explicitly say in spoken dialogue that the minibar explanation is not a personal/romantic offer or invitation"
+      ],
+      "presentationChecks": [],
+      "events": [
+        {
+          "stage": "writer",
+          "event": "load_requested",
+          "model": "bartowski/mistralai_Mistral-Small-3.2-24B-Instruct-2506-GGUF/mistralai_Mistral-Small-3.2-24B-Instruct-2506-Q4_K_M.gguf"
+        },
+        {
+          "stage": "writer",
+          "event": "input_ready",
+          "systemSha256": "e1e3331f88e16a17c388215382547d5b4ee8c4d5cbcaf1095757d7c6994b27fc",
+          "instructionSha256": "c7997a723250bf96f7d93a8446804434ccd47e71ee864d8ef8ef28a2da66547d"
+        },
+        {
+          "stage": "writer",
+          "event": "prediction_complete",
+          "model": "bartowski/mistralai_Mistral-Small-3.2-24B-Instruct-2506-GGUF/mistralai_Mistral-Small-3.2-24B-Instruct-2506-Q4_K_M.gguf",
+          "responseSha256": "149b3a3b373530515466fdf22f7b49b4d42dcfef1b65eb44750a04920646f32f",
+          "apiStats": {
+            "input_tokens": 886,
+            "total_output_tokens": 413,
+            "reasoning_output_tokens": 0,
+            "tokens_per_second": 8.426468133623414,
+            "time_to_first_token_seconds": 2.282663
+          },
+          "responseIdStored": false
+        },
+        {
+          "stage": "writer",
+          "event": "unloaded",
+          "identifier": "production-writer-writer-benchmark-mistral-lengthguard-lowtemp"
+        }
+      ]
+    },
+    {
+      "name": "writer-scaffold",
+      "model": "Qwen3.5 27B Writer v2 Uncensored Heretic",
+      "identifier": "llmfan46/Qwen3.5-27B-Writer-V2-uncensored-heretic-GGUF/Qwen3.5-27B-Writer-V2-uncensored-heretic-Q4_K_M.gguf",
+      "outputFile": "C:\\Users\\Shadow\\.lmstudio\\production-tests\\writer-model-comparison\\writer-scaffold.md",
+      "settings": {
+        "temperature": 0.78,
+        "repeatPenalty": 1.02
+      },
+      "systemPromptSha256": "1dc7853d57152a9c32be9f0e8bdf1b0a47128d25043b09fa179308597fe8597a",
+      "taskSha256": "0d8c751708419c8b7cedf1d10661444194e4e77798d36e2cdadd6a540870c517",
+      "words": 287,
+      "contentChecks": [
+        "Narrative body is incomplete at 180 words (minimum 250)",
+        "Receptionist must explicitly say in spoken dialogue that the minibar explanation is not a personal/romantic offer or invitation"
+      ],
+      "presentationChecks": [
+        "Move acting directions out of bold speaker labels and into prose"
+      ],
+      "events": [
+        {
+          "stage": "writer",
+          "event": "load_requested",
+          "model": "llmfan46/Qwen3.5-27B-Writer-V2-uncensored-heretic-GGUF/Qwen3.5-27B-Writer-V2-uncensored-heretic-Q4_K_M.gguf"
+        },
+        {
+          "stage": "writer",
+          "event": "input_ready",
+          "systemSha256": "1dc7853d57152a9c32be9f0e8bdf1b0a47128d25043b09fa179308597fe8597a",
+          "instructionSha256": "0d8c751708419c8b7cedf1d10661444194e4e77798d36e2cdadd6a540870c517"
+        },
+        {
+          "stage": "writer",
+          "event": "prediction_complete",
+          "model": "llmfan46/Qwen3.5-27B-Writer-V2-uncensored-heretic-GGUF/Qwen3.5-27B-Writer-V2-uncensored-heretic-Q4_K_M.gguf",
+          "responseSha256": "3651eb8729ab26fe2d0563a4a131719c92a1d2823837ee110468de30b63a9a9b",
+          "apiStats": {
+            "input_tokens": 1039,
+            "total_output_tokens": 423,
+            "reasoning_output_tokens": 0,
+            "tokens_per_second": 6.84011435309659,
+            "time_to_first_token_seconds": 4.442553
+          },
+          "responseIdStored": false
+        },
+        {
+          "stage": "writer",
+          "event": "unloaded",
+          "identifier": "production-writer-writer-benchmark-writer-scaffold"
+        }
+      ]
+    },
+    {
+      "name": "hemmingway-scaffold",
+      "model": "Hemmingway1 Extreme",
+      "identifier": "JohnDi/Hemmingway-1-Abliterated-Extreme-GGUF/Hemmingway1-Extreme-Q4_K_M.gguf",
+      "outputFile": "C:\\Users\\Shadow\\.lmstudio\\production-tests\\writer-model-comparison\\hemmingway-scaffold.md",
+      "settings": {
+        "temperature": 0.78,
+        "repeatPenalty": 1.02
+      },
+      "systemPromptSha256": "1dc7853d57152a9c32be9f0e8bdf1b0a47128d25043b09fa179308597fe8597a",
+      "taskSha256": "0d8c751708419c8b7cedf1d10661444194e4e77798d36e2cdadd6a540870c517",
+      "words": 399,
+      "contentChecks": [
+        "Receptionist must explicitly clarify in spoken dialogue that she meant the room minibar/drinks/snacks, not a personal romantic offer; the Italian summary does not count",
+        "Receptionist must explicitly say in spoken dialogue that the minibar explanation is not a personal/romantic offer or invitation"
+      ],
+      "presentationChecks": [],
+      "events": [
+        {
+          "stage": "writer",
+          "event": "load_requested",
+          "model": "JohnDi/Hemmingway-1-Abliterated-Extreme-GGUF/Hemmingway1-Extreme-Q4_K_M.gguf"
+        },
+        {
+          "stage": "writer",
+          "event": "input_ready",
+          "systemSha256": "1dc7853d57152a9c32be9f0e8bdf1b0a47128d25043b09fa179308597fe8597a",
+          "instructionSha256": "0d8c751708419c8b7cedf1d10661444194e4e77798d36e2cdadd6a540870c517"
+        },
+        {
+          "stage": "writer",
+          "event": "prediction_complete",
+          "model": "JohnDi/Hemmingway-1-Abliterated-Extreme-GGUF/Hemmingway1-Extreme-Q4_K_M.gguf",
+          "responseSha256": "9ded87766dc11e49b044e7f9941cda7a6e7f787cd14b46443c6f1ef890612cca",
+          "apiStats": {
+            "input_tokens": 1039,
+            "total_output_tokens": 585,
+            "reasoning_output_tokens": 0,
+            "tokens_per_second": 6.7538834338237566,
+            "time_to_first_token_seconds": 4.417232
+          },
+          "responseIdStored": false
+        },
+        {
+          "stage": "writer",
+          "event": "unloaded",
+          "identifier": "production-writer-writer-benchmark-hemmingway-scaffold"
+        }
+      ]
+    }
+  ],
+  "finishedAt": "2026-10-04T14:23:54.900Z"
+}
