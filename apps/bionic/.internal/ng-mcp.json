@@ -1,36 +1,6 @@
 {
   "servers": [
     {
-      "id": "691b6444-5951-471f-b86e-c496514f4c38",
-      "name": "image-worker",
-      "enabled": false,
-      "connection": {
-        "type": "stdio",
-        "command": "node",
-        "args": [
-          "C:\\AI\\image-worker\\mcp\\server.mjs"
-        ],
-        "cwd": "C:\\AI\\image-worker",
-        "env": {},
-        "timeoutMs": 300000
-      }
-    },
-    {
-      "id": "34ca85aa-4fca-4c3e-b15a-6ed24e065f2a",
-      "name": "asset-worker",
-      "enabled": false,
-      "connection": {
-        "type": "stdio",
-        "command": "node",
-        "args": [
-          "C:\\AI\\asset-worker\\server.mjs"
-        ],
-        "cwd": "C:\\AI\\image-worker",
-        "env": {},
-        "timeoutMs": 300000
-      }
-    },
-    {
       "id": "279b9b90-934a-4281-87c6-18d35e6a7437",
       "name": "project-worker",
       "enabled": true,
@@ -38,11 +8,13 @@
         "type": "stdio",
         "command": "node",
         "args": [
-          "C:\\\\Users\\\\Shadow\\\\.lmstudio\\\\project-worker\\\\mcp\\\\server.mjs"
+          "C:\\Users\\Shadow\\.lmstudio\\project-worker\\mcp\\server.mjs"
         ],
-        "env": {},
         "cwd": "C:\\Users\\Shadow\\.lmstudio\\project-worker\\mcp",
-        "timeoutMs": 300000
+        "env": {
+          "BIONIC_ORCHESTRATION_REV": "20"
+        },
+        "timeoutMs": 3900000
       }
     }
   ]
