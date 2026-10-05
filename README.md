@@ -33,6 +33,22 @@ flowchart TD
 
 La Regia è il punto di contatto creativo con l’utente e usa l’interfaccia LM Studio/Bionic. Nelle sessioni di progetto verificate è associata a **Qwen 3.5 9B**. Dialoga con l’utente nella sua lingua, confronta le idee e lo aiuta a prendere decisioni su concept, personaggi, relazioni, ambientazioni, eventi, tono e direzione visiva e sonora.
 
+```mermaid
+flowchart LR
+    U[Utente]
+    F[Files del progetto]
+    subgraph REGIA[Regia]
+        Q[Qwen 3.5 9B]
+    end
+    C[Coordinatore]
+    P[Programmatore]
+    U <-->|dialogo| REGIA
+    F -->|Analisi| Q
+    REGIA -->|handoff del progetto approvato| C
+    C -->|dubbi o proposta di sviluppo| REGIA
+    REGIA -->|specifica approvata per l’implementazione| P
+```
+
 Prima di proporre una nuova fase, la Regia deve leggere il Project File e la documentazione aggiornata del progetto, comprenderne lo stato e i progressi, e consultare i file e gli asset già disponibili. Questo le permette di conoscere personaggi, relazioni, luoghi e continuità, capire cosa è già stato realizzato e individuare contenuti riutilizzabili, evitando duplicazioni o contraddizioni. Se la documentazione non chiarisce un fatto canonico o lo stato del lavoro, la Regia lo segnala e chiede chiarimenti invece di inventarlo.
 
 Le decisioni canoniche vengono conservate nel Project File Markdown, scritto in inglese per essere utilizzato da tutta la pipeline. Quando ritiene definita una fase, la Regia presenta il piano all’utente e richiede un’approvazione esplicita. Solo dopo l’approvazione passa Project File e contesto operativo al Coordinatore.
@@ -40,6 +56,23 @@ Le decisioni canoniche vengono conservate nel Project File Markdown, scritto in 
 **Limite attuale:** il Project Worker MCP offre a Regia la lettura del Project File e dello stato di orchestrazione, ma non espone ancora strumenti dedicati per esplorare la cartella del progetto software, la sua documentazione completa o la libreria degli asset. Per soddisfare pienamente questo ruolo, tali fonti devono essere rese consultabili in modo sicuro e circoscritto al progetto; la Regia non deve presumere di averle lette quando non sono accessibili.
 
 ### Coordinatore
+
+```mermaid
+flowchart LR
+    R[Regia]
+    subgraph COORD[Coordinatore]
+        C[Codex]
+    end
+    subgraph PRODUZIONE[Produzione]
+        W[Scrittore]
+        D[Disegnatore]
+        S[Progettista sonoro]
+    end
+    R --> COORD
+    COORD --> PRODUZIONE
+    PRODUZIONE --> COORD
+    COORD --> R
+```
 
 Il Coordinatore è Codex, configurato per questo flusso con **Codex 6 Luna Light**, un modello online. Il suo compito è organizzare attività e attese, leggere il Project File, attivare i worker necessari e raccogliere i risultati. Il coordinamento e l’attesa dei processi locali sono attività adatte a questo modello leggero; essendo online, il Coordinatore non occupa la VRAM locale.
 
@@ -51,6 +84,21 @@ A fine produzione, il Coordinatore restituisce alla Regia un handback con i risu
 
 ### Scrittore
 
+```mermaid
+flowchart TD
+    C[Coordinatore]
+    subgraph SCRITTORE[Scrittore]
+        W[Hemmingway]
+        R[Qwen3 8B]
+        X[Controllo finale Codex]
+        W -->|richiesta di review| R
+        R -->|richiede modifiche · massimo 3 cicli| W
+        R -->|PASS| X
+    end
+    C --> W
+    X --> C
+```
+
 Lo Scrittore produce la prima bozza narrativa in inglese a partire dal brief approvato e dalle informazioni canoniche. Il modello Writer attualmente configurato è **Hemmingway 1 Abliterated Extreme**.
 
 Il ciclo Writer → Narrative Reviewer può richiedere correzioni mirate; il Reviewer narrativo attualmente configurato è **Qwen3 8B Narrative Reviewer**. Dopo il suo esito, Codex esegue un controllo finale e può correggere direttamente problemi locali di formato o formulazione, preservando la storia già approvata. La configurazione limita le modifiche finali per evitare riscritture estese.
@@ -59,11 +107,64 @@ Il confronto e i campioni dei Writer provati sono documentati in [Confronto dei 
 
 ### Disegnatore
 
+```mermaid
+flowchart TD
+    C[Coordinatore]
+    subgraph DISEGNATORE[Disegnatore]
+        I[Image Worker]
+        M[Seleziona modello]
+        SDXL[SDXL Lightning 4-step]
+        LUSTIFY[Lustify Zenith v9]
+        G[Genera un'immagine]
+        R[Codex]
+        O[Pubblica con rclone]
+        I --> M
+        M -->|standard| SDXL
+        M -->|adulti| LUSTIFY
+        SDXL --> G
+        LUSTIFY --> G
+        G -->|richiesta di revisione| R
+        R -->|non approvata · corregge il prompt e riprova| I
+        R -->|almeno 80 punti e nessun errore grave| O
+    end
+    C --> I
+    O --> C
+```
+
 Il Disegnatore prepara le immagini coerenti con personaggi, ambienti e momenti narrativi. Il generatore è **`sd-cli.exe`**; i checkpoint attualmente installati sono **SDXL Lightning 4-step** per immagini standard e **Lustify NSFW Checkpoint Zenith v9** per immagini per adulti consensuali.
 
 Codex definisce il prompt visivo, il Worker genera le immagini e Codex esamina i risultati. Un’immagine viene accettata se la valutazione visiva raggiunge la soglia prevista e non rileva errori visivi gravi; altrimenti il processo può correggere il prompt e riprovare entro il limite configurato. Il controller visivo separato non è attualmente installato: il Coordinatore prepara direttamente la richiesta visiva.
 
 ### Progettista sonoro
+
+```mermaid
+flowchart TD
+    C[Coordinatore]
+    subgraph SONORO[Progettista sonoro]
+        A[Audio Worker]
+        M[Seleziona modello]
+        MM[Stable Audio 3 Medium]
+        MS[Stable Audio 3 Small SFX]
+        G[Genera un audio]
+        T[Controllo tecnico]
+        P[Preview ripetuta]
+        L[Ascolto e revisione]
+        O[Pubblica con rclone]
+        A --> M
+        M -->|musica| MM
+        M -->|effetto sonoro| MS
+        MM --> G
+        MS --> G
+        G --> T
+        T -->|loop| P
+        T -->|one-shot| L
+        P --> L
+        L -->|da correggere| G
+        L -->|approvato| O
+    end
+    C -. integrazione MCP da completare .-> A
+    O --> C
+```
 
 Il Progettista sonoro prepara musica ed effetti coerenti con ciò che accade nella storia. La generazione usa **audio.cpp v0.9.0 Vulkan** con **Stable Audio 3 Medium Q8** per la musica e **Stable Audio 3 Small SFX Q8** per gli effetti.
 
@@ -72,6 +173,20 @@ Il Coordinatore decide quale cue serve e definisce se è musica o effetto, se de
 Il test e i campioni generati sono documentati in [Confronto dei modelli audio](docs/CONFRONTO-MODELLI-AUDIO.md).
 
 ### Programmatore
+
+```mermaid
+flowchart LR
+    U[Utente]
+    R[Regia]
+    F[Files del progetto]
+    subgraph PROGRAMMATORE[Programmatore]
+        C[Claude]
+    end
+    U <-->|dialogo| R
+    R -->|specifica approvata| C
+    C <-->|legge e modifica| F
+    C -->|risultati e stato aggiornato| R
+```
 
 Il Programmatore è il ruolo che **modifica concretamente il progetto software**: interviene sui file sorgente, integra scene e asset, implementa i comportamenti interattivi e verifica il risultato nel progetto. Codex gli consegna il Project File, la documentazione pertinente, i contenuti approvati, gli asset riutilizzabili e le istruzioni tecniche. Codex coordina il passaggio; non sostituisce il Programmatore nell’editing del progetto.
 
