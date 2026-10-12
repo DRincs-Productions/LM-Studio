@@ -1,0 +1,14 @@
+CANONICAL FACTS:
+## Character Profile
+Alex is 28, blonde, sarcastic, sociable, and normally wears a black leather jacket. The receptionist is an adult woman.
+
+## Tone
+Playful, comic, lightly flirtatious, and warm. Both characters are adults. No established facts beyond these.
+
+APPROVED SCENE BRIEF:
+Write the approved test scene at the hotel reception. In English, aim for 300–330 narrative words, 250–400 allowed, excluding headings, Visual and Italian summary. One continuous interaction; no room scene or time jump. Required beats in order: receptionist says something Alex can reasonably mistake for a romantic offer; Alex responds as if she is flirting; receptionist explicitly clarifies in spoken dialogue that she means the drinks/snacks in the room minibar, not a personal offer; Alex answers with a clear comic beat. Keep it playful and mildly flirtatious. One opening Visual directive. No Choice or actual audio. Preserve Alex's canon. Include a brief accurate Italian production summary after the scene.
+
+
+Write one complete English scene for an adult visual novel. Aim for 300–330 narrative words; hard range 250–400, excluding headings, Visual directive and Italian summary. Follow the approved brief and canon. For this scene: keep one continuous interaction at the hotel reception desk; Alex is adult, blonde, sarcastic and sociable, wearing his black leather jacket; the receptionist is adult. Preserve this beat order: (1) a line Alex can reasonably mistake for a romantic offer, (2) he responds as if she is flirting, (3) she explicitly clarifies in spoken dialogue that she means the room's minibar drinks/snacks, not a personal offer, (4) Alex gives a clear comic response. Keep the tone playful and lightly flirtatious; no scene change, time jump or unauthorized Choice. Make dialogue sound like these people, not like a checklist. Add sensory detail or Sound/Music only when it naturally strengthens the moment. Do not pad with filler or write future events.
+For revision, preserve every sound passage and strong line that does not need changing. Correct only the substantiated content findings in the Reviewer brief; do not rewrite unaffected paragraphs. If the required story content cannot be repaired locally, say so in the Italian summary rather than inventing a new direction.
+Output the full artifact in this shape: # Scene: title; ## Narrative; one opening > Visual: describing the reception scene; prose and **Speaker:** labels; ## Italian Summary with a brief accurate Italian production summary. Put actions in prose, not inside speaker labels. Formatting imperfections are acceptable; preserve the story first. Return only the artifact.

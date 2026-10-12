@@ -1,0 +1,21 @@
+{
+  "projectId": "8cabd04f-763a-47a7-b36b-9e464efc9a87",
+  "jobId": "adc6d3f1-de20-4e38-9e47-adf5216e630c",
+  "writer": "JohnDi/Hemmingway-1-Abliterated-Extreme-GGUF/Hemmingway1-Extreme-Q4_K_M.gguf",
+  "reviewer": "Qwen/Qwen3-8B-GGUF/Qwen3-8B-Q4_K_M (Narrative Reviewer).gguf",
+  "reviewerVerdict": "PASS",
+  "reviewerCycles": 1,
+  "codexReview": "passed",
+  "narrativeSha256": "95f7f02aaf09b8770411cbc68849b3e92c11680de51977949985f31297b3b220",
+  "transferredImageSha256": "a4acf31802d3eabdd8c1fcee81e6104ef04714914e22ca1dced48a21d415ea6a",
+  "imageScore": 88,
+  "imageMajorError": "NO",
+  "imageDimensions": "1024x1024",
+  "imageAttempt": 2,
+  "soundsOrMusic": false,
+  "claude": false,
+  "narrativePath": "C:\\Users\\Shadow\\.lmstudio\\production\\8cabd04f-763a-47a7-b36b-9e464efc9a87\\adc6d3f1-de20-4e38-9e47-adf5216e630c\\scene.md",
+  "transferredImagePath": "C:\\AI\\assets\\8cabd04f-763a-47a7-b36b-9e464efc9a87\\adc6d3f1-de20-4e38-9e47-adf5216e630c\\8cabd04f-763a-47a7-b36b-9e464efc9a87_adc6d3f1-de20-4e38-9e47-adf5216e630c_hotel_reception.png",
+  "remotePublishedPath": "ImageWorker/final/8cabd04f-763a-47a7-b36b-9e464efc9a87_adc6d3f1-de20-4e38-9e47-adf5216e630c_hotel_reception.png",
+  "narrativeWords": 351
+}

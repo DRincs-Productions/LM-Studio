@@ -1,0 +1,10 @@
+{
+  "status": "passed",
+  "sourceSha256": "e4416b9004aba33e93729d0e59e82cee3a2ceb33b7e7033e4cba4570ade86092",
+  "finalSha256": "95f7f02aaf09b8770411cbc68849b3e92c11680de51977949985f31297b3b220",
+  "reviewSummary": "Codex revalidated the Hemmingway source draft, the Reviewer PASS, and both the narrative content and evidence gates. This image-only job uses the same approved final scene and the explicitly recorded 1024×1024 job dimensions.",
+  "changesMade": "Reused the prior Codex-final narrative; no narrative prose or Visual-directive changes in this image-only continuation.",
+  "finalCheck": "Confirmed the approved narrative remains 250–400 words, the canon and required beats remain satisfied, and there is one Visual directive with no sounds/music. The Image Worker receives explicit 1024×1024 dimensions from this job.",
+  "checks": "passed",
+  "finalizedAt": "2026-10-04T17:04:59.167Z"
+}

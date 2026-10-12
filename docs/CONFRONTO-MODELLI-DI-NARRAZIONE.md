@@ -1,6 +1,6 @@
 # Confronto dei modelli di narrazione
 
-Ultimo aggiornamento: 4 ottobre 2026  
+Ultimo aggiornamento: 4 ottobre 2026
 Ambiente: Windows, LM Studio CLI. La GUI non è stata usata.
 
 ## Protocollo
@@ -19,54 +19,63 @@ Il test è narrativo: non ha avviato Image Worker, trasferimenti o produzione di
 
 Le lunghezze sono contate sul solo corpo narrativo, senza il Visual o il riepilogo italiano. I risultati sono campioni singoli; sono utili per scegliere il prossimo esperimento, non per affermare una superiorità statistica.
 
-## Cosa sceglierei
+## Scelta corrente
 
-**Sceglierei Hemmingway per il prossimo test Writer → Reviewer → Codex.** È l’unico che ha raggiunto la fascia sia nella prova base sia nel test completo, e nel campione finale ha gestito il malinteso con una battuta coerente. Il Reviewer ha fornito evidenze testuali corrette e Codex ha potuto fare correzioni locali senza riscrivere la scena.
+Per questo workflow scegliamo **Hemmingway** come Writer operativo. Qwen e Mistral restano installati e i campioni precedenti sono conservati: la scelta è attuale e reversibile, non elimina gli altri candidati.
 
-Il blocco attuale è nell’automazione del controllo, non nella battuta generata: la scena dice che le bevande e gli snack sono nel minibar e che non si tratta di un’offerta personale o romantica, ma il controllo lessicale cerca principalmente formulazioni del tipo “I mean the minibar”. Per questo resta una segnalazione deterministica anche dopo il PASS del Reviewer e la verifica di Codex. Prima di usare Hemmingway nel workflow produttivo, quel gate va reso capace di riconoscere chiarimenti equivalenti senza accettare ambiguità reali.
+Il test completo successivo è riuscito: Hemmingway ha prodotto una scena nella fascia richiesta, il Narrative Reviewer ha dato PASS al primo ciclo e Codex ha completato il controllo finale con una modifica locale alla sola direttiva Visual per rendere espliciti età e ruolo canonici di Alex. La prosa e i dialoghi narrativi sono rimasti invariati.
 
-Qwen e Mistral non li sceglierei come Writer per questa scena: i loro output finali restano ben sotto 250 parole, quindi raggiungere il requisito richiederebbe un’espansione sostanziale che Codex non dovrebbe improvvisare.
-
+La pipeline ha poi generato un’immagine quadrata 1024×1024. Il tentativo 2 ha ottenuto 88 punti e `MAJOR_ERROR: NO`; l’immagine è stata finalizzata, pubblicata e trasferita con SHA256 verificato. Il resoconto completo è in `confronto-modelli-narrazione/hemmingway/production-result.json`.
 ## Esito sul ciclo Reviewer → Codex
 
 - Il limite di lunghezza deve essere verificato meccanicamente; il PASS del Reviewer da solo non è sufficiente. Qwen e Mistral hanno ottenuto PASS pur essendo sotto il minimo.
 - Le correzioni del Writer vanno confrontate con la versione precedente. Qwen ha ripetuto la stessa bozza in tutti e tre i tentativi; Mistral ha corretto inizialmente ma poi ha accorciato; Hemmingway ha migliorato il payoff una volta e poi ha ripetuto il testo.
-- Il chiarimento del minibar deve essere controllato semanticamente o con più formulazioni ammesse. La frase di Hemmingway “They are not a personal offer. They are not a romantic offer” è esplicita, ma il precheck corrente continua a segnalarla.
+- Il chiarimento del minibar deve essere controllato semanticamente o con più formulazioni ammesse. Nelle prime prove la frase di Hemmingway “They are not a personal offer. They are not a romantic offer” causava un falso negativo del precheck. Il controllo è stato corretto e la prova completa successiva ha verificato il chiarimento, incluso quando era distribuito su battute adiacenti.
 - Il brief per il modello e il Reviewer deve includere il Project File canonico completo. Nel benchmark l’estratto iniziale ometteva che Alex è maschio; Codex lo ha ripreso dal file canonico alla revisione finale.
 
 Non sono stati modificati il Project File, la sessione Regia, il database Bionic o i settaggi permanenti dei modelli. A fine test `lms ps` non mostrava modelli caricati e il server LM Studio risultava fermo.
 
 ## Campioni e tracciabilità
 
-Manifest con hash, eventi, metriche, cicli Reviewer e decisione Codex: [manifest.json](C:/Users/Shadow/.lmstudio/docs/confronto-modelli-narrazione/manifest.json).
+Manifest con hash, eventi, metriche, cicli Reviewer e decisione Codex: [manifest.json](confronto-modelli-narrazione/manifest.json).
 
 ### Qwen
 
-- [Prova base](C:/Users/Shadow/.lmstudio/docs/confronto-modelli-narrazione/qwen-writer/base.md)
-- [Bozza completa iniziale](C:/Users/Shadow/.lmstudio/docs/confronto-modelli-narrazione/qwen-writer/full-writer-1.md)
-- [Terza correzione Writer](C:/Users/Shadow/.lmstudio/docs/confronto-modelli-narrazione/qwen-writer/writer-revision-3.md)
-- [PASS finale del Reviewer](C:/Users/Shadow/.lmstudio/docs/confronto-modelli-narrazione/qwen-writer/reviewer-3.md)
-- [Revisione Codex e motivi del mancato via libera](C:/Users/Shadow/.lmstudio/docs/confronto-modelli-narrazione/qwen-writer/codex-review.md)
-- [Bozza corretta localmente da Codex, ancora troppo corta](C:/Users/Shadow/.lmstudio/docs/confronto-modelli-narrazione/qwen-writer/codex-final-draft.md)
+- [Prova base](confronto-modelli-narrazione/qwen-writer/base.md)
+- [Bozza completa iniziale](confronto-modelli-narrazione/qwen-writer/full-writer-1.md)
+- [Terza correzione Writer](confronto-modelli-narrazione/qwen-writer/writer-revision-3.md)
+- [PASS finale del Reviewer](confronto-modelli-narrazione/qwen-writer/reviewer-3.md)
+- [Revisione Codex e motivi del mancato via libera](confronto-modelli-narrazione/qwen-writer/codex-review.md)
+- [Bozza corretta localmente da Codex, ancora troppo corta](confronto-modelli-narrazione/qwen-writer/codex-final-draft.md)
 
 ### Mistral
 
-- [Prova base](C:/Users/Shadow/.lmstudio/docs/confronto-modelli-narrazione/mistral-small/base.md)
-- [Bozza completa iniziale](C:/Users/Shadow/.lmstudio/docs/confronto-modelli-narrazione/mistral-small/full-writer-1.md)
-- [Terza correzione Writer](C:/Users/Shadow/.lmstudio/docs/confronto-modelli-narrazione/mistral-small/writer-revision-3.md)
-- [PASS finale del Reviewer](C:/Users/Shadow/.lmstudio/docs/confronto-modelli-narrazione/mistral-small/reviewer-3.md)
-- [Revisione Codex e motivi del mancato via libera](C:/Users/Shadow/.lmstudio/docs/confronto-modelli-narrazione/mistral-small/codex-review.md)
-- [Bozza corretta localmente da Codex, ancora troppo corta](C:/Users/Shadow/.lmstudio/docs/confronto-modelli-narrazione/mistral-small/codex-final-draft.md)
+- [Prova base](confronto-modelli-narrazione/mistral-small/base.md)
+- [Bozza completa iniziale](confronto-modelli-narrazione/mistral-small/full-writer-1.md)
+- [Terza correzione Writer](confronto-modelli-narrazione/mistral-small/writer-revision-3.md)
+- [PASS finale del Reviewer](confronto-modelli-narrazione/mistral-small/reviewer-3.md)
+- [Revisione Codex e motivi del mancato via libera](confronto-modelli-narrazione/mistral-small/codex-review.md)
+- [Bozza corretta localmente da Codex, ancora troppo corta](confronto-modelli-narrazione/mistral-small/codex-final-draft.md)
 
 ### Hemmingway
 
-- [Prova base](C:/Users/Shadow/.lmstudio/docs/confronto-modelli-narrazione/hemmingway/base.md)
-- [Bozza completa iniziale](C:/Users/Shadow/.lmstudio/docs/confronto-modelli-narrazione/hemmingway/full-writer-1.md)
-- [Correzione Writer](C:/Users/Shadow/.lmstudio/docs/confronto-modelli-narrazione/hemmingway/writer-revision-1.md)
-- [PASS finale del Reviewer](C:/Users/Shadow/.lmstudio/docs/confronto-modelli-narrazione/hemmingway/reviewer-3.md)
-- [Scena finale corretta da Codex](C:/Users/Shadow/.lmstudio/docs/confronto-modelli-narrazione/hemmingway/codex-final.md)
-- [Revisione Codex e gate automatico rimasto](C:/Users/Shadow/.lmstudio/docs/confronto-modelli-narrazione/hemmingway/codex-review.md)
+- [Prova base](confronto-modelli-narrazione/hemmingway/base.md)
+- [Bozza completa iniziale](confronto-modelli-narrazione/hemmingway/full-writer-1.md)
+- [Correzione Writer](confronto-modelli-narrazione/hemmingway/writer-revision-1.md)
+- [PASS finale del Reviewer](confronto-modelli-narrazione/hemmingway/reviewer-3.md)
+- [Scena finale corretta da Codex](confronto-modelli-narrazione/hemmingway/codex-final.md)
+- [Revisione Codex e gate automatico rimasto](confronto-modelli-narrazione/hemmingway/codex-review.md)
 
 Schede dei modelli: [Qwen Writer](https://huggingface.co/llmfan46/Qwen3.5-27B-Writer-V2-uncensored-heretic-GGUF), [Hemmingway](https://huggingface.co/JohnDi/Hemmingway-1-Abliterated-Extreme-GGUF), [Mistral Small 3.2](https://huggingface.co/mistralai/Mistral-Small-3.2-24B-Instruct-2506).
 
-I campioni precedenti sono stati spostati, per conservarli e lasciare pulita la cartella dei test, in [archivio-confronto-precedente](C:/Users/Shadow/.lmstudio/docs/archivio-confronto-precedente/).
+I campioni precedenti sono stati spostati, per conservarli e lasciare pulita la cartella dei test, in [archivio-confronto-precedente](archivio-confronto-precedente/).
+
+## Test completo con asset (4 ottobre 2026)
+
+- **Writer:** Hemmingway 1 Abliterated Extreme; gli altri modelli sono stati mantenuti.
+- **Reviewer:** PASS in un ciclo; Codex final review: passed.
+- **Narrativa:** [scena finale](confronto-modelli-narrazione/hemmingway/production-final.md), 351 parole narrative, Visual iniziale, nessun suono o musica.
+- **Immagine:** quadrata 1024×1024; score 88, `MAJOR_ERROR: NO`, tentativo 2.
+- **Asset trasferito:** `C:\AI\assets\8cabd04f-763a-47a7-b36b-9e464efc9a87\adc6d3f1-de20-4e38-9e47-adf5216e630c\8cabd04f-763a-47a7-b36b-9e464efc9a87_adc6d3f1-de20-4e38-9e47-adf5216e630c_hotel_reception.png`; SHA256 uguale al file pubblicato.
+- **Esclusioni rispettate:** Claude, suoni/musica e generazione su un PC cloud separato esclusi; Image Worker eseguito sull'host di test.
+- **Tracciabilità:** [risultato completo](confronto-modelli-narrazione/hemmingway/production-result.json), [revisione Reviewer](confronto-modelli-narrazione/hemmingway/production-reviewer.md), [revisione Codex](confronto-modelli-narrazione/hemmingway/production-codex-review.json).

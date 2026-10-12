@@ -40,6 +40,7 @@ node_modules
 /production/
 /component-tests/
 /production-tests/[0-9]*/
+/production-tests/writer-model-comparison/benchmark-results.json
 /e2e-*.json
 /audio/worker/work/
 
