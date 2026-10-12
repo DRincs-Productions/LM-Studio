@@ -9,7 +9,7 @@ Aggiornato: 4 ottobre 2026. Audio Worker MCP implementato e registrato in Codex;
 - I pesi ACE-Step XL SFT sono presenti ma il suo runtime non è installato. Stable Audio 3 TFLite CPU è installato con Medium e Small SFX; è stata generata e verificata una prova audio.
 - Image Worker usa `C:\AI\image-worker\models` per i modelli e `C:\Users\Shadow\.lmstudio\image-worker\work` per il lavoro locale; gli asset finali sono in `C:\AI\image-worker\output\final` e sono trasferiti in `C:\AI\assets\<PROJECT_ID>\...`.
 - Asset Worker immagini è rimasto invariato; Audio Worker ha una pubblicazione dedicata e allowlistata per musica ed effetti.
-- Il remote rclone `imagecloud:` è un OneDrive Personal. La radice conteneva `ImageWorker`; sono stati creati `AudioWorker/SoundEffects/final` e `AudioWorker/Music/final` su OneDrive.
+- In rclone è configurato il remote `imagecloud:`. La radice conteneva `ImageWorker`; sono stati creati `AudioWorker/SoundEffects/final` e `AudioWorker/Music/final`.
 - La GPU è NVIDIA RTX A4500 con 20 GB. Alla verifica del 4 ottobre 2026 `lms ps` non ha trovato modelli caricati; `nvidia-smi` mostrava 599 MiB occupati dal sistema e circa 19,6 GiB liberi. L’Audio Worker dovrà comunque rispettare l’esclusività VRAM e non caricare nulla mentre Regia occupa memoria.
 
 ## Decisioni di responsabilità
@@ -46,12 +46,12 @@ Il Project File resta la fonte canonica del mondo narrativo; il manifest è il r
 - `C:\AI\assets\<PROJECT_ID>\Audio\Music\...`
 - manifest vicino agli asset: `C:\AI\assets\<PROJECT_ID>\Audio\audio-manifest.json`
 
-**OneDrive via remote già configurato**
+**Remote rclone già configurato**
 
 - `imagecloud:AudioWorker/SoundEffects/final/<PROJECT_ID>/...`
 - `imagecloud:AudioWorker/Music/final/<PROJECT_ID>/...`
 
-Il publish deve verificare presenza e hash sul remoto. Nessuna cancellazione remota automatica. I due rami SoundEffects e Music restano distinti sia localmente sia su OneDrive; quello esistente `ImageWorker/final` non si modifica.
+Il publish deve verificare presenza e hash sul remoto. Nessuna cancellazione remota automatica. I due rami SoundEffects e Music restano distinti sia localmente sia sul remote rclone; quello esistente `ImageWorker/final` non si modifica.
 
 ## Qualità e workflow
 
@@ -88,7 +88,7 @@ Le schede Stable Audio richiedono inoltre l’accettazione dell’accordo Stabil
 
 ## Aggiornamento operativo: backend audio.cpp — 4 ottobre 2026
 
-Su richiesta dell’utente il runtime di generazione del Worker è stato spostato a **audio.cpp**, mantenendo gli stessi tool MCP, il formato dei manifest, l’archiviazione locale e i due rami OneDrive. L’Image Worker usa `sd-cli.exe`; l’Audio Worker ora richiama `audiocpp_cli.exe` tramite un backend nativo, senza passare dalla UI di LM Studio.
+Su richiesta dell’utente il runtime di generazione del Worker è stato spostato a **audio.cpp**, mantenendo gli stessi tool MCP, il formato dei manifest, l’archiviazione locale e i due rami remoti rclone. L’Image Worker usa `sd-cli.exe`; l’Audio Worker ora richiama `audiocpp_cli.exe` tramite un backend nativo, senza passare dalla UI di LM Studio.
 
 - Runtime installato: audio.cpp **v0.9.0**, pacchetto Windows x64 Vulkan, in `C:\Users\Shadow\.lmstudio\audio\audio.cpp\v0.9.0-vulkan`.
 - GPU rilevata dal backend: NVIDIA RTX A4500 (Vulkan). Il test backend elenca anche la CPU AMD EPYC 7543P.
@@ -103,7 +103,7 @@ Su richiesta dell’utente il runtime di generazione del Worker è stato spostat
 - Il server MCP aggiornato ha generato il candidato **SFX-01** (campanello, 4 s): WAV stereo PCM 16-bit, 44.1 kHz, nessun clipping; SHA-256 `e63ce5c20db30bd6cc29e04e782d2fa956515e1af317a5c873ead7978473d5d7`.
 - Il server MCP aggiornato ha generato il candidato **MUSIC-01** (musica lounge, 30 s): WAV stereo PCM 16-bit, 44.1 kHz, nessun clipping; SHA-256 `19c0a4ea19bd8382229e3ba3984ffa048822f63fc206d7b67068b80a32b1ac60`.
 - È stata creata un’anteprima di quattro ripetizioni (120 s) per ascoltare la giunzione: `C:\Users\Shadow\.lmstudio\audio\worker\work\loop-previews\MUSIC-01-grand-hotel-lobby-2026-10-04T21-25-35-206Z-loop-preview-1791149158782.wav`.
-- Le metriche diagnostiche del brano mostrano una differenza tra i bordi (RMS primi 100 ms `0.1808135`, ultimi 100 ms `0.0000538`); questo può rendere percepibile la giunzione. L’anteprima va ascoltata e il loop non è ancora approvato. Nessuno dei due candidati è stato finalizzato o caricato su OneDrive.
+- Le metriche diagnostiche del brano mostrano una differenza tra i bordi (RMS primi 100 ms `0.1808135`, ultimi 100 ms `0.0000538`); questo può rendere percepibile la giunzione. L’anteprima va ascoltata e il loop non è ancora approvato. Nessuno dei due candidati è stato finalizzato o caricato sul remote rclone.
 - I file audio candidati e i manifest si trovano nei rispettivi job sotto `C:\Users\Shadow\.lmstudio\audio\worker\work\jobs\9b1b33e8-f40c-464a-bf7c-07fbcba71282\grand-hotel-check-in`.
 
 ### Pulizia di C:\AI
@@ -132,7 +132,7 @@ Il codice del Worker e i file temporanei sono stati spostati fuori da `C:\AI`; l
 3. Implementare MCP Audio Worker separato dall’Image Worker; riusare Project Worker per contesto/proprietà e asset IDs, senza collegare modelli audio a LM Studio se non necessario.
 4. Estendere Asset Worker con operazioni audio esplicitamente allowlistate o creare un transfer helper limitato ai due rami AudioWorker; mantenere immutata la policy immagini.
 5. Aggiungere le chiamate autorizzate alla pipeline Codex e passare ad eventuale Claude un Audio Manifest validato.
-6. Testare separatamente generazione, loop, riuso di asset, trasferimento OneDrive e ripresa dopo errore; solo poi un test end-to-end.
+6. Testare separatamente generazione, loop, riuso di asset, trasferimento tramite rclone e ripresa dopo errore; solo poi un test end-to-end.
 
 ## Limiti aperti
 
@@ -153,7 +153,7 @@ Questa sezione aggiorna lo stato operativo descritto sopra: il progetto è passa
 - Runtime Stable Audio 3 TFLite CPU conservato in `C:\Users\Shadow\.lmstudio\audio\worker\runtime\stable-audio-3\optimized\tflite`; disponibili i backend `stable_audio_medium` (DiT Medium fp32 + codec SAME-L) e `stable_audio_small_sfx` (DiT Small SFX fp32 + codec SAME-S).
 - Cartella output candidati: `C:\Users\Shadow\.lmstudio\audio\worker\work\jobs\<PROJECT_ID>\<SCENE_ID>\<CUE_ID>`; anteprime loop in `C:\Users\Shadow\.lmstudio\audio\worker\work\loop-previews`.
 - Asset finali: `C:\AI\assets\<PROJECT_ID>\Audio\SoundEffects` e `...\Music`.
-- Pubblicazione OneDrive limitata a `imagecloud:AudioWorker/SoundEffects/final/<PROJECT_ID>` e `imagecloud:AudioWorker/Music/final/<PROJECT_ID>`. La pubblicazione copia WAV e manifest JSON affiancato, verifica entrambe le dimensioni e non cancella file remoti.
+- Pubblicazione tramite rclone limitata a `imagecloud:AudioWorker/SoundEffects/final/<PROJECT_ID>` e `imagecloud:AudioWorker/Music/final/<PROJECT_ID>`. La pubblicazione copia WAV e manifest JSON affiancato, verifica entrambe le dimensioni e non cancella file remoti.
 - MCP registrato come `audio-worker` in `C:\Users\Shadow\.codex\config.toml`. Backup precedente: `C:\Users\Shadow\.codex\config.toml.backup-audio-worker-20261004-222343`. `codex mcp get audio-worker` conferma `enabled: true` e trasporto stdio.
 
 ### Tool disponibili in Codex
@@ -163,7 +163,7 @@ Questa sezione aggiorna lo stato operativo descritto sopra: il progetto è passa
 - `inspect_audio`: formato, durata, canali, frequenza, picco, RMS, clipping, hash e metriche diagnostiche ai bordi.
 - `create_loop_preview`: estrae i loop point richiesti e concatena più ripetizioni per l’ascolto. Il crossfade opzionale modifica solo la preview.
 - `finalize_audio`: copia il candidato e il manifest nella cartella locale corretta, rifiutando sovrascritture e mismatch di progetto/categoria.
-- `publish_audio`: carica soltanto un file già finalizzato nella cartella OneDrive della categoria corretta e controlla la dimensione remota.
+- `publish_audio`: carica soltanto un file già finalizzato nella percorso remoto rclone della categoria corretta e controlla la dimensione remota.
 
 ### Verifiche eseguite
 
@@ -173,14 +173,14 @@ Questa sezione aggiorna lo stato operativo descritto sopra: il progetto è passa
 - `create_loop_preview` ha creato una preview di 40 secondi da un segmento da 20 secondi ripetuto due volte, senza alterare il sorgente.
 - `finalize_audio` ha copiato il candidato nella cartella locale SoundEffects e ha verificato l’hash. Il file prodotto era un artefatto temporaneo di prova; è stato rimosso dopo la verifica e non è un asset di progetto.
 - `codex mcp list` / `codex mcp get audio-worker` hanno riconosciuto la configurazione.
-- Sono state lette le cartelle OneDrive dedicate senza modificarle; non è stato caricato alcun file, quindi il publish resta da provare su un asset approvato. Non è stato fatto un ascolto soggettivo del campione né un benchmark comparativo cieco.
+- Sono state lette le percorsi remoti rclone dedicate senza modificarle; non è stato caricato alcun file, quindi il publish resta da provare su un asset approvato. Non è stato fatto un ascolto soggettivo del campione né un benchmark comparativo cieco.
 
 ### Limiti e prossimo lavoro
 
 - **ACE-Step XL SFT** è scaricato ma il relativo runtime d’inferenza non è installato: il Worker al momento espone solo Stable Audio 3 TFLite. ACE non compare tra i backend selezionabili e lo status lo marca come non disponibile. Il modello selezionato per musica va quindi ancora confrontato con ACE prima di considerare conclusa la valutazione della qualità.
 - Il runtime TFLite usa CPU e lascia libera la GPU; il profilo Medium privilegia qualità rispetto a Small SFX. I loop devono essere ascoltati nella preview ripetuta; le metriche ai bordi sono soltanto diagnostiche.
 - Il backend generativo non esegue ancora editing/inpainting da reference; accetta una reference audio per audio-to-audio.
-- Il tool publish verifica dimensione remota; verifica hash remoto soltanto se il backend OneDrive espone una funzione hash confrontabile.
+- Il tool publish verifica dimensione remota; verifica hash remoto soltanto se il backend remoto rclone espone una funzione hash confrontabile.
 - Claude non è coinvolto in questa implementazione; il Worker fornisce manifest con loop, trigger e stop espliciti da passargli in seguito.
 - Codex potrebbe dover ricaricare la configurazione MCP perché la configurazione è stata aggiornata durante la sessione.
 

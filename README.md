@@ -6,7 +6,7 @@ Il sistema non è stato progettato per lavorare soltanto in locale. I modelli on
 
 ## Hardware e ambiente
 
-Il progetto usa hardware di seconda mano e comprende Shadow PC nell’ambiente di lavoro. Nei controlli operativi disponibili, il PC Windows attuale con GPU NVIDIA RTX A4500 è l’unica macchina verificata per la produzione. Il PC cloud/PC 2 resta per ora teorico e non è collegato all’esecuzione dei job.
+Il progetto usa hardware di seconda mano e comprende Shadow PC nell’ambiente di lavoro. L’architettura assegna il progetto di gioco e i suoi file al **PC locale** e i modelli locali con i relativi worker al **PC cloud**. I test eseguiti finora sono stati effettuati su un solo host Windows con GPU NVIDIA RTX A4500: l’esecuzione distribuita e il passaggio automatico dei job tra le due macchine non sono ancora stati verificati.
 
 ## Architettura generale
 
@@ -194,42 +194,44 @@ Codex lo attiva dopo il ciclo creativo e produttivo, come flusso separato dalla 
 
 ## PC locale, PC cloud e condivisione dei file
 
-La separazione prevista assegna la direzione creativa e il coordinamento al PC 1, mentre un futuro PC 2 potrà ospitare lavorazioni produttive quando sarà disponibile. Oggi, però, il PC 2 non è accessibile e non esiste un servizio che gli invii job: i test che simulano quel ruolo eseguono effettivamente le attività sul PC 1. La menzione di Shadow PC non costituisce prova che il PC 2 sia già configurato come worker remoto.
+Il **PC locale** conserva il progetto di gioco: sorgenti, documentazione, Project File, stato e asset integrati. Il **PC cloud** ospita i modelli locali e i worker che li eseguono, così la generazione usa le risorse di quella macchina. Il Coordinatore online assegna il lavoro e governa l’uso della VRAM del PC cloud.
+
+Questa è la suddivisione architetturale desiderata. Le verifiche disponibili sono state svolte su un solo host Windows con RTX A4500; non provano ancora un’esecuzione distribuita né un servizio che invii job al PC cloud. La condivisione file già presente usa rclone e non costituisce, da sola, una coda o un sistema di dispatch.
 
 ```mermaid
 flowchart LR
-    subgraph PC1[PC 1 · Windows attuale · RTX A4500]
+    subgraph LOCAL[PC locale · progetto di gioco]
+        GAME[Sorgenti e documentazione]
+        PF[Project File e stato]
+        AS[Asset integrati]
+    end
+    subgraph CLOUD[PC cloud · modelli locali]
         B[Bionic e Regia]
         C[Codex Coordinatore]
-        M[Modelli locali e Worker]
-        PF[Project File e stato canonico]
-        AS[Asset locali di progetto]
+        M[Modelli e Worker]
         B --> C
         C --> M
-        B --> PF
-        C --> PF
-        M --> AS
     end
-    OD[(OneDrive · remoto imagecloud:)]
-    PC2[PC 2 / cloud pianificato\nnon collegato ai job]
-    M -->|rclone: pubblica finali| OD
-    OD -->|rclone: recupera file| AS
-    PC2 -. futuro accesso ai file .-> OD
+    RCLONE[(Remote rclone · imagecloud:)]
+    M -->|pubblica file finali| RCLONE
+    RCLONE -->|recupera asset| AS
+    GAME -. accesso al progetto da collegare .- M
+    PF -. handoff del progetto da collegare .- C
 ```
 
 ### Cosa gira su ciascuna macchina
 
 | Sistema | Stato e responsabilità attuali |
 |---|---|
-| **PC 1 — Windows attuale** | Host verificato. Qui girano Bionic/Regia, Project Worker, Codex CLI e i worker locali. La generazione immagini e i modelli audio usano le risorse locali, inclusa la RTX A4500. |
-| **PC 2 — cloud pianificato** | Non accessibile e non collegato all’orchestrazione. Non risultano configurati dispatch, heartbeat, installazioni di worker o modelli verificati su questa macchina. Se non è disponibile, oggi non interrompe i test: questi avvengono sul PC 1. Quando il flusso dipenderà davvero dal PC 2, l’indisponibilità dovrà fermare quel job e tornare come errore nel handback. |
-| **Shadow PC** | È citato nell’ambiente complessivo del progetto, ma le configurazioni operative esaminate non lo identificano come PC 2 attivo. La sua eventuale funzione di host remoto va documentata quando verrà collegato. |
+| **PC locale** | Destinazione canonica del progetto di gioco: sorgenti, documentazione, Project File, stato e asset integrati. Il flusso deve poter continuare anche quando il PC cloud è spento, fermando o accodando in modo esplicito la produzione che dipende dai modelli. |
+| **PC cloud** | Destinazione dei modelli locali e dei worker di generazione, con GPU e VRAM per scrittura, immagini e audio. Il dispatch remoto, il controllo di disponibilità e l’installazione completa dei worker non sono ancora stati verificati tra due macchine. |
+| **Host di test verificato** | I test documentati sono stati eseguiti su un solo host Windows con NVIDIA RTX A4500. Questo dato descrive l’ambiente di prova e non cambia la destinazione architetturale del progetto e dei modelli. |
 
-Non si assume che il PC 2 disponga della GPU, dei modelli o degli stessi percorsi del PC 1. Un futuro worker remoto dovrà essere installato e verificato separatamente; OneDrive trasferisce file, non installa modelli e non avvia da solo la generazione.
+La GPU, i modelli e i percorsi del PC cloud devono essere verificati sulla macchina effettivamente configurata. rclone trasferisce i file previsti, ma non installa modelli e non avvia da solo la generazione.
 
 ### Dove risiedono modelli, progetti e asset
 
-| Dati o programmi | Posizione attuale sul PC 1 | Note |
+| Dati o programmi | Destinazione architetturale | Note |
 |---|---|---|
 | Modelli linguistici LM Studio | `C:\Users\Shadow\.lmstudio\models` | Regia Qwen 3.5 9B; Writer Hemmingway 1 Abliterated Extreme; Narrative Reviewer Qwen3 8B. Sono modelli locali di LM Studio. |
 | Checkpoint immagini | `C:\AI\image-worker\models` | SDXL Lightning 4-step e Lustify Zenith v9. |
@@ -239,25 +241,25 @@ Non si assume che il PC 2 disponga della GPU, dei modelli o degli stessi percors
 | Project File e stato operativo | `C:\AI\bionic\projects` | Il Project File è la fonte canonica; lo stato di handoff è in `.orchestration`. |
 | Asset finali locali | `C:\AI\assets\<PROJECT_ID>` | Organizzati per progetto; audio separato in `Audio\SoundEffects` e `Audio\Music`. |
 
-I modelli elencati risiedono sul PC 1, non su OneDrive. Un PC 2 futuro dovrà ricevere i modelli richiesti tramite una propria installazione o un trasferimento controllato; il protocollo di condivisione degli asset non replica automaticamente l’intero catalogo dei modelli.
+I percorsi sopra sono quelli rilevati durante i test sull’host Windows verificato. Nell’architettura a due macchine i modelli appartengono al PC cloud; il trasferimento dei soli asset via rclone non replica il catalogo dei modelli.
 
 **Eccezione da riordinare:** Project File e stato di orchestrazione si trovano ancora in `C:\AI\bionic\projects`. Questa è una posizione preesistente mantenuta durante le modifiche ai Worker; non rispetta ancora del tutto l’obiettivo di lasciare sotto `C:\AI` soltanto modelli e asset. Lo spostamento richiede di aggiornare e verificare i percorsi del Project Worker e non è stato eseguito in questa fase.
 
-### OneDrive e rclone
+### Trasferimento file con rclone
 
-Il programma che collega i worker al cloud file è **rclone**. Il remote già configurato si chiama `imagecloud:` ed è collegato a OneDrive Personal. Il file di configurazione locale di rclone è sotto `%APPDATA%\rclone\rclone.conf`; contiene le credenziali OAuth e non va copiato nel repository, nei Project File o nei log. Ogni PC dovrà autorizzare il proprio accesso a OneDrive e configurare il remote localmente.
+Il trasferimento dei file è gestito da **rclone**. Il remote già configurato si chiama `imagecloud:`. Il file di configurazione locale di rclone è sotto `%APPDATA%\rclone\rclone.conf`; contiene credenziali e non va copiato nel repository, nei Project File o nei log. Ogni macchina che trasferisce file deve avere rclone configurato localmente.
 
 Il trasferimento avviene quando il worker chiama rclone: non è una sincronizzazione continua delle cartelle e non costituisce una coda di job remoti.
 
-| Contenuto | Cartella OneDrive usata | Direzione e responsabile |
+| Contenuto | Percorso remoto rclone | Direzione e responsabile |
 |---|---|---|
 | Immagini finali | `imagecloud:ImageWorker/final/` | Image Worker pubblica; Asset Worker scarica la copia finale in `C:\AI\assets\<PROJECT_ID>`. |
 | Effetti sonori finali | `imagecloud:AudioWorker/SoundEffects/final/<PROJECT_ID>/` | Destinazione configurata per WAV e manifest; pubblicazione di un prodotto finale non ancora verificata. |
 | Musiche finali | `imagecloud:AudioWorker/Music/final/<PROJECT_ID>/` | Destinazione configurata per WAV e manifest; pubblicazione di un prodotto finale non ancora verificata. |
 
-Il codice usa copie esplicite tramite rclone e controlli sul risultato; non viene eseguito `sync` dell’intero OneDrive. La pubblicazione delle immagini verifica la presenza remota; il trasferimento locale usato nella produzione confronta anche l’hash del file. La pubblicazione audio verifica le dimensioni di WAV e manifest. La rimozione di un file remoto non è automatica nel flusso normale.
+Il codice usa copie esplicite tramite rclone e controlli sul risultato; non viene eseguita una sincronizzazione indiscriminata del remote. La pubblicazione delle immagini verifica la presenza remota; il trasferimento locale usato nella produzione confronta anche l’hash del file. La pubblicazione audio verifica le dimensioni di WAV e manifest. La rimozione di un file remoto non è automatica nel flusso normale.
 
-Se in futuro il PC 2 dovrà elaborare un asset, potrà scaricare dalla cartella OneDrive autorizzata e pubblicare il risultato nella cartella finale prevista. La richiesta del job, l’assegnazione al PC 2, il controllo che sia online e la gestione dei tentativi sono parti separate da implementare: rclone da solo non le fornisce.
+Quando il PC cloud sarà collegato, potrà scaricare tramite rclone gli input autorizzati e pubblicare i risultati nei percorsi finali previsti. La richiesta del job, l’assegnazione al PC cloud, il controllo che sia online e la gestione dei tentativi sono parti separate da implementare: rclone da solo non le fornisce.
 
 ## MCP: strumenti e installazione
 

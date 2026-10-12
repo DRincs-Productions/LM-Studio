@@ -38,6 +38,6 @@ I WAV, le preview e i manifest copiati qui sono gli stessi file prodotti dal Wor
 
 ## Limiti e decisioni
 
-La preview contiene quattro ripetizioni del segmento da 30 secondi. Le metriche misurano soltanto proprietà del segnale e non certificano che la giunta sia impercettibile; inoltre non è stato fatto un ascolto umano documentato. Perciò il loop resta **da correggere e ascoltare**, non approvato. Nessun candidato è stato finalizzato o pubblicato su OneDrive; non sono stati creati asset definitivi. Le prove non hanno modificato il Project File canonico.
+La preview contiene quattro ripetizioni del segmento da 30 secondi. Le metriche misurano soltanto proprietà del segnale e non certificano che la giunta sia impercettibile; inoltre non è stato fatto un ascolto umano documentato. Perciò il loop resta **da correggere e ascoltare**, non approvato. Nessun candidato è stato finalizzato o pubblicato tramite rclone; non sono stati creati asset definitivi. Le prove non hanno modificato il Project File canonico.
 
 Conclusione provvisoria: mantenere **Small SFX per effetti** e **Medium come candidato musicale**, subordinando l'accettazione musicale alla correzione della coda, all'ascolto della preview ripetuta e a un nuovo controllo del loop.
