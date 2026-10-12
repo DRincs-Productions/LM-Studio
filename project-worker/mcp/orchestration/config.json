@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "coordinatorEnabled": true,
+  "coordinatorCommand": "codex.exe",
+  "writerModelIdentifier": "JohnDi/Hemmingway-1-Abliterated-Extreme-GGUF/Hemmingway1-Extreme-Q4_K_M.gguf",
+  "coordinatorTimeoutMs": 3600000,
+  "waitTimeoutMs": 3600000,
+  "suspendRegia": true,
+  "pc2": {
+    "mode": "local_simulation",
+    "imageWorker": "C:\\Users\\Shadow\\.lmstudio\\image-worker\\mcp\\server.mjs",
+    "transport": "imagecloud:",
+    "remoteFinalDirectory": "ImageWorker/final"
+  },
+  "writableDirectories": [
+    "C:\\AI\\bionic",
+    "C:\\AI\\image-worker",
+    "C:\\Users\\Shadow\\.lmstudio\\production",
+    "C:\\AI\\assets"
+  ]
+}

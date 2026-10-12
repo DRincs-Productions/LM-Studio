@@ -11,17 +11,19 @@ import path from "node:path";
 // =========================================================
 
 const ROOT = "C:\\AI\\image-worker";
+const WORKER_HOME = "C:\\Users\\Shadow\\.lmstudio\\image-worker";
 
-const SDCLI = path.join(ROOT, "bin", "sd-cli.exe");
+const SDCLI = path.join(WORKER_HOME, "bin", "sd-cli.exe");
 const MODELS = path.join(ROOT, "models");
 
-const WORK = path.join(ROOT, "work", "current");
+const WORK = path.join(WORKER_HOME, "work", "current");
 const FINAL = path.join(ROOT, "output", "final");
 
 const NORMAL_MODEL = path.join(
   MODELS,
   "sdxl_lightning_4step.safetensors"
 );
+
 
 const ADULT_MODEL = path.join(
   MODELS,
@@ -73,12 +75,8 @@ function safeName(name) {
 
 function isInsideRoot(filePath) {
   const requested = path.resolve(filePath).toLowerCase();
-  const root = path.resolve(ROOT).toLowerCase();
-
-  return (
-    requested === root ||
-    requested.startsWith(root + path.sep.toLowerCase())
-  );
+  const allowedRoots = [ROOT, WORK].map((root) => path.resolve(root).toLowerCase());
+  return allowedRoots.some((root) => requested === root || requested.startsWith(root + path.sep.toLowerCase()));
 }
 
 function runProcess(executable, args, options = {}) {
@@ -285,7 +283,10 @@ server.tool(
 
     filename: z
       .string()
-      .min(1)
+      .min(1),
+
+    width: z.number().int().min(512).max(2048).optional(),
+    height: z.number().int().min(512).max(2048).optional()
   },
 
   async ({
@@ -293,7 +294,9 @@ server.tool(
     prompt,
     negative_prompt,
     seed,
-    filename
+    filename,
+    width,
+    height
   }) => {
     await ensureDirectories();
 
@@ -369,8 +372,8 @@ PATH: ${model}`
         "-p", prompt,
         "-n", negative_prompt,
 
-        "-W", "1920",
-        "-H", "1080",
+        "-W", String(width ?? 1920),
+        "-H", String(height ?? 1080),
 
         "--steps", "4",
 
@@ -589,7 +592,8 @@ Prioritize:
 5. no missing heads;
 6. no severe anatomical corruption;
 7. faces are understandable when relevant;
-8. overall scene substantially matches the request.
+8. overall scene substantially matches the request;
+9. explicit canonical appearance requirements in ORIGINAL REQUEST (such as hair color and signature clothing) must be present. A contradictory or missing required canonical feature is a MAJOR_ERROR, not a minor clothing difference.
 
 Do NOT heavily penalize:
 - minor hand defects;
@@ -1079,3 +1083,4 @@ const transport =
   new StdioServerTransport();
 
 await server.connect(transport);
+

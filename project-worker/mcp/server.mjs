@@ -5,12 +5,13 @@ import { z } from "zod";
 import fs from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
+import { store, installTools, registrationText, projectContext } from "./orchestration/tools.mjs";
 
 // =========================================================
 // CONFIG
 // =========================================================
 
-const PROJECTS_DIR = "C:\\AI\\bionic\\projects";
+const PROJECTS_DIR = store.root;
 
 // =========================================================
 // SERVER
@@ -130,7 +131,8 @@ Project File: ${filename}
         text:
 `PROJECT_FILE_CREATED
 PROJECT_FILE: ${filename}
-PATH: ${filePath}`
+PATH: ${filePath}
+${registrationText(await store.register(filename))}`
       }]
     };
   }
@@ -166,12 +168,14 @@ server.tool(
           text:
 `PROJECT_FILE_READ
 PROJECT_FILE: ${filename}
+PROJECT_CONTEXT: ${JSON.stringify(await projectContext(filename))}
 
 ${content}`
         }]
       };
     } catch (error) {
       return {
+        isError: true,
         content: [{
           type: "text",
           text:
@@ -195,12 +199,14 @@ server.tool(
 
   {
     filename: z.string().min(1),
-    content: z.string().min(1)
+    content: z.string().min(1),
+    expected_sha256: z.string().regex(/^[a-f0-9]{64}$/).optional()
   },
 
   async ({
     filename,
-    content
+    content,
+    expected_sha256
   }) => {
     try {
       const filePath =
@@ -209,11 +215,7 @@ server.tool(
       // Refuse accidental creation.
       await fs.access(filePath);
 
-      await fs.writeFile(
-        filePath,
-        content,
-        "utf8"
-      );
+      await store.replaceProject(filename, content, expected_sha256);
 
       const stats =
         await fs.stat(filePath);
@@ -229,6 +231,7 @@ FILE_SIZE_BYTES: ${stats.size}`
       };
     } catch (error) {
       return {
+        isError: true,
         content: [{
           type: "text",
           text:
@@ -250,4 +253,5 @@ await ensureProjectsDirectory();
 const transport =
   new StdioServerTransport();
 
+installTools(server);
 await server.connect(transport);
