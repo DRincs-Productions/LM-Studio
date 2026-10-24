@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "projectId": "ff746465-5ca7-49df-bf94-a76917ddf3c3",
+  "projectFile": "project.md",
+  "bindingToken": "fe74a8cd-0c1f-44fa-8e8a-7a5c099d787a",
+  "binding": {
+    "regiaSessionId": "fixture-session",
+    "modelSpecifier": {
+      "type": "indexed",
+      "indexedModelIdentifier": "fixture-model"
+    }
+  },
+  "owner": "regia",
+  "phase": "prototype",
+  "status": "handback_ready",
+  "revision": 6,
+  "createdAt": "2026-10-24T12:02:05.214Z",
+  "job": {
+    "id": "f87e3b34-88ec-46ff-af99-bfc243a8c55a",
+    "phase": "prototype",
+    "summary": "Create a prototype",
+    "projectSha256": "b639b321035bd1129c11d8d3ec39d2872bf4192d43aea3e4d52f4d18bdd1c41a",
+    "executionMode": "production",
+    "createdAt": "2026-10-24T12:02:05.258Z",
+    "status": "error",
+    "runnerPid": null,
+    "startedAt": "2026-10-24T12:02:05.270Z",
+    "memory": {
+      "status": "disabled",
+      "gpuBeforeMiB": "14490, 19190",
+      "gpuAfterMiB": "14490, 19190"
+    },
+    "finishedAt": "2026-10-24T12:02:05.478Z"
+  },
+  "handback": {
+    "summary": "Production requires attention before it can continue.",
+    "completedTasks": [],
+    "assets": [],
+    "problems": [
+      "PC 2 unavailable"
+    ],
+    "decisions": [
+      "Inspect the current project and available dependencies."
+    ],
+    "questionForUser": "How should we resolve this production problem?",
+    "jobId": "f87e3b34-88ec-46ff-af99-bfc243a8c55a",
+    "status": "error",
+    "createdAt": "2026-10-24T12:02:05.478Z",
+    "acknowledgedAt": null
+  },
+  "history": [],
+  "updatedAt": "2026-10-24T12:02:05.478Z"
+}

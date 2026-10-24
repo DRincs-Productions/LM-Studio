@@ -1,0 +1,124 @@
+{
+  "schemaVersion": 1,
+  "projectId": "aa533b0c-f447-4037-aa1e-3632ce79989c",
+  "projectFile": "project.md",
+  "bindingToken": "80f648ec-56a9-42f5-86f5-ce0757241536",
+  "binding": {
+    "regiaSessionId": "fixture-session",
+    "modelSpecifier": {
+      "type": "indexed",
+      "indexedModelIdentifier": "fixture-model"
+    }
+  },
+  "owner": "regia",
+  "phase": "prototype",
+  "status": "regia_ready",
+  "revision": 14,
+  "createdAt": "2026-10-23T14:44:46.197Z",
+  "job": {
+    "id": "84d6e55c-01b4-47c4-a2e1-f3bcf7f00905",
+    "phase": "prototype",
+    "summary": "Create a prototype",
+    "projectSha256": "b639b321035bd1129c11d8d3ec39d2872bf4192d43aea3e4d52f4d18bdd1c41a",
+    "executionMode": "production",
+    "createdAt": "2026-10-23T14:44:46.563Z",
+    "status": "completed",
+    "runnerPid": null,
+    "startedAt": "2026-10-23T14:44:46.572Z",
+    "memory": {
+      "status": "unloaded",
+      "gpuBeforeMiB": "14380, 20470",
+      "gpuAfterMiB": "14380, 20470"
+    },
+    "finishedAt": "2026-10-23T14:44:46.764Z"
+  },
+  "handback": {
+    "summary": "Prototype complete. Alex remains blonde and wears a black leather jacket.",
+    "completedTasks": [
+      "Created prototype"
+    ],
+    "assets": [],
+    "problems": [],
+    "decisions": [
+      "Choose a mission"
+    ],
+    "questionForUser": "Which mission should Alex take?",
+    "jobId": "84d6e55c-01b4-47c4-a2e1-f3bcf7f00905",
+    "status": "completed",
+    "createdAt": "2026-10-23T14:44:46.764Z",
+    "acknowledgedAt": "2026-10-23T14:44:46.890Z"
+  },
+  "history": [
+    {
+      "job": {
+        "id": "aea8a21e-f117-4f67-9693-3d0b2ba14d45",
+        "phase": "prototype",
+        "summary": "Create a prototype",
+        "projectSha256": "b639b321035bd1129c11d8d3ec39d2872bf4192d43aea3e4d52f4d18bdd1c41a",
+        "executionMode": "production",
+        "createdAt": "2026-10-23T14:44:46.226Z",
+        "status": "completed",
+        "runnerPid": null,
+        "startedAt": "2026-10-23T14:44:46.241Z",
+        "memory": {
+          "status": "unloaded",
+          "gpuBeforeMiB": "14380, 20470",
+          "gpuAfterMiB": "14380, 20470"
+        },
+        "finishedAt": "2026-10-23T14:44:46.449Z"
+      },
+      "handback": {
+        "summary": "Prototype complete. Alex remains blonde and wears a black leather jacket.",
+        "completedTasks": [
+          "Created prototype"
+        ],
+        "assets": [],
+        "problems": [],
+        "decisions": [
+          "Choose a mission"
+        ],
+        "questionForUser": "Which mission should Alex take?",
+        "jobId": "aea8a21e-f117-4f67-9693-3d0b2ba14d45",
+        "status": "completed",
+        "createdAt": "2026-10-23T14:44:46.449Z",
+        "acknowledgedAt": "2026-10-23T14:44:46.547Z"
+      }
+    },
+    {
+      "job": {
+        "id": "84d6e55c-01b4-47c4-a2e1-f3bcf7f00905",
+        "phase": "prototype",
+        "summary": "Create a prototype",
+        "projectSha256": "b639b321035bd1129c11d8d3ec39d2872bf4192d43aea3e4d52f4d18bdd1c41a",
+        "executionMode": "production",
+        "createdAt": "2026-10-23T14:44:46.563Z",
+        "status": "completed",
+        "runnerPid": null,
+        "startedAt": "2026-10-23T14:44:46.572Z",
+        "memory": {
+          "status": "unloaded",
+          "gpuBeforeMiB": "14380, 20470",
+          "gpuAfterMiB": "14380, 20470"
+        },
+        "finishedAt": "2026-10-23T14:44:46.764Z"
+      },
+      "handback": {
+        "summary": "Prototype complete. Alex remains blonde and wears a black leather jacket.",
+        "completedTasks": [
+          "Created prototype"
+        ],
+        "assets": [],
+        "problems": [],
+        "decisions": [
+          "Choose a mission"
+        ],
+        "questionForUser": "Which mission should Alex take?",
+        "jobId": "84d6e55c-01b4-47c4-a2e1-f3bcf7f00905",
+        "status": "completed",
+        "createdAt": "2026-10-23T14:44:46.764Z",
+        "acknowledgedAt": "2026-10-23T14:44:46.890Z"
+      }
+    }
+  ],
+  "updatedAt": "2026-10-23T14:44:46.898Z"
+}

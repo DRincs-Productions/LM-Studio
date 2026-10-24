@@ -13,8 +13,7 @@
     "remoteFinalDirectory": "ImageWorker/final"
   },
   "writableDirectories": [
-    "C:\\AI\\bionic",
-    "C:\\AI\\image-worker",
+    "C:\\Users\\Shadow\\.lmstudio\\apps\\bionic\\projects\\d49037d8-47f4-5808-9028-c707de117f8f\\workspace",
     "C:\\Users\\Shadow\\.lmstudio\\production",
     "C:\\AI\\assets"
   ]

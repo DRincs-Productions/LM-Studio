@@ -1,0 +1,124 @@
+{
+  "schemaVersion": 1,
+  "projectId": "812e8371-18f4-45c7-b30d-dc0bd32c2c17",
+  "projectFile": "project.md",
+  "bindingToken": "a8542e87-149c-4aa1-b3e7-c328d09b635c",
+  "binding": {
+    "regiaSessionId": "fixture-session",
+    "modelSpecifier": {
+      "type": "indexed",
+      "indexedModelIdentifier": "fixture-model"
+    }
+  },
+  "owner": "regia",
+  "phase": "prototype",
+  "status": "regia_ready",
+  "revision": 14,
+  "createdAt": "2026-10-23T13:54:45.306Z",
+  "job": {
+    "id": "e2d0c659-7591-49bf-8fc8-6de347a56062",
+    "phase": "prototype",
+    "summary": "Create a prototype",
+    "projectSha256": "b639b321035bd1129c11d8d3ec39d2872bf4192d43aea3e4d52f4d18bdd1c41a",
+    "executionMode": "production",
+    "createdAt": "2026-10-23T13:54:45.650Z",
+    "status": "completed",
+    "runnerPid": null,
+    "startedAt": "2026-10-23T13:54:45.658Z",
+    "memory": {
+      "status": "unloaded",
+      "gpuBeforeMiB": "519, 20470",
+      "gpuAfterMiB": "519, 20470"
+    },
+    "finishedAt": "2026-10-23T13:54:45.816Z"
+  },
+  "handback": {
+    "summary": "Prototype complete. Alex remains blonde and wears a black leather jacket.",
+    "completedTasks": [
+      "Created prototype"
+    ],
+    "assets": [],
+    "problems": [],
+    "decisions": [
+      "Choose a mission"
+    ],
+    "questionForUser": "Which mission should Alex take?",
+    "jobId": "e2d0c659-7591-49bf-8fc8-6de347a56062",
+    "status": "completed",
+    "createdAt": "2026-10-23T13:54:45.816Z",
+    "acknowledgedAt": "2026-10-23T13:54:45.962Z"
+  },
+  "history": [
+    {
+      "job": {
+        "id": "6c4e712d-2e68-47f4-a115-d4b742b0683c",
+        "phase": "prototype",
+        "summary": "Create a prototype",
+        "projectSha256": "b639b321035bd1129c11d8d3ec39d2872bf4192d43aea3e4d52f4d18bdd1c41a",
+        "executionMode": "production",
+        "createdAt": "2026-10-23T13:54:45.327Z",
+        "status": "completed",
+        "runnerPid": null,
+        "startedAt": "2026-10-23T13:54:45.336Z",
+        "memory": {
+          "status": "unloaded",
+          "gpuBeforeMiB": "519, 20470",
+          "gpuAfterMiB": "519, 20470"
+        },
+        "finishedAt": "2026-10-23T13:54:45.492Z"
+      },
+      "handback": {
+        "summary": "Prototype complete. Alex remains blonde and wears a black leather jacket.",
+        "completedTasks": [
+          "Created prototype"
+        ],
+        "assets": [],
+        "problems": [],
+        "decisions": [
+          "Choose a mission"
+        ],
+        "questionForUser": "Which mission should Alex take?",
+        "jobId": "6c4e712d-2e68-47f4-a115-d4b742b0683c",
+        "status": "completed",
+        "createdAt": "2026-10-23T13:54:45.492Z",
+        "acknowledgedAt": "2026-10-23T13:54:45.637Z"
+      }
+    },
+    {
+      "job": {
+        "id": "e2d0c659-7591-49bf-8fc8-6de347a56062",
+        "phase": "prototype",
+        "summary": "Create a prototype",
+        "projectSha256": "b639b321035bd1129c11d8d3ec39d2872bf4192d43aea3e4d52f4d18bdd1c41a",
+        "executionMode": "production",
+        "createdAt": "2026-10-23T13:54:45.650Z",
+        "status": "completed",
+        "runnerPid": null,
+        "startedAt": "2026-10-23T13:54:45.658Z",
+        "memory": {
+          "status": "unloaded",
+          "gpuBeforeMiB": "519, 20470",
+          "gpuAfterMiB": "519, 20470"
+        },
+        "finishedAt": "2026-10-23T13:54:45.816Z"
+      },
+      "handback": {
+        "summary": "Prototype complete. Alex remains blonde and wears a black leather jacket.",
+        "completedTasks": [
+          "Created prototype"
+        ],
+        "assets": [],
+        "problems": [],
+        "decisions": [
+          "Choose a mission"
+        ],
+        "questionForUser": "Which mission should Alex take?",
+        "jobId": "e2d0c659-7591-49bf-8fc8-6de347a56062",
+        "status": "completed",
+        "createdAt": "2026-10-23T13:54:45.816Z",
+        "acknowledgedAt": "2026-10-23T13:54:45.962Z"
+      }
+    }
+  ],
+  "updatedAt": "2026-10-23T13:54:45.968Z"
+}

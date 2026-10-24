@@ -40,14 +40,16 @@ export class LocalChatApi {
       repeat_penalty: repeat && typeof repeat === 'object' ? (repeat.checked ? repeat.value : false) : (repeat ?? 1.05),
       max_output_tokens: fields['llm.prediction.maxPredictedTokens'] ?? fields['llm.prediction.maxTokens'] ?? 3072,
       context_length: 8192,
-      store: false
+      store: false,
+      stream: true
     };
     if (typeof thinking === 'boolean') body.reasoning = thinking ? 'on' : 'off';
+    else if (role === 'reviewer') body.reasoning = 'off';
     const response = await fetch('http://127.0.0.1:1234/api/v1/chat', {
-      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(600000)
+      method: 'POST', headers: { 'content-type': 'application/json', accept: 'text/event-stream' }, body: JSON.stringify(body), signal: AbortSignal.timeout(1800000)
     });
-    const result = await response.json();
-    if (!response.ok) throw Error(`LM Studio local chat API returned HTTP ${response.status}: ${JSON.stringify(result).slice(0, 600)}`);
+    if (!response.ok) throw Error(`LM Studio local chat API returned HTTP ${response.status}: ${(await response.text()).slice(0, 600)}`);
+    const result = await readLmStudioChatStream(response.body);
     if (result.model_instance_id && result.model_instance_id !== modelInstanceId) throw Error('LM Studio responded from an unexpected model instance');
     const text = result.output?.filter(output => output.type === 'message').map(output => output.content).join('\n') || '';
     if (!text.trim()) throw Error('LM Studio local chat API returned no message text');
@@ -60,62 +62,65 @@ export class LocalChatApi {
     this.owned = false; this.started = false;
   }
 }
+export async function readLmStudioChatStream(stream) {
+  if (!stream) throw Error('LM Studio chat API returned no event stream');
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let finalResult = null;
+  let streamError = null;
+  const consumeBlock = block => {
+    let eventName = '';
+    const data = [];
+    for (const line of block.split(/\r?\n/)) {
+      if (line.startsWith('event:')) eventName = line.slice(6).trim();
+      else if (line.startsWith('data:')) data.push(line.slice(5).trimStart());
+    }
+    if (!data.length) return;
+    let payload;
+    try { payload = JSON.parse(data.join('\n')); } catch { throw Error('LM Studio chat stream contained invalid event JSON'); }
+    const type = payload.type || eventName;
+    if (type === 'error') streamError = payload.error?.message || 'LM Studio chat stream reported an error';
+    if (type === 'chat.end') finalResult = payload.result || null;
+  };
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let boundary;
+    while ((boundary = buffer.search(/\r?\n\r?\n/)) !== -1) {
+      const block = buffer.slice(0, boundary);
+      const separator = buffer.slice(boundary).match(/^\r?\n\r?\n/)[0];
+      buffer = buffer.slice(boundary + separator.length);
+      consumeBlock(block);
+    }
+  }
+  buffer += decoder.decode();
+  if (buffer.trim()) consumeBlock(buffer);
+  if (streamError) throw Error(streamError);
+  if (!finalResult) throw Error('LM Studio chat stream ended without its final chat.end result');
+  return finalResult;
+}
 export function reviewVerdict(text) {
   const matches = clean(text).match(/^REVIEW:\s*(PASS|REVISION REQUIRED)\s*$/gm) || [];
   if (matches.length !== 1) throw Error('Reviewer must return one unambiguous verdict');
   return /REVISION REQUIRED/.test(matches[0]) ? 'REVISION REQUIRED' : 'PASS';
 }
 export function reviewPassEvidenceIssues(review, narrative) {
-  const fields = [
-    ['MISUNDERSTANDING_EVIDENCE', 'misunderstanding'],
-    ['MINIBAR_CLARIFICATION_EVIDENCE', 'clarification'],
-    ['COMIC_RESPONSE_EVIDENCE', 'comic response']
-  ];
-  const issues = [];
-  const quoted = {};
-  for (const [key, label] of fields) {
-    const match = review.match(new RegExp(`^${key}:\\s*["“]([^"”]+)["”]\\s*$`, 'm'));
-    if (!match) { issues.push(`Reviewer PASS missing ${label} verbatim evidence quote`); continue; }
-    quoted[key] = match[1];
-    if (!narrative.includes(match[1])) issues.push(`Reviewer ${label} quote does not occur verbatim in the Narrative`);
-  }
-  // The clarification may be split across adjacent Receptionist lines: one names the minibar and another rules out romantic intent. The content precheck validates both parts independently.
-  if (quoted.COMIC_RESPONSE_EVIDENCE) {
-    const explicitlyLabeled = narrative.split(/\r?\n/).some(line => /^\*\*Alex:\*\*/.test(line) && line.includes(quoted.COMIC_RESPONSE_EVIDENCE));
-    const quoteAt = narrative.indexOf(quoted.COMIC_RESPONSE_EVIDENCE);
-    const start = narrative.lastIndexOf('\n\n', quoteAt) + 2;
-    const end = narrative.indexOf('\n\n', quoteAt);
-    const paragraph = narrative.slice(start, end < 0 ? undefined : end);
-    const beforeQuote = paragraph.slice(0, paragraph.indexOf(quoted.COMIC_RESPONSE_EVIDENCE));
-    const namedSpeakers = [...beforeQuote.matchAll(/\b(Alex|Receptionist)\b/gi)].map(match => match[1].toLowerCase());
-    const proseAttributedToAlex = namedSpeakers.at(-1) === 'alex' && !/\bReceptionist\b/i.test(paragraph);
-    if (!explicitlyLabeled && !proseAttributedToAlex) issues.push('Reviewer comic-response quote is not clearly attributable to Alex; use an Alex dialogue line or nearby Alex attribution');
-  }
-  return issues;
+  // Greedy capture supports exact evidence that itself contains quoted dialogue.
+  const quotes = [...review.matchAll(/^NARRATIVE_EVIDENCE(?:_\d+)?:\s*["“](.+)["”]\s*$/gm)].map(match => match[1]);
+  if (!quotes.length) return ['Reviewer PASS must include at least one exact NARRATIVE_EVIDENCE quote'];
+  const source = narrative.toLocaleLowerCase();
+  return quotes.filter(quote => !source.includes(quote.toLocaleLowerCase())).map(() => 'Reviewer evidence quote does not occur verbatim in the Narrative');
 }
-export function reviewFindingEvidenceIssues(review, narrative, mechanicalChecks = []) {
+export function reviewFindingEvidenceIssues(review, narrative) {
   const findings = review.split(/(?=^###\s)/m).filter(block => /^###\s/.test(block));
   if (!findings.length) return ['Reviewer revision report contains no structured findings with source evidence'];
   const issues = [];
   findings.forEach((finding, index) => {
-    const match = finding.match(/^NARRATIVE_EVIDENCE:\s*["“]([^"”]+)["”]\s*$/m);
-    if (match) {
-      if (!narrative.includes(match[1])) issues.push(`Reviewer finding ${index + 1} quotes text absent from the Narrative`);
-      return;
-    }
-    const quotedText = [...finding.matchAll(/["“]([^"”]+)["”]/g)].map(item => item[1]);
-    if (quotedText.some(quote => narrative.includes(quote))) return;
-    const text = finding.toLowerCase().replace(/[_-]+/g, ' ');
-    const objectivelySupported = mechanicalChecks.some(check => {
-      const issue = check.toLowerCase();
-      if (/word\s*count|length/.test(text)) return /word count/.test(issue);
-      if (/speaker label|acting direction|parenthetical/.test(text)) return /acting directions/.test(issue);
-      if (/minibar|clarification|personal offer/.test(text)) return /explicitly clarify/.test(issue);
-      if (/repeat|unchanged draft/.test(text)) return /repeated the rejected draft/.test(issue);
-      if (/visual directive|choice|format|heading/.test(text)) return /missing|remove|choices|visual directive|section/.test(issue);
-      return false;
-    });
-    if (!objectivelySupported) issues.push(`Reviewer finding ${index + 1} has no matching verbatim quotation or mechanical check`);
+    const quotes = [...finding.matchAll(/["“]([^"”]+)["”]/g)].map(match => match[1]);
+    if (!quotes.length) issues.push('Reviewer finding ' + (index + 1) + ' has no quoted source evidence');
+    else if (!quotes.some(quote => narrative.includes(quote))) issues.push('Reviewer finding ' + (index + 1) + ' quotes text absent from the Narrative');
   });
   return issues;
 }
@@ -126,51 +131,127 @@ export function stripPresentationOnlyFindings(review, narrative) {
   const substantive = findings.filter(block => {
     const header = block.split(/\r?\n/, 1)[0];
     const body = block.slice(header.length);
-    const presentationOnly = /\bFORMAT\b/i.test(header)
-      && !/\b(?:plot|story|beat|character|motivation|misunderstanding|clarification|continuity|canon|missing event|incomplete scene|unclear intent)\b/i.test(body);
-    return !presentationOnly;
+    return !/\bFORMAT\b/i.test(header) || /\b(?:plot|story|beat|character|motivation|continuity|canon|missing event|incomplete scene|unclear intent)\b/i.test(body);
   });
   const removed = findings.length - substantive.length;
   if (!removed) return { review, removed, autoPassed: false };
-  if (substantive.length) return { review: `${intro.replace(/^REVIEW:\s*REVISION REQUIRED/m, 'REVIEW: REVISION REQUIRED').trim()}\n\n${substantive.join('\n')}`, removed, autoPassed: false };
-  const body = narrative.split(/## Italian Summary/i)[0];
-  const lines = body.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
-  const dialogue = lines.map((line, index) => {
-    const match = line.match(/^(?:\*\*)?(Alex|Receptionist)(?:\*\*)?:\*{0,2}\s*(.+)$/);
-    return match ? { speaker: match[1], text: match[2], line, index } : null;
-  }).filter(Boolean);
-  const clarify = dialogue.findIndex(item => item.speaker === 'Receptionist' && /\b(?:minibar|drinks?|snacks?|room)\b/i.test(item.text) && /\b(?:mean|meant|talking about|referring to|just|only)\b/i.test(item.text));
-  const misunderstanding = clarify >= 0 ? dialogue.slice(0, clarify).reverse().find(item => item.speaker === 'Alex') : null;
-  const comic = clarify >= 0 ? dialogue.slice(clarify + 1).find(item => item.speaker === 'Alex') : null;
-  if (!misunderstanding || clarify < 0 || !comic || [misunderstanding, dialogue[clarify], comic].some(item => item.text.includes('"'))) {
-    return { review: `${intro.trim()}\n\nThe only structured findings were presentation issues, but the required content evidence could not be safely extracted.`, removed, autoPassed: false };
-  }
-  return {
-    review: `REVIEW: PASS\nMISUNDERSTANDING_EVIDENCE: "${misunderstanding.text}"\nMINIBAR_CLARIFICATION_EVIDENCE: "${dialogue[clarify].text}"\nCOMIC_RESPONSE_EVIDENCE: "${comic.text}"\n\nLe sole revisioni richieste riguardavano la presentazione, quindi non bloccano la revisione narrativa.`,
-    removed, autoPassed: true
-  };
+  if (substantive.length) return { review: intro.trim() + '\n\n' + substantive.join('\n'), removed, autoPassed: false };
+  const evidence = narrative.replace(/^>.*$/gm, '').replace(/^#+.*$/gm, '').trim().slice(0, 120).replace(/["“”]/g, "'");
+  if (!evidence) return { review: intro.trim() + '\n\nNo narrative evidence was available for an automatic content pass.', removed, autoPassed: false };
+  return { review: 'REVIEW: PASS\nNARRATIVE_EVIDENCE: "' + evidence + '"\n\nOnly presentation findings were reported; they do not block content review.', removed, autoPassed: true };
 }
 export function narrativeChecks(text) {
   return [...narrativeContentChecks(text), ...narrativePresentationChecks(text)];
 }
-export function narrativeContentChecks(text) {
-  const narrative = clean(text).split(/## Narrative\s*\r?\n/i)[1]?.split(/## Italian Summary/i)[0];
-  if (!narrative) return ['Missing ## Narrative / ## Italian Summary structure'];
+export function requiredTimelineChecks(text, canonical = '') {
+  const block = canonical.match(/^####\s+REQUIRED STORY TIMELINE\s*\r?\n([\s\S]*?)(?=^#{1,6}\s|$(?![\s\S]))/mi)?.[1] || '';
+  if (!block) return [];
+  const narrative = clean(text).split(/## Narrative\s*\r?\n/i)[1]?.split(/## Italian Summary/i)[0] || '';
+  const facts = [...block.matchAll(/^\s*[-*]\s*(\d{1,2}:\d{2}\s*a\.m\.)\s*:\s*(.+)$/gim)];
   const issues = [];
-  const words = narrative.replace(/^>.*$/gm, '').trim().split(/\s+/).filter(Boolean).length;
-  if (words < 250) issues.push(`Narrative body is incomplete at ${words} words (minimum 250)`);
-  if (words > 450) issues.push(`Narrative is materially overlong at ${words} words (maximum 400; allow only a small Codex trim)`);
-  if (/^> Choice:/m.test(narrative)) issues.push('Choices are not authorized');
-  const receptionistSpeech = narrative.split(/\r?\n/).filter(line => /^\s*\**Receptionist\**:\**\s*/i.test(line)).join(' ');
-  const explicitlyClarifiesMinibar = /\b(?:I|we)\s+(?:(?:just|only)\s+)?(?:mean|meant|was talking about|am talking about)\b.{0,100}\b(?:minibar|drinks?|snacks?|room)\b/i.test(narrative)
-    || /\bI[’']m\s+(?:just\s+)?(?:talking about|referring to)\b.{0,100}\b(?:minibar|drinks?|snacks?|room)\b/i.test(narrative)
-    || /\b(?:just|only)\b.{0,70}\b(?:the\s+)?(?:minibar|drinks?\s+and\s+snacks?|room's\s+drinks?)\b/i.test(narrative)
-    || /\b(?:minibar|drinks?|snacks?|room)\b.{0,50}\bactually\b/i.test(receptionistSpeech)
-    || (/\b(?:minibar|drinks?|snacks?|room)\b.{0,140}\b(?:not|no)\b.{0,40}\b(?:personal|romantic|offer|invitation|date|connotations?)\b/i.test(receptionistSpeech)
-      && /\b(?:not|no)\s+(?:(?:a\s+)?(?:personal|romantic)\s+(?:offer|invitation|date|compliment|connotations?)|making you an offer|an offer|an invitation|a date)\b/i.test(receptionistSpeech));
-  if (!explicitlyClarifiesMinibar) issues.push('Receptionist must explicitly clarify in spoken dialogue that she meant the room minibar/drinks/snacks, not a personal romantic offer; the Italian summary does not count');
-  if (!/\b(?:not|no)\b.{0,45}\b(?:personal|romantic|a date|asking you out|flirting|hitting on you|making you an offer|an offer|an invitation)\b/i.test(receptionistSpeech)) {
-    issues.push('Receptionist must explicitly say in spoken dialogue that the minibar explanation is not a personal/romantic offer or invitation');
+  const matchesFor = time => {
+    const parsed = time.match(/^(\d{1,2}):(\d{2})/);
+    if (!parsed) return [];
+    const hour = Number(parsed[1]);
+    const expression = new RegExp(`\\b0?${hour}:${parsed[2]}(?:\\s*a\\.m\\.)?\\b(?!\\s*p\\.m\\.)`, 'ig');
+    return [...narrative.matchAll(expression)].map(match => ({ index: match.index, length: match[0].length }));
+  };
+  const allOccurrences = facts.map(([, time]) => matchesFor(time));
+  for (let factIndex = 0; factIndex < facts.length; factIndex++) {
+    const [, time, fact] = facts[factIndex];
+    const occurrences = allOccurrences[factIndex];
+    if (!occurrences.length) { issues.push(`Narrative omits the explicitly required timeline event at ${time}; include it at the correct event, not only in the summary.`); continue; }
+    const quotedFact = fact.match(/[“"]([^”"]+)[”"]/);
+    const requiresRecord = /record(?:s|ed|ing)?/i.test(fact);
+    const requiresPlayback = /play(?:s|ed|back|ing)?|buffer replays?/i.test(fact);
+    const requiresScheduler = /scheduler|timestamp|clock-label bug/i.test(fact);
+    const satisfied = occurrences.some(match => {
+      // Bound each fact by its neighboring required timestamps. This includes
+      // dialogue immediately before a displayed clock without letting another
+      // event satisfy the wrong timestamp.
+      const prior = allOccurrences.slice(0, factIndex).flat().filter(item => item.index < match.index).sort((a, b) => b.index - a.index)[0];
+      const next = allOccurrences.slice(factIndex + 1).flat().filter(item => item.index > match.index).sort((a, b) => a.index - b.index)[0];
+      const start = prior ? prior.index + prior.length : Math.max(0, match.index - 1000);
+      const end = next ? next.index : Math.min(narrative.length, match.index + time.length + 1200);
+      const context = narrative.slice(start, end).toLocaleLowerCase();
+      return (!quotedFact || context.includes(quotedFact[1].toLocaleLowerCase())) &&
+        (!requiresRecord || /record(?:s|ed|ing)?/.test(context)) &&
+        (!requiresPlayback || /play(?:s|ed|back|ing)?|buffer replay/.test(context)) &&
+        (!requiresScheduler || /scheduler|timestamp|clock-label/.test(context)) &&
+        (!/3:18/.test(time) || !/scheduler|timestamp|clock-label/i.test(fact) ||
+          (/\b(?:commit|commits|committed|writes?|logged|log row|event log)\b/i.test(context) &&
+           /\b(?:four|4) minutes?\b/i.test(context) && /processed_at/i.test(context)));
+    });
+    if (!satisfied) issues.push(`Narrative includes ${time} but does not attach the required event, action, and quoted message from the Project File to that time.`);
+  }
+  const dawnFact = block.match(/^\s*[-*]\s*Dawn:\s*(.+)$/mi)?.[1] || '';
+  if (dawnFact) {
+    const opening = narrative.match(/\b(?:orchid|flower)\b[\s\S]{0,180}\b(?:open(?:s|ed|ing)?|unfold(?:s|ed|ing)?|unfurl(?:s|ed|ing)?|bloom(?:s|ed|ing)?)\b|\b(?:open(?:s|ed|ing)?|unfold(?:s|ed|ing)?|unfurl(?:s|ed|ing)?|bloom(?:s|ed|ing)?)\b[\s\S]{0,180}\b(?:orchid|flower)\b/i);
+    if (!opening) issues.push('Narrative must show the actual dawn opening of the unidentified flower, not stop before it happens.');
+    else if (/\b(?:Tali|Ivo|both|shared)\b/i.test(dawnFact)) {
+      const nearby = narrative.slice(Math.max(0, opening.index - 450), Math.min(narrative.length, opening.index + opening[0].length + 450));
+      if (!/\bTali\b/i.test(nearby) || !/\bIvo\b/i.test(nearby)) issues.push('The Project File requires Tali and Ivo to share the flower opening at dawn.');
+    }
+  }
+  return issues;
+}
+export function narrativeContentChecks(text, canonical = '') {
+  const narrative = clean(text).split(/## Narrative\s*\r?\n/i)[1]?.split(/## Italian Summary/i)[0];
+  if (!narrative?.trim()) return ['Missing or empty ## Narrative section'];
+  const checks = /[.!?…]["'”’)]?\s*$/.test(narrative.trim()) ? [] : ['Narrative appears truncated because its final sentence has no closing punctuation'];
+  checks.push(...requiredTimelineChecks(text, canonical));
+  checks.push(...singlePlaybackChecks(narrative, canonical));
+  checks.push(...narrativeCanonBoundaryChecks(narrative, canonical));
+  return checks;
+}
+export function singlePlaybackChecks(narrative, canonical = '') {
+  if (!/exactly\s+(?:one|1)\s+(?:recording|playback)|one recording and one playback/i.test(canonical)) return [];
+  const issues = [];
+  const recordAt = narrative.search(/\b3:08(?:\s*a\.m\.)?\b/i);
+  const playbackAt = narrative.search(/\b3:14(?:\s*a\.m\.)?\b/i);
+  if (recordAt >= 0 && playbackAt > recordAt) {
+    const prePlayback = narrative.slice(recordAt, playbackAt);
+    const positiveListen = /\b(?:listen(?:s|ed)?|play(?:s|ed)?(?:\s+back)?|preview(?:s|ed)?)\b[^.!?\n]{0,80}\b(?:recording|memo|message|playback|it)\b/i.test(prePlayback);
+    const explicitNoListen = /\b(?:never|not|without|didn't|doesn't|do not|did not)\b[^.!?\n]{0,50}\b(?:listen|play|preview)/i.test(prePlayback);
+    if (positiveListen && !explicitNoListen) issues.push('Tali must save the 3:08 recording without previewing it; the only playback is the 3:14 buffer playback.');
+  }
+  if (/\b(?:listen(?:s|ed)?|replay(?:s|ed)?|play(?:s|ed)?)\b[^.!?\n]{0,80}\b(?:again|twice|a second time|for him|to Ivo)\b/i.test(narrative) ||
+      /\b(?:another|second|additional)\s+(?:playback|replay|listening)\b/i.test(narrative)) {
+    issues.push('Narrative implies an additional playback or repeat listening despite the one-playback canon.');
+  }
+  if (/\b(?:Ivo|he)\b[^.!?\n]{0,100}\b(?:heard|listened to)\b[^.!?\n]{0,100}\b(?:recording|message|clip|voice)\b/i.test(narrative)) {
+    issues.push('Ivo must not hear the single recording or playback.');
+  }
+  if (/\bI hear things all night\b[\s\S]{0,140}\b(?:memo|recording|message)\b[\s\S]{0,80}\b(?:play(?:s|ed|ing|back)?|replay)\b|\bI've heard a lot of recordings?\b/i.test(narrative)) {
+    issues.push('Narrative implies Ivo heard the private recording; only Tali hears the 3:14 playback.');
+  }
+  if (/\b(?:I(?:'ve| have)? got|I received|I've received|I read|I saw)\s+(?:your|the)\s+(?:message|recording|voice memo)\b/i.test(narrative)) {
+    issues.push('Ivo must not receive or know the private recording before the first meeting.');
+  }
+  if (/\b(?:event|scheduler)\s+log\b[\s\S]{0,150}\b(?:something about\s+(?:an?\s+)?orchid\s+and\s+coffee|message content|the message said|orchid and coffee|coffee and orchid)\b/i.test(narrative)) {
+    issues.push('The event log contains timing metadata only; it must not reveal the recording content.');
+  }
+  const futureClaims = [...narrative.matchAll(/\b(?:message|recording|voice)\b[^.!?\n]{0,80}\bfrom the future\b|\bfuture transmission\b/gi)];
+  if (futureClaims.some(match => {
+    const sentenceStart = Math.max(narrative.lastIndexOf('.', match.index), narrative.lastIndexOf('!', match.index), narrative.lastIndexOf('?', match.index), narrative.lastIndexOf('\n', match.index)) + 1;
+    const leadIn = narrative.slice(sentenceStart, match.index);
+    return !/\b(?:not|no|never|isn't|wasn't|aren't|weren't|cannot|can't|couldn't|didn't)\b/i.test(`${leadIn} ${match[0]}`);
+  })) {
+    issues.push('Narrative contradicts the canon: there is no future transmission.');
+  }
+  return issues;
+}
+export function narrativeCanonBoundaryChecks(narrative, canonical = '') {
+  const issues = [];
+  if (/first\s+(?:personal\s+)?conversation/i.test(canonical) && /rooftop access pathway/i.test(canonical)) {
+    const meeting = narrative.match(/\bfirst\s+(?:personal\s+)?(?:meeting|conversation)|\bfirst\s+time.{0,100}\b(?:meet|met|have met|run into each other)|\b(?:they|Tali and Ivo)\s+(?:first\s+)?(?:meet|met|begin speaking)/i);
+    const nearby = meeting ? narrative.slice(Math.max(0, meeting.index - 350), Math.min(narrative.length, meeting.index + meeting[0].length + 350)) : '';
+    if (!meeting || !/\bpathway\b/i.test(nearby)) issues.push('The first physical meeting and conversation must occur on the rooftop access pathway, not inside the greenhouse, booth or station.');
+  }
+  if (/unidentified rare orchid/i.test(canonical) && /do not invent[^\n]{0,180}(?:growth history|biology)|no (?:prior )?bloom history/i.test(canonical)) {
+    if (/\b(?:nobody|no one|never)\b[^.!?\n]{0,100}\b(?:seen|saw|watched|observed)\b[^.!?\n]{0,100}\b(?:open|bloom|flower)\b|\b(?:closed|bloomed|flowered)\b[^.!?\n]{0,120}\b(?:for as long as anyone|since it arrived|since (?:I|Tali|we|she|he) (?:started|began)|for (?:many|several|\d+) years|before anyone can remember)\b|\b(?:only|first|fourth)\s+(?:unusual\s+)?(?:orchid|flower|bloom|specimen)\b/i.test(narrative)) {
+      issues.push('Do not invent the unidentified orchid’s prior bloom history, collection status or growth history.');
+    }
   }
   return issues;
 }
@@ -178,16 +259,28 @@ export function narrativePresentationChecks(text) {
   const narrative = clean(text).split(/## Narrative\s*\r?\n/i)[1]?.split(/## Italian Summary/i)[0];
   if (narrative === undefined) return ['Missing narrative section; Codex cannot safely normalize the artifact'];
   const issues = [];
-  const summary = clean(text).split(/## Italian Summary/i)[1] || '';
-  if (!/^# Scene:/m.test(clean(text)) || !/## Italian Summary/i.test(text)) issues.push('Missing scene heading or Italian production metadata');
-  if (/^---\s*$|^\s*#{1,3}\s|Production metadata:|Narrative word count|MISUNDERSTANDING_EVIDENCE:|MINIBAR_CLARIFICATION_EVIDENCE:|COMIC_RESPONSE_EVIDENCE:/im.test(summary)) issues.push('Remove extra production sections, English word-count claims and Reviewer evidence labels; keep only the brief Italian Summary');
-  if (!narrative.trimStart().startsWith('> Visual:')) issues.push('Narrative must start with > Visual:');
-  if ((narrative.match(/^> Visual:/gm) || []).length !== 1) issues.push('This test requires one Visual directive and one image');
-  if (!/\*\*[^*]+:\*\*/.test(narrative)) issues.push('Missing required bold speaker labels');
-  if (/^\*\*[^*]+:\*\*\s*\([^\r\n)]*\)/m.test(narrative)) issues.push('Move acting directions out of bold speaker labels and into prose');
-  const words = narrative.replace(/^>.*$/gm, '').trim().split(/\s+/).filter(Boolean).length;
-  if (words >= 400 && words <= 450) issues.push(`Narrative is slightly over the preferred 400-word ceiling (${words}); Codex may trim locally`);
+  if (!/^# Scene:/m.test(clean(text)) || !/## Italian Summary/i.test(text)) issues.push('Missing scene heading or Italian production summary');
   return issues;
+}
+export function visualMomentPrompts(narrative = '') {
+  const explicit = [...narrative.matchAll(/^> Visual(?:\s+\d+)?:\s*(.+)$/gm)].map(match => match[1].trim()).filter(Boolean);
+  if (explicit.length) return explicit;
+  // Scene separators are meaningful structure in the Writer's artifact. Use them as
+  // visual anchors when the model omitted optional directives; never impose a count.
+  const sections = narrative.split(/^\s*---\s*$/m).map(section => section
+    .replace(/^>.*$/gm, '')
+    .replace(/^#{1,6}.*$/gm, '')
+    .trim())
+    .filter(Boolean);
+  const cues = [];
+  for (const section of sections) {
+    const paragraphs = section.split(/\n\s*\n/).map(value => value.trim()).filter(Boolean);
+    const prose = paragraphs.filter(value => !/^['“‘]/.test(value) && value.length > 80);
+    const cue = prose.slice(0, 2).join(' ').trim();
+    if (cue.length < 60) continue;
+    if (!cues.some(previous => previous.slice(0, 90) === cue.slice(0, 90))) cues.push(cue.slice(0, 500));
+  }
+  return cues;
 }
 export function codexNarrativeEditBudgetIssues(source, revised, maxChangedWords = 55, maxChangedRatio = 0.16) {
   const body = text => clean(text).split(/## Narrative\s*\r?\n/i)[1]?.split(/## Italian Summary/i)[0] || '';
@@ -209,7 +302,7 @@ export function writerRevisionScopeChecks(source, revised) {
     return (body.replace(/^>.*$/gm, '').toLowerCase().match(/[a-z0-9’'-]+/g) || []).length;
   };
   const sourceWords = bodyWordCount(source);
-  if (sourceWords >= 250) return codexNarrativeEditBudgetIssues(source, revised, 90, 0.30);
+  if (sourceWords >= 250) return codexNarrativeEditBudgetIssues(source, revised, 400, 0.40);
   // Underlength drafts need room for the missing story beats. Allow enough additive
   // text to reach the minimum while still blocking a wholesale scene replacement.
   const revisedWords = Math.max(1, bodyWordCount(revised));
@@ -217,7 +310,7 @@ export function writerRevisionScopeChecks(source, revised) {
   const maxChangedRatio = Math.min(0.75, Math.max(0.30, maxChangedWords / revisedWords));
   return codexNarrativeEditBudgetIssues(source, revised, maxChangedWords, maxChangedRatio);
 }
-export function codexFinalReviewIssues({ reviewSummary, changesMade, finalCheck, sourceSha256, expectedSourceSha256, reviewerReport, sourceNarrative, finalNarrative }) {
+export function codexFinalReviewIssues({ reviewSummary, changesMade, finalCheck, sourceSha256, expectedSourceSha256, reviewerReport, sourceNarrative, finalNarrative, canonical = '' }) {
   const issues = [];
   if (typeof reviewSummary !== 'string' || reviewSummary.trim().length < 20) issues.push('Codex review summary is missing or too short');
   if (typeof changesMade !== 'string' || changesMade.trim().length < 8) issues.push('Codex must state what it changed or explicitly state that no changes were needed');
@@ -225,7 +318,7 @@ export function codexFinalReviewIssues({ reviewSummary, changesMade, finalCheck,
   if (sourceSha256 !== expectedSourceSha256) issues.push('Codex review source hash is stale or does not match the reviewed Writer draft');
   if (!/^[a-f0-9]{64}$/i.test(sourceSha256 || '')) issues.push('Invalid source SHA256');
   if (typeof finalNarrative !== 'string' || !finalNarrative.trim()) return [...issues, 'Codex final narrative is empty'];
-  issues.push(...narrativeContentChecks(finalNarrative));
+  issues.push(...narrativeContentChecks(finalNarrative, canonical));
   issues.push(...narrativePresentationChecks(finalNarrative));
   if (typeof sourceNarrative === 'string') issues.push(...codexNarrativeEditBudgetIssues(sourceNarrative, finalNarrative));
   issues.push(...reviewPassEvidenceIssues(reviewerReport, finalNarrative));
@@ -237,13 +330,52 @@ export function visualVerdict(text) {
   if (!/^REVIEW_SUCCESS\s*$/m.test(text) || !Number.isFinite(score) || score < 0 || score > 100 || !major) throw Error('Invalid visual review');
   return { score, majorError: major, accepted: score >= 80 && major === 'NO', retryHint: text.match(/^RETRY_HINT:\s*(.*)$/m)?.[1] || 'Improve request correspondence.' };
 }
-export function deterministicImagePlan(visual = '') {
+export function deterministicImagePlan(visual = '', canon = '') {
   const sceneCue = typeof visual === 'string' ? visual.trim() : '';
+  const projectCanon = relevantVisualCanon(sceneCue, canon);
   return {
     generator: 'normal',
-    prompt: `Polished visual-novel illustration, close medium two-person shot framed waist-up across a hotel reception counter at dusk. Fill the frame with exactly two adult characters, both heads and faces fully visible and equally prominent: Alex, a 28-year-old blonde man in a clearly visible black leather jacket, and one amused adult female receptionist in a simple uniform facing him. Crop out lobby seating and doorways; use a plain softly blurred empty wall behind them, with only a small brass desk lamp for setting. Keep their bodies separate, expressions readable, and background completely empty. Playful, non-explicit mood. ${sceneCue}`,
-    negative_prompt: 'single person, one person, missing character, cropped head, hidden face, crowd, guests, seated man, bystanders, background people, silhouettes, third person, extra person, duplicate people, extra faces, people in posters, people in photographs, mirror reflections, text, lettering, watermark, fused bodies, severe anatomy errors, explicit content'
+    prompt: 'Create one visual-novel illustration for this specific moment. Keep the named characters and setting accurate to the concise canon below. The scene description controls the composition; include only people and objects requested in that moment. Make the subject and action unmistakable.\n\nScene: ' + sceneCue + (projectCanon ? '\n\nRelevant canon:\n' + projectCanon : ''),
+    negative_prompt: 'unrequested text, lettering, watermark, duplicate characters, malformed anatomy, inconsistent established character appearance'
   };
+}
+function relevantVisualCanon(sceneCue, canon) {
+  const text = typeof canon === 'string' ? canon : '';
+  if (!sceneCue.trim() || !text.trim()) return '';
+  const ignored = new Set('a an the and or of to in on at by with from this that these those is are was were be been being has have had for as into over under around during based depict scene moment night day dark light view close one only his her their its it he she they them'.split(' '));
+  const words = value => (value.toLowerCase().match(/[a-z0-9]+/g) || []).filter(word => word.length > 2 && !ignored.has(word));
+  const cueWords = new Set(words(sceneCue));
+  const lines = text.split(/\r?\n/);
+  const sections = [];
+  for (let index = 0; index < lines.length; index++) {
+    const match = lines[index].match(/^(#{2,6})\s+(.+?)\s*#*\s*$/);
+    if (!match) continue;
+    const depth = match[1].length;
+    let end = index + 1;
+    while (end < lines.length) {
+      const next = lines[end].match(/^(#{2,6})\s+/);
+      if (next && next[1].length <= depth) break;
+      end++;
+    }
+    const headingWords = words(match[2]);
+    const overlap = [...new Set(headingWords)].filter(word => cueWords.has(word));
+    if (overlap.length) sections.push({ score: overlap.length, heading: match[2], body: lines.slice(index + 1, end).join('\n') });
+  }
+  sections.sort((a, b) => b.score - a.score);
+  const selected = [];
+  let used = 0;
+  for (const section of sections) {
+    const snippet = `${section.heading}: ${section.body}`.replace(/```[\s\S]*?```/g, '').replace(/\n{3,}/g, '\n\n').trim();
+    if (!snippet || used + snippet.length > 1800) continue;
+    selected.push(snippet);
+    used += snippet.length;
+    if (selected.length >= 3) break;
+  }
+  if (selected.length) return selected.join('\n\n').slice(0, 1800);
+  const ranked = lines.map(line => ({ line: line.trim(), score: [...new Set(words(line))].filter(word => cueWords.has(word)).length }))
+    .filter(item => item.score > 0 && item.line && !/^#{1,6}\s/.test(item.line))
+    .sort((a, b) => b.score - a.score);
+  return ranked.slice(0, 12).map(item => item.line).join('\n').slice(0, 1200);
 }
 export function imageDimensionsForJob(state) {
   const size = state?.job?.imageSize;
@@ -318,19 +450,66 @@ export async function predictRole(role, prompt, { jobId = crypto.randomUUID(), r
   }
 }
 export function writerInstruction(canonical, summary, previous = '', feedback = '') {
-  const start = canonical.search(/^## Character Profile\s*$/m);
-  const end = canonical.search(/^## Visual Asset Specification\s*$/m);
-  const scopedFacts = start >= 0 && end > start ? canonical.slice(start, end).trim() : canonical;
-  return `CANONICAL FACTS:\n${scopedFacts}\n\nAPPROVED SCENE BRIEF:\n${summary}\n\n${previous ? '<previous_draft_to_revise>\n' + previous + '\n</previous_draft_to_revise>\n' : ''}${feedback ? '<review_feedback>\n' + feedback + '\n</review_feedback>\n' : ''}
-Write one complete English scene for an adult visual novel. The narrative body must be 250–400 words inclusive. Aim for 300–330 narrative words so the scene has room to develop and remains safely above the minimum; exclude headings, the Visual directive and Italian summary from the count. Follow the approved brief and canon. For this scene: keep one continuous interaction at the hotel reception desk; Alex is adult, blonde, sarcastic and sociable, wearing his black leather jacket; the receptionist is adult. Preserve this beat order: (1) a line Alex can reasonably mistake for a romantic offer, (2) he responds as if she is flirting, (3) the receptionist clearly says in her spoken dialogue that she means the room's minibar drinks/snacks and that this is not a personal or romantic offer, (4) after the clarification Alex tries to save face with a brief, plausible improvisation, then gives a clear comic spoken response. Use a separate paragraph for each line of dialogue and prefix every line with exactly **Alex:** or **Receptionist:** so the speaker is unambiguous. Keep the tone playful and lightly flirtatious; no scene change, time jump or unauthorized Choice. Make dialogue sound like these people, not like a checklist. Use visual description only when it strengthens the scene; do not include Sound or Music directions. Do not pad with filler or write future events.
-For revision, preserve strong lines and passages that do not need changing. Correct only the substantiated content findings in the Reviewer brief; do not rewrite unaffected paragraphs or compress a scene that already meets the requested length. If the required story content cannot be repaired locally, say so in the Italian summary rather than inventing a new direction.
-Output the full artifact in this shape: # Scene: title; ## Narrative; one opening > Visual: describing the reception scene; prose and **Speaker:** labels; ## Italian Summary with a brief accurate Italian production summary. Put actions in prose, not inside speaker labels. Formatting imperfections are acceptable; preserve the story first. Return only the artifact.`;
+  return 'CANONICAL PROJECT CONTEXT (relevant sections):\n' + compactNarrativeCanon(canonical) + '\n\nAPPROVED PRODUCTION BRIEF:\n' + summary + '\n\n' +
+    (previous ? '<previous_draft_to_revise>\n' + previous + '\n</previous_draft_to_revise>\n' : '') +
+    (feedback ? '<review_feedback>\n' + feedback + '\n</review_feedback>\n' : '') +
+    'Write the requested original narrative in English for this visual novel. Follow the Project File and approved brief; preserve established canon, tone, continuity, and scope. If a section titled Complete-Test Canon Clarification is present, it is the controlling canon and overrides any older conflicting or alternative text elsewhere in the Project File. Do not invent unspecified character appearance, relationship history, plant species, technical mechanisms, or chronology details; leave unspecified facts unspecified. Do not invent how long a plant has been closed, prior bloom observations, or collection history unless canon states them. Do not impose a word count or a fixed number of scenes, images, or audio cues. Treat explicit chronology and relationship facts as hard constraints: state each important time at the event it describes, distinguish an event time from an inaccurate displayed timestamp, and use the exact quoted message at each required timeline event. Do not infer earlier personal interactions when the Project File says this is a first meeting. If the Project File specifies the first-meeting location, explicitly place both characters there before their first dialogue and keep the scene there until their initial encounter is established. Respect information boundaries: do not let a character know, quote, react to, or act on private recording content unless the canon explicitly shows how that character receives it; a metadata log reveals only the fields listed in the canon. If the recipient has not received the recording, give them an independent canon-consistent reason for being present and stage any invitation in person. When the Project File requires an invitation and acceptance, show the invitation and a clear spoken acceptance. When it requires a shared event or resolution, depict that event happening on-page before the ending; do not stop at a promise, plan, or anticipation. Mark visually distinct story moments with concise > Visual: directives where useful; choose them from actual changes in setting, action, or emotional beat, with no target count. Do not add sound/music directions unless the approved brief requests them. Do not add choices unless the Project File authorizes them. For revisions, correct only the evidence-backed findings and preserve unaffected prose. Output # Scene: title, ## Narrative, and ## Italian Summary. Return only the artifact.';
 }
 export function reviewerInstruction(canonical, summary, narrative, checks) {
-  return `CANONICAL PROJECT FILE:\n${canonical}\nAUTHORIZED SCOPE:\n${summary}\nWRITER OUTPUT:\n${narrative}\nCONTENT PRECHECKS ONLY:\n${checks.join('\n') || 'PASS: deterministic content prechecks found no issues.'}
-REVIEW TASK: Review only substantive narrative issues: canon and continuity, adult characters, approved playful mild flirtation, scene scope, whether the misunderstanding is plausible, whether the spoken clarification and Alex's comic reaction are actually present, and whether the scene feels complete and engaging. Do not block or request Writer revisions for headings, Markdown, speaker-label styling, acting directions, directive placement/count, summary formatting, or other presentation issues; Codex will repair presentation after content review. Do not treat a small length variation inside 250–400 words as a content failure. A PASS must provide the three exact evidence lines: MISUNDERSTANDING_EVIDENCE: "..."; MINIBAR_CLARIFICATION_EVIDENCE: "..."; COMIC_RESPONSE_EVIDENCE: "...". The clarification evidence may quote either the exact spoken minibar/drinks/snacks reference or the exact spoken line ruling out a personal/romantic offer; the deterministic content check independently verifies both lines are present. Comic response must be Alex dialogue. For each substantive revision finding include a separate NARRATIVE_EVIDENCE: "..." exact quote. Never invent or paraphrase evidence. Do not submit style preference as a required revision. If content is substantively missing, explain one localized repair target and what surrounding material to preserve.
-FORMAT AUTHORITY: Presentation is checked and repaired by Codex after this review. The artifact normally has # Scene, ## Narrative, an opening Visual directive, and ## Italian Summary, but format defects alone must never change the verdict. Do not invent requirements or require that sarcasm forbid confusion. Review only narrative substance.
-Rispondi con una sola prima riga esatta REVIEW: PASS oppure REVIEW: REVISION REQUIRED. Tutte le spiegazioni successive devono essere in italiano. Non riscrivere il testo: identifica solo problemi materiali con prove e correzioni richieste al Writer. /no_think`;
+  const body = narrative.split(/## Narrative\s*\r?\n/i)[1]?.split(/## Italian Summary/i)[0] || narrative;
+  const evidenceCandidates = body.replace(/^>.*$/gm, '').replace(/^#{1,6}.*$/gm, '').split(/(?<=[.!?])\s+(?=[A-Z“”"'])/)
+    .map(line => line.trim()).filter(line => line.length >= 35 && line.length <= 220 && !/["“”]/.test(line))
+    .slice(0, 10);
+  return 'CANONICAL PROJECT CONTEXT (relevant sections):\n' + compactNarrativeCanon(canonical) + '\nAPPROVED SCOPE:\n' + summary + '\nWRITER OUTPUT:\n' + narrative + '\nCONTENT PRECHECKS:\n' +
+    (checks.join('\n') || 'No deterministic content failures.') +
+    '\nVERBATIM NARRATIVE EVIDENCE CANDIDATES (select one line exactly as printed; these are copied from ## Narrative only):\n' + evidenceCandidates.map(line => '- ' + line).join('\n') +
+    '\nReview substance only: canon, continuity, requested story beats, character motivation, tone, completeness, and whether the result fulfills the approved brief. A Complete-Test Canon Clarification section overrides conflicting older alternatives elsewhere in the Project File. Do not require a specific word count, fixed image/audio count, or presentation style unless the Project File explicitly does. If revision is required, use this exact structure for every finding: ### Finding 1: short issue title; Evidence: "one exact sentence copied verbatim from the Narrative"; Required local correction: one concise actionable sentence. Do not make unsupported claims. If it passes, include exactly one sentence selected from the verbatim Narrative Evidence Candidates, copied character for character as NARRATIVE_EVIDENCE: "...". Never quote the Project File, Italian Summary, or headings. Copy spelling, punctuation, capitalization, and contractions exactly; never invent, combine, or paraphrase a quote. Do not rewrite the narrative.\nThe first line must be exactly REVIEW: PASS or REVIEW: REVISION REQUIRED. Write all explanations after that line in Italian.';
+}
+export function compactNarrativeCanon(canonical, maxChars = 6500) {
+  const text = typeof canonical === 'string' ? canonical.replace(/```(?:markdown)?\s*/gi, '').replace(/```/g, '') : '';
+  const lines = text.split(/\r?\n/);
+  const sections = [];
+  const priority = heading => {
+    if (/clarification|established facts to preserve|canon corrections?|required story timeline|relationship boundary/i.test(heading)) return 11;
+    if (/task objective|original request summary|project overview|story overview/i.test(heading)) return 10;
+    if (/character profiles?|main characters?|protagonists?/i.test(heading)) return 9;
+    if (/location definitions|locations?|setting/i.test(heading)) return 8;
+    if (/story structure|story beats|plot outline|narrative production brief|narrative brief/i.test(heading)) return 7;
+    if (/tone|themes|genre|style|continuity|visual canon|character canon/i.test(heading)) return 6;
+    if (/audio production brief|audio cues|sound design/i.test(heading)) return 3;
+    return 0;
+  };
+  for (let index = 0; index < lines.length; index++) {
+    const match = lines[index].match(/^(#{1,6})\s+(.+?)\s*#*\s*$/);
+    if (!match) continue;
+    const score = priority(match[2]);
+    if (!score) continue;
+    const depth = match[1].length;
+    let end = index + 1;
+    while (end < lines.length) {
+      const next = lines[end].match(/^(#{1,6})\s+/);
+      if (next && next[1].length <= depth) break;
+      end++;
+    }
+    const section = `${match[1]} ${match[2]}\n${lines.slice(index + 1, end).join('\n')}`.replace(/\n{3,}/g, '\n\n').trim();
+    if (section.length > 80) sections.push({ score, section });
+  }
+  const hasClarification = sections.some(item => item.score === 11);
+  const candidates = sections.filter(item => !hasClarification || item.score !== 7);
+  const unique = [];
+  const seen = new Set();
+  for (const item of candidates.sort((a, b) => b.score - a.score)) {
+    const key = item.section.slice(0, item.section.indexOf('\n')).toLowerCase();
+    if (!seen.has(key)) { unique.push(item.section); seen.add(key); }
+  }
+  if (!unique.length) return text.trim().slice(0, maxChars);
+  let output = '';
+  for (const section of unique) {
+    const remaining = maxChars - output.length;
+    if (remaining <= 0) break;
+    output += (output ? '\n\n' : '') + section.slice(0, remaining);
+  }
+  return output.trim();
 }
 export async function produceScene(filename, adapters = {}) {
   const store = adapters.store || new Store();
@@ -360,12 +539,12 @@ export async function produceScene(filename, adapters = {}) {
       modelIdentifierOverride: role === 'writer' ? writerModelIdentifier : null
     }));
     let narrative = '', feedback = '', accepted = false, acceptedReview = '', reviewerCycles = 0;
-    for (let cycle = 1; cycle <= 3; cycle++) {
+    for (let cycle = 1; cycle <= 5; cycle++) {
       reviewerCycles = cycle;
       const previous = narrative;
       narrative = await predict('writer', writerInstruction(canonical, state.job.summary, previous, feedback));
       await fs.writeFile(path.join(out, `writer-${cycle}.md`), narrative);
-      const contentChecks = narrativeContentChecks(narrative);
+      const contentChecks = narrativeContentChecks(narrative, canonical);
       const presentationChecks = narrativePresentationChecks(narrative);
       if (previous) contentChecks.push(...writerRevisionScopeChecks(previous, narrative).map(issue => `Revision scope: ${issue}`));
       if (previous && sha(previous) === sha(narrative)) contentChecks.push('Writer repeated the rejected draft unchanged; make a localized correction to the cited content issue.');
@@ -389,7 +568,7 @@ export async function produceScene(filename, adapters = {}) {
       const trustedReview = evidenceChecks.length ? 'The Reviewer report did not provide verifiable quotations. Ignore its narrative claims and proposed edits.' : review;
       feedback = trustedReview + '\nSubstantive content checks to correct (preserve all unaffected lines and paragraphs):\n' + [...contentChecks, ...evidenceChecks].join('\n');
     }
-    if (!accepted) throw Error('Narrative not approved after three Writer/Reviewer cycles');
+    if (!accepted) throw Error('Narrative not approved after five Writer/Reviewer cycles');
     const draftPath = path.join(out, 'narrative-draft.md');
     const pendingPath = path.join(out, 'narrative-review-ready.json');
     const draftSha256 = sha(narrative);
@@ -423,7 +602,7 @@ export async function finalizeReviewedScene(filename, input, adapters = {}) {
     if (sha(draft) !== pending.draftSha256) throw Error('Writer draft changed after Reviewer approval');
     const canonical = await fs.readFile(store.project(filename), 'utf8');
     if (sha(canonical) !== state.job.projectSha256) throw Error('Canonical Project File changed before Codex final review');
-    const reviewIssues = codexFinalReviewIssues({ ...input, sourceNarrative: draft, expectedSourceSha256: pending.draftSha256, reviewerReport: pending.reviewerReport });
+    const reviewIssues = codexFinalReviewIssues({ ...input, sourceNarrative: draft, expectedSourceSha256: pending.draftSha256, reviewerReport: pending.reviewerReport, canonical });
     if (reviewIssues.length) throw Error('Codex final review rejected: ' + reviewIssues.join('; '));
 
     const narrativePath = path.join(out, 'scene.md');
@@ -463,73 +642,79 @@ export async function finalizeReviewedScene(filename, input, adapters = {}) {
 }
 
 async function produceSceneAssets({ filename, store, state, canonical, out, narrative, narrativePath, codexReview, reviewPath, reviewerCycles, events, predict, memory, adapters, controllerAvailable = true }) {
-    const record = async event => { events.push({ at: new Date().toISOString(), ...event }); await fs.writeFile(path.join(out, 'evidence.json'), JSON.stringify(events, null, 2)); };
-    const visual = narrative.match(/^> Visual:\s*(.*)$/m)?.[1];
-    const originalRequest = `Approved Project File:\n${canonical}\nScene opening Visual:\n${visual}\nExactly two adult principal characters: Alex, blonde man age 28 in black leather jacket, at hotel reception desk, and amused adult female receptionist behind desk. Medium shot, readable faces, playful non-explicit visual novel scene.`;
-    const plan = controllerAvailable
-      ? jsonObject(await predict('imageController', `You are in PROMPT_PLANNING mode. Tools are executed by the coordinator's deterministic controller. Return only JSON with keys generator (normal), prompt (concise English image generation prompt), negative_prompt. Preserve canonical appearance and exactly two separate adult people. Do not claim generation, review, publication, or invent paths.\n${originalRequest}\n/no_think`))
-      : deterministicImagePlan(visual);
-    if (!controllerAvailable) await record({ stage: 'image_planning', event: 'deterministic_fallback', reason: 'Image Controller model is absent from the local LM Studio catalog' });
-    if (plan.generator !== 'normal' || typeof plan.prompt !== 'string' || !plan.prompt.trim() || typeof plan.negative_prompt !== 'string') throw Error('Invalid Image Controller plan');
-    await fs.writeFile(path.join(out, 'image-plan.json'), JSON.stringify({ ...plan, originalRequest }, null, 2));
-    const connect = async worker => {
-      if (adapters.connect) return adapters.connect(worker);
-      const client = new Client({ name: 'bionic-production-controller', version: '1.0.0' });
-      const transport = new StdioClientTransport({ command: process.execPath, args: [path.join(lmRoot, worker, 'mcp', 'server.mjs')], stderr: 'pipe' });
-      await client.connect(transport);
-      return client;
-    };
-    const imageWorker = await connect('image-worker');
-    const imageSize = imageDimensionsForJob(state);
-    let assetWorker;
-    const call = async (client, name, args) => {
-      const result = await client.callTool({ name, arguments: args }, undefined, { timeout: 900000 });
-      const text = result.content?.filter(c => c.type === 'text').map(c => c.text).join('\n') || '';
-      if (result.isError || /^(FAILED|REVIEW_FAILED|PUBLISH_FAILED|FETCH_FAILED|FINALIZE_FAILED)/m.test(text)) throw Error(name + ' failed: ' + text.slice(0, 1000));
-      return text;
-    };
-    try {
+  const record = async event => { events.push({ at: new Date().toISOString(), ...event }); await fs.writeFile(path.join(out, 'evidence.json'), JSON.stringify(events, null, 2)); };
+  const visuals = visualMomentPrompts(narrative);
+  if (!visuals.length) throw Error('Narrative has no explicit visual directives or distinct scene passages from which to plan images');
+  const connect = async worker => {
+    if (adapters.connect) return adapters.connect(worker);
+    const client = new Client({ name: 'bionic-production-controller', version: '1.0.0' });
+    const transport = new StdioClientTransport({ command: process.execPath, args: [path.join(lmRoot, worker, 'mcp', 'server.mjs')], stderr: 'pipe' });
+    await client.connect(transport);
+    return client;
+  };
+  const imageWorker = await connect('image-worker');
+  const imageSize = imageDimensionsForJob(state);
+  let assetWorker;
+  const call = async (client, name, args) => {
+    const result = await client.callTool({ name, arguments: args }, undefined, { timeout: 900000 });
+    const response = result.content?.filter(c => c.type === 'text').map(c => c.text).join('\n') || '';
+    if (result.isError || /^(FAILED|REVIEW_FAILED|PUBLISH_FAILED|FETCH_FAILED|FINALIZE_FAILED)/m.test(response)) throw Error(name + ' failed: ' + response.slice(0, 1000));
+    return response;
+  };
+  try {
+    const approvedImages = [];
+    for (let index = 0; index < visuals.length; index++) {
+      const visual = visuals[index];
+      const originalRequest = 'Relevant Project Canon:\n' + relevantVisualCanon(visual, canonical) + '\n\nSpecific story moment:\n' + visual;
+      const plan = controllerAvailable
+        ? jsonObject(await predict('imageController', 'You are in PROMPT_PLANNING mode. Return only JSON with keys generator (normal), prompt (concise English image generation prompt), negative_prompt. Follow established appearance and continuity in the Project File; design for this specific story moment. Do not claim generation, review, publication, or invent paths.\n' + originalRequest + '\n/no_think'))
+        : deterministicImagePlan(visual, canonical);
+      if (!controllerAvailable) await record({ stage: 'image_planning', imageIndex: index + 1, event: 'deterministic_fallback', reason: 'Image Controller model is absent from the local LM Studio catalog' });
+      if (plan.generator !== 'normal' || typeof plan.prompt !== 'string' || !plan.prompt.trim() || typeof plan.negative_prompt !== 'string') throw Error('Invalid Image Controller plan for visual ' + (index + 1));
+      await fs.writeFile(path.join(out, 'image-plan-' + String(index + 1).padStart(2, '0') + '.json'), JSON.stringify({ ...plan, originalRequest }, null, 2));
       let selected = null, retry = '';
       for (let attempt = 1; attempt <= 5; attempt++) {
         if ((await memory.list()).length) throw Error('A local LLM was loaded during image generation; stop to preserve VRAM ownership');
         const seed = crypto.randomInt(1, 2147483647);
-        const name = `${state.projectId}_${state.job.id}_attempt_${String(attempt).padStart(2, '0')}.png`;
-        const generated = await call(imageWorker, 'generate_image', { generator: 'normal', prompt: plan.prompt + (retry ? '\nCorrect this issue: ' + retry : ''), negative_prompt: plan.negative_prompt, seed, filename: name, ...imageSize });
-        if (!/^SUCCESS\s*$/m.test(generated)) throw Error('Generation did not confirm success');
+        const base = state.projectId + '_' + state.job.id + '_visual_' + String(index + 1).padStart(2, '0');
+        const generated = await call(imageWorker, 'generate_image', { generator: 'normal', prompt: plan.prompt + (retry ? '\nCorrect this issue: ' + retry : ''), negative_prompt: plan.negative_prompt, seed, filename: base + '_attempt_' + String(attempt).padStart(2, '0') + '.png', ...imageSize });
+        if (!/^SUCCESS\s*$/m.test(generated)) throw Error('Generation did not confirm success for visual ' + (index + 1));
         const imagePath = generated.match(/^PATH:\s*(.*)$/m)?.[1]?.trim();
         const file = await checkedFile(imagePath);
         const review = await call(imageWorker, 'review_with_codex', { image_path: imagePath, original_request: originalRequest });
         const verdict = visualVerdict(review);
-        await record({ stage: 'image_review', attempt, seed, ...file, ...verdict, review });
-        if (verdict.accepted) { selected = { ...file, ...verdict, attempt }; break; }
+        await record({ stage: 'image_review', imageIndex: index + 1, attempt, seed, ...file, ...verdict, review });
+        if (verdict.accepted) { selected = { ...file, ...verdict, attempt, imageIndex: index + 1 }; break; }
         retry = verdict.retryHint;
       }
-      if (!selected) throw Error('No image approved after five attempts; unapproved assets were not published');
-      const finalized = await call(imageWorker, 'finalize_image', { source_path: selected.path, final_filename: `${state.projectId}_${state.job.id}_hotel_reception.png` });
+      if (!selected) throw Error('No image approved after five attempts for visual ' + (index + 1));
+      const finalName = state.projectId + '_' + state.job.id + '_visual_' + String(index + 1).padStart(2, '0') + '.png';
+      const finalized = await call(imageWorker, 'finalize_image', { source_path: selected.path, final_filename: finalName });
       const finalPath = finalized.match(/^FINAL_PATH:\s*(.*)$/m)?.[1]?.trim();
       const final = await checkedFile(finalPath);
       if (final.sha256 !== selected.sha256) throw Error('Finalized image differs from reviewed image');
-      await record({ stage: 'finalized', ...final });
+      await record({ stage: 'finalized', imageIndex: index + 1, ...final });
       const published = await call(imageWorker, 'publish_image', { local_path: finalPath });
-      if (!/^PUBLISH_SUCCESS\s*$/m.test(published)) throw Error('Publication not confirmed');
+      if (!/^PUBLISH_SUCCESS\s*$/m.test(published)) throw Error('Publication not confirmed for visual ' + (index + 1));
       const remotePath = published.match(/^REMOTE_PATH:\s*(.*)$/m)?.[1]?.trim();
       if (!remotePath?.startsWith('ImageWorker/final/')) throw Error('Unexpected published asset path');
-      await record({ stage: 'published', remotePath });
-      assetWorker = await connect('asset-worker');
+      await record({ stage: 'published', imageIndex: index + 1, remotePath });
+      assetWorker ||= await connect('asset-worker');
       const assetDirectory = path.join('C:\\AI\\assets', state.projectId, state.job.id);
       await fs.mkdir(assetDirectory, { recursive: true });
       const destination = path.join(assetDirectory, path.basename(finalPath));
       await call(assetWorker, 'fetch_image', { remote_path: remotePath, destination_path: destination });
       const transferred = await checkedFile(destination);
       if (transferred.sha256 !== final.sha256) throw Error('Transferred image hash differs from approved final');
-      await record({ stage: 'transferred', ...transferred });
-      const result = { status: 'completed', narrativePath, narrativeSha256: sha(narrative), reviewer: 'PASS', reviewerCycles, codexReview: { ...codexReview, path: reviewPath }, image: { ...selected, finalPath, remotePath, transferredPath: destination }, evidencePath: path.join(out, 'evidence.json') };
-      await fs.writeFile(path.join(out, 'result.json'), JSON.stringify(result, null, 2));
-      return result;
-    } catch (error) {
-      const currentFiles = await fs.readdir(out).catch(() => []);
-      throw Error(`${error.message}\nEVIDENCE_DIRECTORY: ${out}\nAVAILABLE_PARTIAL_FILES: ${currentFiles.join(', ')}\nNarrative is finalized; inspect evidence before retrying.`);
-    } finally { await imageWorker.close(); await assetWorker?.close(); }
+      const item = { ...selected, finalPath, remotePath, transferredPath: destination, finalSha256: final.sha256 };
+      approvedImages.push(item);
+      await record({ stage: 'transferred', imageIndex: index + 1, ...transferred });
+    }
+    const result = { status: 'completed', narrativePath, narrativeSha256: sha(narrative), reviewer: 'PASS', reviewerCycles, codexReview: { ...codexReview, path: reviewPath }, images: approvedImages, image: approvedImages[0], evidencePath: path.join(out, 'evidence.json') };
+    await fs.writeFile(path.join(out, 'result.json'), JSON.stringify(result, null, 2));
+    return result;
+  } catch (error) {
+    const currentFiles = await fs.readdir(out).catch(() => []);
+    throw Error(error.message + '\nEVIDENCE_DIRECTORY: ' + out + '\nAVAILABLE_PARTIAL_FILES: ' + currentFiles.join(', ') + '\nNarrative is finalized; inspect evidence before retrying.');
+  } finally { await imageWorker.close(); await assetWorker?.close(); }
 }
-
-

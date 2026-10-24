@@ -1,0 +1,26 @@
+[
+  {
+    "turn": 1,
+    "runId": "component-run-0001",
+    "role": "writer",
+    "input": "Fresh test premise A",
+    "inputSha256": "72907c67930ec189928f55dbb1dde4d98da6cc1b89eb8b2a274f3bb8af2b9098",
+    "model": "fixture-writer",
+    "response": "Draft A",
+    "interaction": "revision",
+    "mockReply": "Reviewer asks for a local change",
+    "createdAt": "2026-10-23T15:11:34.502Z"
+  },
+  {
+    "turn": 2,
+    "runId": "component-run-0001",
+    "role": "writer",
+    "input": "Fresh test premise B",
+    "inputSha256": "31da51d26360b81dcb623fa8d8c244b68320638ba454d381df711eb58610d10b",
+    "model": "fixture-writer",
+    "response": "Revised draft",
+    "interaction": "revision",
+    "mockReply": "Recorded",
+    "createdAt": "2026-10-23T15:11:34.512Z"
+  }
+]

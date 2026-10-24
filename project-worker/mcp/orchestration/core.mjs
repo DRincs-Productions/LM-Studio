@@ -1,11 +1,31 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 
 export const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 export const sha = value => crypto.createHash('sha256').update(value).digest('hex');
 export const now = () => new Date().toISOString();
-export function alive(pid) { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } }
+export function alive(pid, recordedStartedAt) {
+  if (!Number.isInteger(Number(pid)) || Number(pid) <= 0) return false;
+  try { process.kill(Number(pid), 0); } catch (e) { return e.code === 'EPERM' && !recordedStartedAt; }
+  if (recordedStartedAt && process.platform === 'win32') {
+    // Windows can reuse a PID after restart. A live PID is the same process only
+    // when its OS creation time is no later than the timestamp recorded at spawn.
+    // If the OS query fails, keep the conservative "alive" result and do not
+    // recover/remove a lock based on an unverified identity.
+    const script = `$p=Get-CimInstance -ClassName Win32_Process -Filter 'ProcessId = ${Number(pid)}'; if($p){[Console]::Out.Write($p.CreationDate.ToUniversalTime().ToString('o',[Globalization.CultureInfo]::InvariantCulture))}`;
+    const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], {
+      encoding: 'utf8', windowsHide: true, timeout: 5000
+    });
+    if (result.error || result.status !== 0) return true;
+    const created = Date.parse((result.stdout || '').trim());
+    const expected = Date.parse(recordedStartedAt);
+    if (!Number.isFinite(created) || !Number.isFinite(expected)) return true;
+    return created <= expected + 1000;
+  }
+  return true;
+}
 
 export class Store {
   constructor(root = process.env.BIONIC_PROJECTS_DIR || 'C:\\AI\\bionic\\projects') {
@@ -35,7 +55,7 @@ export class Store {
         let owner;
         try { owner = JSON.parse(await fs.readFile(path.join(lock, 'owner.json'), 'utf8')); } catch {}
         // Unknown or live owners are never removed automatically.
-        if (owner && !alive(owner.pid)) {
+        if (owner && !alive(owner.pid, owner.createdAt)) {
           try { await fs.rename(lock, lock + '.abandoned.' + crypto.randomUUID()); } catch {}
         }
         if (tries > 100) throw Error('Project lock busy; inspect lock owner before recovery');
@@ -64,16 +84,17 @@ export class Store {
   async update(filename, fn) {
     return this.locked(filename, async () => { const state = await this.read(filename); await fn(state); return this.save(state); });
   }
-  async enqueue(filename, { phase, summary, expectedRevision, expectedSha256 }) {
+  async enqueue(filename, { phase, summary, expectedRevision, expectedSha256, executionMode = 'production' }) {
     return this.locked(filename, async () => {
       const state = await this.read(filename);
       if (state.status !== 'regia_ready') throw Error('Project is not owned by Regia or previous handback has not been acknowledged');
       if (state.revision !== expectedRevision) throw Error('Stale project revision');
-      if (!state.binding) throw Error('Session association not verified. Use register_project first and retry after its result has been recorded by Bionic');
+      if (!['production', 'complete_test'].includes(executionMode)) throw Error('Invalid execution mode');
+      if (!state.binding && executionMode !== 'complete_test') throw Error('Session association not verified. Use register_project first and retry after its result has been recorded by Bionic');
       const content = await fs.readFile(this.project(filename), 'utf8');
       if (sha(content) !== expectedSha256) throw Error('Project File changed since last read');
       state.owner = 'codex'; state.phase = phase; state.status = 'queued'; state.handback = null;
-      state.job = { id: crypto.randomUUID(), phase, summary, projectSha256: sha(content), createdAt: now(), status: 'queued', runnerPid: null };
+      state.job = { id: crypto.randomUUID(), phase, summary, projectSha256: sha(content), executionMode, createdAt: now(), status: 'queued', runnerPid: null };
       return this.save(state);
     });
   }
@@ -98,7 +119,7 @@ export class Store {
   }
   async recover(filename) {
     return this.update(filename, state => {
-      if (state.status !== 'running' || alive(state.job.runnerPid) || (state.job.codexPid && alive(state.job.codexPid))) throw Error('Only a job with a dead runner and dead coordinator can be recovered');
+      if (state.status !== 'running' || alive(state.job.runnerPid, state.job.startedAt) || (state.job.codexPid && alive(state.job.codexPid, state.job.codexStartedAt))) throw Error('Only a job with a dead runner and dead coordinator can be recovered');
       state.owner = 'regia'; state.status = 'handback_ready'; state.job.status = 'interrupted';
       state.handback = { summary: 'The coordinator process stopped. Inspect produced files and job state before retrying.', completedTasks: [], assets: [], problems: ['Interrupted job; side effects may have occurred. No automatic replay.'], decisions: ['Decide whether to retry after inspecting outputs.'], questionForUser: 'May this interrupted phase be retried?', jobId: state.job.id, status: 'interrupted', createdAt: now(), acknowledgedAt: null };
     });
@@ -130,7 +151,7 @@ export async function waitHandback(store, filename, jobId, { signal, timeoutMs =
     const state = await store.read(filename);
     if (state.job?.id !== jobId) throw Error('Project job changed during wait');
     if (state.status === 'handback_ready' || state.handback?.acknowledgedAt) return { status: 'handback_ready', projectId: state.projectId, projectFile: filename, handback: state.handback };
-    if (state.status === 'running' && state.job.runnerPid && !alive(state.job.runnerPid) && (!state.job.codexPid || !alive(state.job.codexPid))) {
+    if (state.status === 'running' && state.job.runnerPid && !alive(state.job.runnerPid, state.job.startedAt) && (!state.job.codexPid || !alive(state.job.codexPid, state.job.codexStartedAt))) {
       await store.recover(filename);
       continue;
     }

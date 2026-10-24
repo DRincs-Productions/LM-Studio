@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "projectId": "b827a3c7-d1ac-414f-939a-d41bf0e827f3",
+  "projectFile": "project.md",
+  "bindingToken": "94c2623a-e98e-4b63-9649-acd2a21d850f",
+  "binding": {
+    "regiaSessionId": "fixture-session",
+    "modelSpecifier": {
+      "type": "indexed",
+      "indexedModelIdentifier": "fixture-model"
+    }
+  },
+  "owner": "regia",
+  "phase": "prototype",
+  "status": "handback_ready",
+  "revision": 4,
+  "createdAt": "2026-10-24T11:29:54.691Z",
+  "job": {
+    "id": "49f4c4f0-93a8-4367-8554-6508b4aaf54c",
+    "phase": "prototype",
+    "summary": "Create a prototype",
+    "projectSha256": "b639b321035bd1129c11d8d3ec39d2872bf4192d43aea3e4d52f4d18bdd1c41a",
+    "executionMode": "production",
+    "createdAt": "2026-10-24T11:29:54.711Z",
+    "status": "completed",
+    "runnerPid": null,
+    "finishedAt": "2026-10-24T11:29:54.720Z"
+  },
+  "handback": {
+    "summary": "Prototype complete. Alex remains blonde and wears a black leather jacket.",
+    "completedTasks": [
+      "Created prototype"
+    ],
+    "assets": [],
+    "problems": [],
+    "decisions": [
+      "Choose a mission"
+    ],
+    "questionForUser": "Which mission should Alex take?",
+    "jobId": "49f4c4f0-93a8-4367-8554-6508b4aaf54c",
+    "status": "completed",
+    "createdAt": "2026-10-24T11:29:54.720Z",
+    "acknowledgedAt": null
+  },
+  "history": [],
+  "updatedAt": "2026-10-24T11:29:54.720Z"
+}

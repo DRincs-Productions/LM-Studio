@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "projectId": "a5cb3cae-6fc5-477f-90f0-4d9e49869bba",
+  "projectFile": "project.md",
+  "bindingToken": "776698a2-65a9-49d8-9ab1-127261e4c5b8",
+  "binding": {
+    "regiaSessionId": "fixture-session",
+    "modelSpecifier": {
+      "type": "indexed",
+      "indexedModelIdentifier": "fixture-model"
+    }
+  },
+  "owner": "regia",
+  "phase": "creative_definition",
+  "status": "regia_ready",
+  "revision": 2,
+  "createdAt": "2026-10-24T11:29:56.607Z",
+  "job": null,
+  "handback": null,
+  "history": [],
+  "updatedAt": "2026-10-24T11:29:56.614Z"
+}

@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "projectId": "64a33b7f-35fe-4dc4-b7d2-43ae99f91fe9",
+  "projectFile": "project.md",
+  "bindingToken": "0da1c7c3-bf8f-4c61-a025-a8d2627e8eb0",
+  "binding": {
+    "regiaSessionId": "fixture-session",
+    "modelSpecifier": {
+      "type": "indexed",
+      "indexedModelIdentifier": "fixture-model"
+    }
+  },
+  "owner": "regia",
+  "phase": "prototype",
+  "status": "handback_ready",
+  "revision": 5,
+  "createdAt": "2026-10-24T11:03:14.520Z",
+  "job": {
+    "id": "93d85391-437a-46df-a33e-7eac570b6cab",
+    "phase": "prototype",
+    "summary": "Create a prototype",
+    "projectSha256": "b639b321035bd1129c11d8d3ec39d2872bf4192d43aea3e4d52f4d18bdd1c41a",
+    "executionMode": "production",
+    "createdAt": "2026-10-24T11:03:14.540Z",
+    "status": "interrupted",
+    "runnerPid": 99999999,
+    "codexPid": 99999998
+  },
+  "handback": {
+    "summary": "The coordinator process stopped. Inspect produced files and job state before retrying.",
+    "completedTasks": [],
+    "assets": [],
+    "problems": [
+      "Interrupted job; side effects may have occurred. No automatic replay."
+    ],
+    "decisions": [
+      "Decide whether to retry after inspecting outputs."
+    ],
+    "questionForUser": "May this interrupted phase be retried?",
+    "jobId": "93d85391-437a-46df-a33e-7eac570b6cab",
+    "status": "interrupted",
+    "createdAt": "2026-10-24T11:03:14.554Z",
+    "acknowledgedAt": null
+  },
+  "history": [],
+  "updatedAt": "2026-10-24T11:03:14.554Z"
+}

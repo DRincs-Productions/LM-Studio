@@ -7,6 +7,7 @@ import { Store, sha, waitHandback, alive } from './core.mjs';
 import { discoverBinding } from './bionic.mjs';
 import { configuration } from './runner.mjs';
 import { produceScene, finalizeReviewedScene } from './production.mjs';
+import { selectProgrammer, startProgrammer, recordComponentTest } from './programmer.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const store = new Store();
@@ -29,14 +30,14 @@ export async function projectContext(filename) {
 async function launchJob(filename, jobId) {
   const state = await store.read(filename);
   if (state.status !== 'queued' || state.job.id !== jobId) throw Error('Job is not queued');
-  if (state.job.launcherPid && alive(state.job.launcherPid)) throw Error('Queued job already has a live launcher');
+  if (state.job.launcherPid && alive(state.job.launcherPid, state.job.launcherStartedAt)) throw Error('Queued job already has a live launcher');
   try {
     await new Promise((resolve, reject) => {
       const child = spawn(process.execPath, [path.join(here, 'runner.mjs'), filename], { detached: true, stdio: 'ignore', shell: false, windowsHide: true, env: process.env });
       child.once('error', reject);
       child.once('spawn', async () => {
         child.unref();
-        try { await store.update(filename, s => { if (s.job.id === jobId) s.job.launcherPid = child.pid; }); resolve(); }
+        try { await store.update(filename, s => { if (s.job.id === jobId) { s.job.launcherPid = child.pid; s.job.launcherStartedAt = new Date().toISOString(); } }); resolve(); }
         catch (e) { reject(e); }
       });
     });
@@ -52,7 +53,7 @@ export function installTools(server) {
     try { return textResult(await fn(params, extra)); }
     catch (e) { return { isError: true, content: [{ type: 'text', text: e.message }] }; }
   });
-  tool('produce_scene_assets', 'Codex Coordinator only: run the approved Writer → Narrative Reviewer content-only loop (maximum three cycles). Formatting defects do not block Reviewer PASS and are returned for Codex repair. Returns the draft, presentation checks, review and source SHA256. Does not generate images. Call finalize_reviewed_scene once after a bounded Codex review and final edit.', { filename: z.string() }, async ({ filename }) => produceScene(filename));
+  tool('produce_scene_assets', 'Codex Coordinator only: run the approved Writer → Narrative Reviewer content-only loop (maximum five cycles). Formatting defects do not block Reviewer PASS and are returned for Codex repair. Returns the draft, presentation checks, review and source SHA256. Does not generate images. Call finalize_reviewed_scene once after a bounded Codex review and final edit.', { filename: z.string() }, async ({ filename }) => produceScene(filename));
   tool('finalize_reviewed_scene', 'Codex Coordinator only: submit review and final narrative against the exact Reviewer-approved source SHA256. Codex may fix formatting and make at most 55 changed narrative-word edits and 16% change; larger content repairs must return to Writer/Regia, never trigger a scene rewrite. The worker validates content, presentation, evidence, edit budget and hashes, writes the final artifact, then proceeds to image generation/review, publication and hash-verified asset transfer. Refuses stale drafts or replay.', {
     filename: z.string(), source_sha256: z.string().regex(/^[a-f0-9]{64}$/i),
     review_summary: z.string().min(20).max(4000), changes_made: z.string().min(8).max(4000),
@@ -67,13 +68,14 @@ export function installTools(server) {
     return { ...await projectContext(filename), bindingNote: note };
   });
   tool('handoff_to_codex', 'After saving creative decisions in the English Project File, delegate one production phase to Codex and WAIT. The model is unloaded only after it is idle. This native tool result returns the persisted handback to this same chat. Do not run the production pipeline yourself. If cancelled, work persists; later use wait_for_handback. Requires a verified session binding.', {
-    filename: z.string(), production_approved: z.boolean(), approval_text: z.string().min(1).max(4000), phase: z.string().min(1).max(200), summary: z.string().min(1).max(12000), expected_revision: z.number().int(), expected_sha256: z.string().regex(/^[a-f0-9]{64}$/)
-  }, async ({ filename, production_approved, approval_text, phase, summary, expected_revision, expected_sha256 }, extra) => {
+    filename: z.string(), production_approved: z.boolean(), approval_text: z.string().min(1).max(4000), phase: z.string().min(1).max(200), summary: z.string().min(1).max(12000), expected_revision: z.number().int(), expected_sha256: z.string().regex(/^[a-f0-9]{64}$/), execution_mode: z.enum(['production', 'complete_test']).default('production')
+  }, async ({ filename, production_approved, approval_text, phase, summary, expected_revision, expected_sha256, execution_mode }, extra) => {
     if (!production_approved) throw Error('Explicit user approval is required before production');
+    if (execution_mode === 'complete_test' && process.env.BIONIC_ALLOW_COMPLETE_TEST !== '1') throw Error('Complete-test mode is available only to the terminal test harness');
     const config = await configuration();
     if (!config.coordinatorEnabled) throw Error('Coordinator disabled');
-    await tryBind(filename);
-    const state = await store.enqueue(filename, { phase, summary, expectedRevision: expected_revision, expectedSha256: expected_sha256 });
+    if (execution_mode === 'production') await tryBind(filename);
+    const state = await store.enqueue(filename, { phase, summary, expectedRevision: expected_revision, expectedSha256: expected_sha256, executionMode: execution_mode });
     await store.update(filename, s => { s.job.approval = { text: approval_text, recordedAt: new Date().toISOString() }; });
     await launchJob(filename, state.job.id);
     return waitHandback(store, filename, state.job.id, { signal: extra.signal, timeoutMs: config.waitTimeoutMs });
@@ -89,6 +91,17 @@ export function installTools(server) {
   tool('recover_interrupted_job', 'Recover a dead coordinator as an interrupted handback. Never automatically repeats work; inspect produced files before deciding on a new handoff.', { filename: z.string() }, async ({ filename }) => {
     const state = await store.recover(filename); return state.handback;
   });
+  tool('select_programmer', 'Regia only: record whether Claude or Codex was selected to implement this approved project. This does not start implementation. After selection, ask the user in a separate turn for explicit approval to start.', {
+    filename: z.string(), provider: z.enum(['claude', 'codex']), project_root: z.string().min(1)
+  }, async ({ filename, provider, project_root }) => selectProgrammer({ store, filename, provider, projectRoot: project_root }));
+  tool('start_programmer', 'Regia only: start the previously selected Claude or Codex implementation after a separate explicit user approval. Uses the provider CLI default model; never changes provider or model automatically. A missing CLI returns an error without fallback.', {
+    filename: z.string(), selection_id: z.string().uuid(), approval_text: z.string().min(1).max(4000), implementation_brief: z.string().min(1).max(12000)
+  }, async ({ filename, selection_id, approval_text, implementation_brief }) => startProgrammer({ store, filename, selectionId: selection_id, approvalText: approval_text, implementationBrief: implementation_brief }));
+  tool('record_component_test', 'Component-test path of this real Project Worker MCP. Records a fresh role interaction and returns the requested controlled test reply without starting production, image/audio generation, or implementation.', {
+    run_id: z.string().regex(/^[a-zA-Z0-9_-]{8,80}$/), role: z.enum(['regia', 'coordinator', 'writer', 'designer', 'sound_designer']),
+    input: z.string().min(1).max(12000), model: z.string().min(1).max(300), response: z.string().min(1).max(30000),
+    interaction: z.enum(['analysis', 'handoff', 'clarification', 'revision', 'error', 'approval_gate']), mock_reply: z.string().max(12000).default('')
+  }, async args => recordComponentTest({ store, ...args }));
   tool('resume_queued_job', 'Start an existing queued job only if its launcher is no longer alive. Used after an MCP/service interruption before execution began. Never replays a running or completed production job.', { filename: z.string() }, async ({ filename }, extra) => {
     const state = await store.read(filename); if (!state.job) throw Error('No job exists');
     await launchJob(filename, state.job.id);

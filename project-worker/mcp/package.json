@@ -4,7 +4,10 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test ./orchestration/tests.mjs",
+    "test:component": "node ./orchestration/component-test.mjs",
+    "test:complete": "node ./orchestration/complete-test.mjs",
+    "test:complete:resume": "node ./orchestration/resume-complete-test.mjs"
   },
   "keywords": [],
   "author": "",

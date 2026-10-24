@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "projectId": "4f18baf3-705c-4662-afc2-f6be24505940",
+  "projectFile": "project.md",
+  "bindingToken": "ef31a9ae-12a7-4603-a41f-0f17e5280af9",
+  "binding": {
+    "regiaSessionId": "fixture-session",
+    "modelSpecifier": {
+      "type": "indexed",
+      "indexedModelIdentifier": "fixture-model"
+    }
+  },
+  "owner": "codex",
+  "phase": "prototype",
+  "status": "queued",
+  "revision": 3,
+  "createdAt": "2026-10-23T14:59:30.180Z",
+  "job": {
+    "id": "0cd7546b-745d-42f3-a075-7605a8e1ebac",
+    "phase": "prototype",
+    "summary": "Create a prototype",
+    "projectSha256": "b639b321035bd1129c11d8d3ec39d2872bf4192d43aea3e4d52f4d18bdd1c41a",
+    "executionMode": "production",
+    "createdAt": "2026-10-23T14:59:30.202Z",
+    "status": "queued",
+    "runnerPid": null
+  },
+  "handback": null,
+  "history": [],
+  "updatedAt": "2026-10-23T14:59:30.202Z"
+}
