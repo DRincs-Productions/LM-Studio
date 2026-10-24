@@ -8,6 +8,7 @@ import { discoverBinding } from './bionic.mjs';
 import { configuration } from './runner.mjs';
 import { produceScene, finalizeReviewedScene } from './production.mjs';
 import { selectProgrammer, startProgrammer, recordComponentTest } from './programmer.mjs';
+import { startRegiaRelay, talkToRegia, stopRegiaRelay, regiaRelayStatus, discardRegiaTurn, verifyCodexRelay } from './regia-relay.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const store = new Store();
@@ -24,7 +25,7 @@ async function tryBind(filename) {
 export async function projectContext(filename) {
   let state;
   try { state = await store.read(filename); } catch (e) { if (e.code !== 'ENOENT') throw e; }
-  return { sha256: sha(await fs.readFile(store.project(filename), 'utf8')), orchestration: state ? { projectId: state.projectId, owner: state.owner, status: state.status, phase: state.phase, revision: state.revision, bindingVerified: !!state.binding, jobId: state.job?.id, handback: state.handback } : null };
+  return { sha256: sha(await fs.readFile(store.project(filename), 'utf8')), orchestration: state ? { projectId: state.projectId, owner: state.owner, status: state.status, phase: state.phase, revision: state.revision, bindingVerified: !!state.binding, frontend: state.frontend || 'bionic', codexRelay: state.codexRelay || null, jobId: state.job?.id, handback: state.handback } : null };
 }
 
 async function launchJob(filename, jobId) {
@@ -33,7 +34,7 @@ async function launchJob(filename, jobId) {
   if (state.job.launcherPid && alive(state.job.launcherPid, state.job.launcherStartedAt)) throw Error('Queued job already has a live launcher');
   try {
     await new Promise((resolve, reject) => {
-      const child = spawn(process.execPath, [path.join(here, 'runner.mjs'), filename], { detached: true, stdio: 'ignore', shell: false, windowsHide: true, env: process.env });
+      const child = spawn(process.execPath, [path.join(here, 'runner.mjs'), filename], { detached: true, stdio: 'ignore', shell: false, windowsHide: true, env: { ...process.env, BIONIC_PROJECTS_DIR: store.root } });
       child.once('error', reject);
       child.once('spawn', async () => {
         child.unref();
@@ -53,6 +54,11 @@ export function installTools(server) {
     try { return textResult(await fn(params, extra)); }
     catch (e) { return { isError: true, content: [{ type: 'text', text: e.message }] }; }
   });
+  tool('start_regia_session', 'Only after the user explicitly asks to speak with local Regia from Codex: start or resume its persistent project conversation. Codex acts as a relay until the user asks to return. Does not start production. new_session=true archives the old history and requires an explicit user request to reset the conversation.', { filename: z.string(), new_session: z.boolean().default(false) }, ({ filename, new_session }) => startRegiaRelay(store, filename, { newSession: new_session }));
+  tool('talk_to_regia', 'Relay the exact user message to local Regia. Use the returned session_id and a new UUID request_id; retry an uncertain call only with the SAME ID and message. Display reply verbatim as Regia. If proposed_project_document is non-null, persist it via update_project_file with expected_sha256, then read back; never claim a save from this reply alone. No production or implementation is started.', { filename: z.string(), session_id: z.string().uuid(), request_id: z.string().uuid(), message: z.string().min(1).max(12000) }, ({ filename, session_id, request_id, message }) => talkToRegia(store, { filename, sessionId: session_id, requestId: request_id, message }));
+  tool('get_regia_session', 'Read the persisted local Regia relay mode, session ID, pending request and last response after a restart or uncertain tool result. Does not call a model.', { filename: z.string() }, ({ filename }) => regiaRelayStatus(store, filename));
+  tool('stop_regia_session', 'When the user asks to return to Codex, suspend the Regia relay without deleting conversation history. Does not acknowledge handbacks or start production.', { filename: z.string(), session_id: z.string().uuid() }, ({ filename, session_id }) => stopRegiaRelay(store, filename, session_id));
+  tool('discard_regia_turn', 'Explicit recovery only: abandon a failed or dead Regia request after inspecting get_regia_session. Preserves its prompt/error/raw result, never replays it. Refuses a live running request.', { filename: z.string(), session_id: z.string().uuid(), request_id: z.string().uuid() }, ({ filename, session_id, request_id }) => discardRegiaTurn(store, filename, session_id, request_id));
   tool('produce_scene_assets', 'Codex Coordinator only: run the approved Writer → Narrative Reviewer content-only loop (maximum five cycles). Formatting defects do not block Reviewer PASS and are returned for Codex repair. Returns the draft, presentation checks, review and source SHA256. Does not generate images. Call finalize_reviewed_scene once after a bounded Codex review and final edit.', { filename: z.string() }, async ({ filename }) => produceScene(filename));
   tool('finalize_reviewed_scene', 'Codex Coordinator only: submit review and final narrative against the exact Reviewer-approved source SHA256. Codex may fix formatting and make at most 55 changed narrative-word edits and 16% change; larger content repairs must return to Writer/Regia, never trigger a scene rewrite. The worker validates content, presentation, evidence, edit budget and hashes, writes the final artifact, then proceeds to image generation/review, publication and hash-verified asset transfer. Refuses stale drafts or replay.', {
     filename: z.string(), source_sha256: z.string().regex(/^[a-f0-9]{64}$/i),
@@ -64,18 +70,23 @@ export function installTools(server) {
   tool('register_project', 'Associate an existing canonical Project File with this Regia session automatically. No session UUID needed. Call once from Regia, then get_orchestration_status.', { filename: z.string() }, async ({ filename }) => registrationText(await store.register(filename)));
   tool('get_orchestration_status', 'Read project ownership, pending handback, Project File hash and revision. Establish the session binding after register_project. Use before production handoff and at the start of a resumed Regia turn.', { filename: z.string() }, async ({ filename }) => {
     let note = null;
-    try { await tryBind(filename); } catch (e) { note = e.message; }
+    const current = await store.read(filename).catch(e => { if (e.code !== 'ENOENT') throw e; return null; });
+    if (current?.frontend === 'codex') { try { await verifyCodexRelay(store, current); note = 'Codex relay verified; Bionic binding is not required for frontend=codex'; } catch (e) { note = e.message; } }
+    else { try { await tryBind(filename); } catch (e) { note = e.message; } }
     return { ...await projectContext(filename), bindingNote: note };
   });
-  tool('handoff_to_codex', 'After saving creative decisions in the English Project File, delegate one production phase to Codex and WAIT. The model is unloaded only after it is idle. This native tool result returns the persisted handback to this same chat. Do not run the production pipeline yourself. If cancelled, work persists; later use wait_for_handback. Requires a verified session binding.', {
-    filename: z.string(), production_approved: z.boolean(), approval_text: z.string().min(1).max(4000), phase: z.string().min(1).max(200), summary: z.string().min(1).max(12000), expected_revision: z.number().int(), expected_sha256: z.string().regex(/^[a-f0-9]{64}$/), execution_mode: z.enum(['production', 'complete_test']).default('production')
-  }, async ({ filename, production_approved, approval_text, phase, summary, expected_revision, expected_sha256, execution_mode }, extra) => {
+  tool('handoff_to_codex', 'Delegate one explicitly approved production phase and WAIT. frontend=bionic (default) requires a verified Bionic binding; frontend=codex requires a verified persistent Regia relay session. The idle model is unloaded before production. If cancelled, retrieve wait_for_handback; never duplicate a job.', {
+    filename: z.string(), production_approved: z.boolean(), approval_text: z.string().min(1).max(4000), phase: z.string().min(1).max(200), summary: z.string().min(1).max(12000), expected_revision: z.number().int(), expected_sha256: z.string().regex(/^[a-f0-9]{64}$/), execution_mode: z.enum(['production', 'complete_test']).default('production'), frontend: z.enum(['bionic', 'codex']).default('bionic')
+  }, async ({ filename, production_approved, approval_text, phase, summary, expected_revision, expected_sha256, execution_mode, frontend }, extra) => {
     if (!production_approved) throw Error('Explicit user approval is required before production');
     if (execution_mode === 'complete_test' && process.env.BIONIC_ALLOW_COMPLETE_TEST !== '1') throw Error('Complete-test mode is available only to the terminal test harness');
     const config = await configuration();
     if (!config.coordinatorEnabled) throw Error('Coordinator disabled');
-    if (execution_mode === 'production') await tryBind(filename);
-    const state = await store.enqueue(filename, { phase, summary, expectedRevision: expected_revision, expectedSha256: expected_sha256, executionMode: execution_mode });
+    if (execution_mode === 'production') {
+      if (frontend === 'codex') await verifyCodexRelay(store, await store.read(filename));
+      else await tryBind(filename);
+    }
+    const state = await store.enqueue(filename, { phase, summary, expectedRevision: expected_revision, expectedSha256: expected_sha256, executionMode: execution_mode, frontend });
     await store.update(filename, s => { s.job.approval = { text: approval_text, recordedAt: new Date().toISOString() }; });
     await launchJob(filename, state.job.id);
     return waitHandback(store, filename, state.job.id, { signal: extra.signal, timeoutMs: config.waitTimeoutMs });

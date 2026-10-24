@@ -27,7 +27,8 @@ export class LocalChatApi {
     if (started.code !== 0 || !/server is now running on port 1234/i.test(started.stdout + started.stderr)) throw Error('Could not start the local LM Studio API server');
     this.started = true; this.owned = true;
   }
-  async predict(modelInstanceId, prompt, system, config, role) {
+  async predict(modelInstanceId, prompt, system, config, role, { contextLength = 8192 } = {}) {
+    if (!Number.isInteger(contextLength) || contextLength < 4096 || contextLength > 65536) throw Error('Invalid local prediction context length');
     await this.ensure();
     const fields = Object.fromEntries((config.operation?.fields || []).map(field => [field.key, field.value]));
     const repeat = fields['llm.prediction.repeatPenalty'];
@@ -39,7 +40,7 @@ export class LocalChatApi {
       temperature: fields['llm.prediction.temperature'] ?? (role === 'writer' ? 0.75 : 0.6),
       repeat_penalty: repeat && typeof repeat === 'object' ? (repeat.checked ? repeat.value : false) : (repeat ?? 1.05),
       max_output_tokens: fields['llm.prediction.maxPredictedTokens'] ?? fields['llm.prediction.maxTokens'] ?? 3072,
-      context_length: 8192,
+      context_length: contextLength,
       store: false,
       stream: true
     };

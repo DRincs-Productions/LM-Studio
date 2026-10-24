@@ -1,4 +1,8 @@
 import test from 'node:test';
+import { cleanCliText } from './cli-output.mjs';
+import crypto from 'node:crypto';
+import { LocalChatApi } from './production.mjs';
+import { startRegiaRelay, talkToRegia, stopRegiaRelay, regiaRelayStatus, discardRegiaTurn, verifyCodexRelay } from './regia-relay.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -237,4 +241,109 @@ test('LM Studio SSE chat parser waits for and returns the final aggregated chat.
   assert.equal(result.model_instance_id, 'writer-1');
   assert.equal(result.output[0].content, 'hello world');
   assert.equal(result.stats.total_output_tokens, 2);
+});
+
+test('CLI loading progress does not pollute a narrative or overflow the MCP response limit', () => {
+  const artifact = '# Scene: Harbor\n\n## Narrative\n\nShe held the parcel.\n\n## Italian Summary\n\nTiene il pacco.';
+  const progress = '\u001b[2KLoading model 81% ⠙\r\nLoading model 81% ⠹\r\n'.repeat(1000);
+  assert.ok(progress.length > 30000);
+  assert.equal(cleanCliText(progress + artifact), artifact);
+  assert.equal(cleanCliText('<think>internal</think>\n' + artifact), artifact);
+});
+
+test('Codex Regia relay persists messages, proposals and idempotent replies across restart and suspension', async t => {
+  const f = await fixture(t);
+  const session = await startRegiaRelay(f.store, 'project.md');
+  const args = {filename:'project.md',sessionId:session.session_id,requestId:crypto.randomUUID(),message:'Una biblioteca su una nave.'};
+  let calls=0;
+  const adapters={predict:async prompt=>{
+    calls++;
+    assert.equal(JSON.parse(prompt).user_message,args.message);
+    return {text:JSON.stringify({reply:'Che cosa custodisce la biblioteca?',project_document:'# Canonical project\nAlex is blonde.\nProposed ship library.'})};
+  }};
+  const response=await talkToRegia(f.store,args,adapters);
+  assert.equal(response.document_saved,false);
+  assert.doesNotMatch(await fs.readFile(f.store.project('project.md'),'utf8'),/ship library/);
+  const restarted=new Store(f.root);
+  assert.deepEqual(await talkToRegia(restarted,args,adapters),response);
+  assert.equal(calls,1);
+  await assert.rejects(talkToRegia(restarted,{...args,message:'Different'},adapters),/different message/);
+  await stopRegiaRelay(restarted,'project.md',session.session_id);
+  await assert.rejects(talkToRegia(restarted,{...args,requestId:crypto.randomUUID()},adapters),/suspended/);
+  assert.equal((await startRegiaRelay(restarted,'project.md')).session_id,session.session_id);
+  await talkToRegia(restarted,{...args,requestId:crypto.randomUUID(),message:'Una mappa delle maree.'},{predict:async prompt=>{
+    assert.equal(JSON.parse(prompt).history[0].regia,response.reply);
+    return {text:JSON.stringify({reply:'La mappa resta una proposta.',project_document:null})};
+  }});
+  assert.equal((await regiaRelayStatus(restarted,'project.md')).turns,2);
+  assert.notEqual((await startRegiaRelay(restarted,'project.md',{newSession:true})).session_id,session.session_id);
+  await assert.rejects(talkToRegia(restarted,{...args,requestId:crypto.randomUUID()},adapters),/Stale/);
+});
+
+test('failed Regia envelope is retained and never replayed without explicit discard', async t => {
+  const f=await fixture(t), session=await startRegiaRelay(f.store,'project.md');
+  const args={filename:'project.md',sessionId:session.session_id,requestId:crypto.randomUUID(),message:'Nuova idea'};
+  let calls=0;
+  const adapters={predict:async()=>{calls++;return {text:'{invalid JSON'};}};
+  await assert.rejects(talkToRegia(f.store,args,adapters));
+  assert.equal((await regiaRelayStatus(f.store,'project.md')).pending.raw.text,'{invalid JSON');
+  await assert.rejects(talkToRegia(f.store,args,adapters),/unresolved/);
+  assert.equal(calls,1);
+  await assert.rejects(verifyCodexRelay(f.store,await f.store.read('project.md')),/pending/);
+  await discardRegiaTurn(f.store,'project.md',session.session_id,args.requestId);
+  assert.equal((await regiaRelayStatus(f.store,'project.md')).pending,null);
+});
+
+test('Codex handoff verifies relay independently while default Bionic binding gate remains', async t => {
+  const f=await fixture(t);
+  await f.store.update('project.md',s=>{s.binding=null;});
+  const enqueue=async frontend=>{
+    const state=await f.store.read('project.md');
+    return f.store.enqueue('project.md',{phase:'relay-fixture',summary:'Fixture only',frontend,expectedRevision:state.revision,expectedSha256:sha(await fs.readFile(f.store.project('project.md'),'utf8'))});
+  };
+  await assert.rejects(enqueue('codex'),/association/);
+  const relay=await startRegiaRelay(f.store,'project.md');
+  await assert.rejects(enqueue('bionic'),/association/);
+  await enqueue('codex');
+  let executed=0;
+  await runJob(f.store,'project.md',{suspendRegia:false},{verifyBinding:async()=>{throw Error('Must not consult Bionic');},execute:async()=>{executed++;return handback;}});
+  const state=await f.store.read('project.md');
+  assert.equal(executed,1);
+  assert.equal(state.handback.status,'completed');
+  assert.equal(state.job.relaySessionId,relay.session_id);
+  await f.store.acknowledge('project.md',state.job.id);
+  await fs.unlink(path.join(f.store.stateRoot,'regia-relay',relay.session_id+'.json'));
+  await assert.rejects(verifyCodexRelay(f.store,await f.store.read('project.md')));
+});
+
+test('Regia prose is relayed verbatim and project edits remain hash-guarded', async t => {
+  const f=await fixture(t), session=await startRegiaRelay(f.store,'project.md');
+  const args={filename:'project.md',sessionId:session.session_id,requestId:crypto.randomUUID(),message:'Un segreto personale.'};
+  const prose='**Regia**\nPreferisci una promessa dimenticata oppure una lettera mai spedita?';
+  const response=await talkToRegia(f.store,args,{predict:async()=>({text:prose})});
+  assert.equal(response.reply,prose);
+  assert.equal(response.proposed_project_document,null);
+  assert.equal(response.production_started,false);
+  await f.store.replaceProject('project.md','# New canonical facts\n',response.expected_sha256);
+  await assert.rejects(f.store.replaceProject('project.md','Stale proposal',response.expected_sha256),/Concurrent/);
+  await talkToRegia(f.store,{...args,requestId:crypto.randomUUID(),message:'Continuiamo.'},{predict:async prompt=>{
+    assert.match(JSON.parse(prompt).canonical_project_file,/New canonical facts/);
+    return {text:'Quale fatto vuoi approfondire?'};
+  }});
+});
+
+test('Regia can request larger local context while production defaults remain unchanged', async () => {
+  const originalFetch=globalThis.fetch;
+  const requests=[];
+  globalThis.fetch=async (_url,options)=>{
+    requests.push(JSON.parse(options.body));
+    return new Response('event: chat.end\ndata: '+JSON.stringify({result:{model_instance_id:'fixture-model',output:[{type:'message',content:'Reply'}],stats:{}}})+'\n\n');
+  };
+  const api=new LocalChatApi(); api.started=true;
+  try {
+    await api.predict('fixture-model','A','B',{},'writer');
+    await api.predict('fixture-model','A','B',{},'regia',{contextLength:32768});
+    assert.deepEqual(requests.map(item=>item.context_length),[8192,32768]);
+    await assert.rejects(api.predict('fixture-model','A','B',{},'regia',{contextLength:-1}),/context/);
+  } finally {globalThis.fetch=originalFetch;}
 });

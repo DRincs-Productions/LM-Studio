@@ -84,17 +84,18 @@ export class Store {
   async update(filename, fn) {
     return this.locked(filename, async () => { const state = await this.read(filename); await fn(state); return this.save(state); });
   }
-  async enqueue(filename, { phase, summary, expectedRevision, expectedSha256, executionMode = 'production' }) {
+  async enqueue(filename, { phase, summary, expectedRevision, expectedSha256, executionMode = 'production', frontend = 'bionic' }) {
     return this.locked(filename, async () => {
       const state = await this.read(filename);
       if (state.status !== 'regia_ready') throw Error('Project is not owned by Regia or previous handback has not been acknowledged');
       if (state.revision !== expectedRevision) throw Error('Stale project revision');
       if (!['production', 'complete_test'].includes(executionMode)) throw Error('Invalid execution mode');
-      if (!state.binding && executionMode !== 'complete_test') throw Error('Session association not verified. Use register_project first and retry after its result has been recorded by Bionic');
+      if (!['bionic', 'codex'].includes(frontend)) throw Error('Invalid frontend');
+      if (executionMode !== 'complete_test' && (frontend === 'codex' ? !state.codexRelay : !state.binding)) throw Error('Session association not verified for the selected frontend');
       const content = await fs.readFile(this.project(filename), 'utf8');
       if (sha(content) !== expectedSha256) throw Error('Project File changed since last read');
-      state.owner = 'codex'; state.phase = phase; state.status = 'queued'; state.handback = null;
-      state.job = { id: crypto.randomUUID(), phase, summary, projectSha256: sha(content), executionMode, createdAt: now(), status: 'queued', runnerPid: null };
+      state.owner = 'codex'; state.frontend = frontend; state.phase = phase; state.status = 'queued'; state.handback = null;
+      state.job = { id: crypto.randomUUID(), phase, summary, projectSha256: sha(content), executionMode, frontend, relaySessionId: frontend === 'codex' ? state.codexRelay?.id : null, createdAt: now(), status: 'queued', runnerPid: null };
       return this.save(state);
     });
   }

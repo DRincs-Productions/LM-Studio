@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { Store, now, sha, validateHandback } from './core.mjs';
 import { MemoryManager, verifyBinding, run } from './bionic.mjs';
+import { verifyCodexRelay } from './regia-relay.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export async function configuration() { return JSON.parse(await fs.readFile(path.join(here, 'config.json'), 'utf8')); }
@@ -139,7 +140,10 @@ export async function runJob(store, filename, config, adapters = {}) {
     try {
       const completeTest = state.job.executionMode === 'complete_test';
       if (completeTest && process.env.BIONIC_ALLOW_COMPLETE_TEST !== '1') throw Error('Complete-test runner mode is not enabled by the terminal harness');
-      const binding = completeTest ? null : await (adapters.verifyBinding || verifyBinding)(state.binding, state.bindingToken);
+      if (state.job.frontend === 'codex' && state.job.relaySessionId !== state.codexRelay?.id) throw Error('Codex relay session changed after handoff');
+      const binding = completeTest ? null : state.job.frontend === 'codex'
+        ? await verifyCodexRelay(store, state)
+        : await (adapters.verifyBinding || verifyBinding)(state.binding, state.bindingToken);
       if (sha(await fs.readFile(store.project(filename), 'utf8')) !== state.job.projectSha256) throw Error('Project File changed before coordinator started');
       const gpuBefore = await run('nvidia-smi', ['--query-gpu=memory.used,memory.total', '--format=csv,noheader,nounits']).catch(() => null);
       const memory = completeTest ? { status: 'terminal-test-no-bionic-session' } : config.suspendRegia ? await (adapters.memory || new MemoryManager()).suspend(binding) : { status: 'disabled' };

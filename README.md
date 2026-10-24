@@ -1,6 +1,6 @@
 # Architettura locale e cloud per la creazione di visual novel
 
-L’interfaccia grafica principale per la progettazione è LM Studio con Bionic: l’utente conversa con la Regia e sviluppa con lei la direzione creativa. L’obiettivo generale dell’architettura è generare la prima bozza di una visual novel. La modifica di visual novel esistenti resta un obiettivo futuro e non viene definita in questa fase.
+Il progetto offre due punti d’ingresso: Codex e LM Studio con Bionic. In Codex l’utente dialoga normalmente con GPT; quando chiede esplicitamente di parlare con la Regia, Codex inoltra i messaggi al modello locale e ne presenta le risposte attribuite. In Bionic l’utente conversa direttamente con la Regia. Entrambi i percorsi usano il Project File canonico e gli stessi worker. L’obiettivo generale resta generare la prima bozza di una visual novel; la modifica di visual novel esistenti è un obiettivo futuro.
 
 Il sistema non è stato progettato per lavorare soltanto in locale. I modelli online possono offrire capacità di ragionamento e coordinamento nettamente superiori; possono dirigere i passaggi tra i worker e stabilire quale processo locale utilizzi la VRAM in un dato momento. Quando un modello locale non raggiunge la qualità o le capacità richieste, il coordinamento può ricorrere al cloud. I modelli locali restano utili per ridurre il consumo dei crediti Codex, la dipendenza dai servizi online e i limiti sui contenuti imposti da singoli modelli cloud, secondo le regole applicabili.
 
@@ -10,11 +10,14 @@ Il progetto usa hardware di seconda mano e comprende Shadow PC nell’ambiente d
 
 ## Architettura generale
 
-La Regia sviluppa il progetto con l’utente e registra le informazioni canoniche nel Project File. Dopo l’approvazione della fase creativa, il Coordinatore avvia e governa la produzione, mantenendo ordinato l’uso delle risorse locali. Scrittore, Disegnatore e Progettista sonoro preparano i contenuti; il Coordinatore restituisce i risultati alla Regia per il feedback finale. La programmazione è un passaggio successivo e indipendente dal ciclo creativo.
+La conversazione creativa può svolgersi con GPT in Codex oppure con la Regia locale, direttamente in Bionic o attraverso Codex come tramite. Le decisioni confluiscono nello stesso Project File. Dopo l’approvazione esplicita della fase creativa, il Coordinatore governa la produzione e le risorse locali. Scrittore, Disegnatore e Progettista sonoro preparano i contenuti; i risultati ritornano al punto d’ingresso usato dall’utente. La programmazione richiede una scelta e un’approvazione separate.
 
 ```mermaid
 flowchart TD
-    U[Utente] <--> R[Regia]
+    U[Utente] <--> X[Codex · dialogo GPT e tramite]
+    U <--> B[Bionic · dialogo diretto]
+    X <-->|su richiesta esplicita| R[Regia]
+    B <--> R
     R --> C[Coordinatore]
     C --> PRODUZIONE
     subgraph PRODUZIONE[Produzione]
@@ -31,7 +34,7 @@ flowchart TD
 
 ### Regia
 
-La Regia è il punto di contatto creativo con l’utente e usa l’interfaccia LM Studio/Bionic. Nelle sessioni di progetto verificate è associata a **Qwen 3.5 9B**. Dialoga con l’utente nella sua lingua, confronta le idee e lo aiuta a prendere decisioni su concept, personaggi, relazioni, ambientazioni, eventi, tono e direzione visiva e sonora.
+La Regia locale dialoga con l’utente attraverso Bionic oppure, su richiesta esplicita, attraverso Codex. Il modello locale resta eseguito dal runtime LM Studio: il percorso Codex non richiede l’interfaccia Bionic. Nelle sessioni verificate la Regia è associata a **Qwen 3.5 9B**. Dialoga nella lingua dell’utente e aiuta a definire concept, personaggi, relazioni, ambientazioni, eventi, tono e direzione visiva e sonora.
 
 ```mermaid
 flowchart LR
@@ -43,6 +46,8 @@ flowchart LR
     C[Coordinatore]
     P[Programmatore]
     U <-->|dialogo| REGIA
+    U <-->|dialogo GPT| CX[Codex]
+    CX <-->|tramite su richiesta| REGIA
     F -->|Analisi| Q
     REGIA -->|handoff del progetto approvato| C
     C -->|dubbi o proposta di sviluppo| REGIA
@@ -76,11 +81,11 @@ flowchart LR
 
 Il Coordinatore è Codex, configurato per questo flusso con **Codex 6 Luna Light**, un modello online. Il suo compito è organizzare attività e attese, leggere il Project File, attivare i worker necessari e raccogliere i risultati. Il coordinamento e l’attesa dei processi locali sono attività adatte a questo modello leggero; essendo online, il Coordinatore non occupa la VRAM locale.
 
-Codex governa l’uso della VRAM: fa lavorare un modello locale per volta e ne libera la memoria prima di avviare il successivo. Gestisce gli imprevisti in autonomia quando può farlo senza cambiare le decisioni creative approvate; se incontra un blocco o serve una decisione creativa, restituisce il controllo alla Regia nella stessa chat Bionic.
+Codex governa l’uso della VRAM: fa lavorare un modello locale per volta e ne libera la memoria prima di avviare il successivo. Gestisce gli imprevisti senza cambiare le decisioni creative approvate; se serve una decisione creativa, restituisce il controllo alla conversazione d’origine, in Bionic o in Codex.
 
 Per avviare le funzioni produttive il Coordinatore usa strumenti MCP. I singoli MCP e le loro responsabilità saranno descritti in una sezione dedicata.
 
-A fine produzione, il Coordinatore restituisce alla Regia un handback con i risultati e i problemi. Bionic riattiva il modello della Regia nella chat originaria, dove la Regia presenta all’utente il feedback finale. Dopo la chiusura del ciclo creativo, Codex può avviare il Programmatore come attività separata.
+A fine produzione, il Coordinatore restituisce un handback persistente con risultati e problemi. Nel percorso Bionic la Regia riprende nella chat originaria; nel percorso Codex il risultato torna alla conversazione Codex e può essere inoltrato alla Regia locale quando il tramite è attivo. Dopo la chiusura del ciclo creativo, il Programmatore è avviabile come attività separata con le approvazioni previste.
 
 ### Scrittore
 
@@ -140,37 +145,56 @@ Codex definisce il prompt visivo, il Worker genera le immagini e Codex esamina i
 ```mermaid
 flowchart TD
     C[Coordinatore]
+    FIND[Cerca asset audio del progetto]
+    REUSE[Riusa asset approvato]
     subgraph SONORO[Progettista sonoro]
-        A[Audio Worker]
+        AW[Audio Worker]
         M[Seleziona modello]
         MM[Stable Audio 3 Medium]
         MS[Stable Audio 3 Small SFX]
         G[Genera un audio]
         T[Controllo tecnico]
         P[Preview ripetuta]
-        L[Ascolto e revisione]
+        ASK[Richiesta di revisione]
         O[Pubblica con rclone]
-        A --> M
+        AW --> M
         M -->|musica| MM
         M -->|effetto sonoro| MS
         MM --> G
         MS --> G
         G --> T
         T -->|loop| P
-        T -->|one-shot| L
-        P --> L
-        L -->|da correggere| G
-        L -->|approvato| O
+        subgraph REVIEW[Revisione audio]
+            LM[Qwen2.5 Omni 7B · ascolto]
+            R[Codex · valutazione]
+            LM -->|evidenze percettive| R
+        end
+        T --> ASK
+        P --> ASK
+        ASK --> LM
+        R -->|meno di 80 o errore grave · corregge il prompt e riprova| G
+        R -->|almeno 80 e nessun errore grave| O
     end
-    C -. integrazione MCP da completare .-> A
+    C --> FIND
+    FIND -->|asset approvato idoneo| REUSE
+    REUSE --> C
+    FIND -->|serve un nuovo cue| AW
     O --> C
 ```
 
 Il Progettista sonoro prepara musica ed effetti coerenti con ciò che accade nella storia. La generazione usa **audio.cpp v0.9.0 Vulkan** con **Stable Audio 3 Medium Q8** per la musica e **Stable Audio 3 Small SFX Q8** per gli effetti.
 
-Il Coordinatore decide quale cue serve e definisce se è musica o effetto, se deve essere un loop, quando parte e quando termina. Audio Worker controlla formato, durata e difetti tecnici; per i loop crea una preview ripetuta. Le misure automatiche non certificano una giunta impercettibile: l’ascolto resta necessario prima dell’approvazione.
+Regia specifica nel Project File ogni cue: categoria (musica o effetto), comportamento loop, descrizione, trigger e condizione di stop. Prima di generare, il Coordinatore cerca asset audio già presenti nel progetto e li riusa quando sono adatti; altrimenti seleziona il generatore coerente con la categoria.
 
-Il test e i campioni generati sono documentati in [Confronto dei modelli audio](docs/CONFRONTO-MODELLI-AUDIO.md).
+La revisione percettiva usa **Qwen2.5 Omni 7B Q4_K_M** con il projector audio incluso nel download LM Studio. Un profilo Bionic specifico del modello contiene il system prompt, che chiede osservazioni verificabili in JSON e non formula un’approvazione. Il runtime di prova è **llama.cpp v0.6.0-dev, build 11560, Vulkan**, nella cartella `C:\Users\Shadow\.lmstudio\audio\llama.cpp\b11560-vulkan`.
+
+Il test da terminale con un breve chime sintetico ha riconosciuto categoria ed elementi descritti, restituito JSON valido, nessun difetto e il flag `loop=false`. È un test di funzionamento dell’ingresso audio e del prompt, non una valutazione della qualità di suoni musicali reali. llama.cpp segnala che l’ingresso audio è sperimentale.
+
+Codex non riceve direttamente il WAV tramite il percorso CLI usato per la revisione delle immagini. L’Audio Worker avvia perciò Qwen2.5 Omni localmente e restituisce un rapporto percettivo in JSON; Codex confronta quel rapporto e i controlli tecnici con il cue, assegna il punteggio e decide se approvare o correggere il prompt. Un cue viene finalizzato soltanto con almeno 80 punti, nessun errore grave e un rapporto d’ascolto interpretabile. Il limite è di tre generazioni per cue. Per i loop viene ascoltata anche un’anteprima ripetuta senza crossfade artificiale; una singola passata non certifica la continuità del loop.
+
+Prima di generare, il Coordinatore cerca gli audio già finalizzati nello spazio del progetto e ne confronta manifest, categoria e comportamento loop con il cue. Se trova un asset adatto, lo riusa e ne verifica hash e manifest. I nuovi WAV approvati vengono finalizzati in `C:\AI\assets\<PROJECT_ID>\Audio\Music` o `C:\AI\assets\<PROJECT_ID>\Audio\SoundEffects`, poi pubblicati in percorsi distinti tramite rclone. Il manifest conserva hash, rapporto percettivo, decisione Codex e stato di pubblicazione.
+
+Il confronto dei modelli e i campioni sono documentati in [Confronto dei modelli audio](docs/CONFRONTO-MODELLI-AUDIO.md). La prova completa degli strumenti Audio Worker, dell’ascolto Qwen e della decisione Codex è riportata in [Test del flusso Audio Worker](RAPPORTO-TEST-AUDIO-WORKER.md). Il runner del Coordinatore è predisposto per la fase audio; l’handoff Bionic non è stato ripetuto mentre il Project File canonico aveva un handback narrativo pendente.
 
 ### Programmatore
 
@@ -180,17 +204,17 @@ flowchart LR
     R[Regia]
     F[Files del progetto]
     subgraph PROGRAMMATORE[Programmatore]
-        C[Claude]
+        C[Claude o Codex]
     end
     U <-->|dialogo| R
-    R -->|specifica approvata| C
+    R -->|scelta provider e conferma separata| C
     C <-->|legge e modifica| F
     C -->|risultati e stato aggiornato| R
 ```
 
 Il Programmatore è il ruolo che **modifica concretamente il progetto software**: interviene sui file sorgente, integra scene e asset, implementa i comportamenti interattivi e verifica il risultato nel progetto. Codex gli consegna il Project File, la documentazione pertinente, i contenuti approvati, gli asset riutilizzabili e le istruzioni tecniche. Codex coordina il passaggio; non sostituisce il Programmatore nell’editing del progetto.
 
-Codex lo attiva dopo il ciclo creativo e produttivo, come flusso separato dalla conversazione tra utente e Regia. Claude è il Programmatore previsto; la sua integrazione non è ancora attiva. Il Programmatore non usa LM Studio/Bionic per la conversazione creativa: riceve da Codex il pacchetto di lavoro e opera direttamente sul progetto software. Questa fase sarà definita separatamente e non fa ancora parte della produzione corrente.
+Al termine del ciclo creativo e produttivo, Regia chiede all’utente se implementerà Claude o Codex. Dopo aver registrato la scelta, chiede una conferma esplicita separata prima di avviare l’implementazione tramite il Project Worker MCP. Il provider selezionato usa il proprio modello predefinito; se non è installato o autenticato, il passaggio si ferma e Regia informa l’utente senza cambiare provider automaticamente. Il Programmatore opera direttamente sui file del progetto e resta separato dalla conversazione creativa in LM Studio/Bionic.
 
 ## PC locale, PC cloud e condivisione dei file
 
@@ -238,12 +262,14 @@ La GPU, i modelli e i percorsi del PC cloud devono essere verificati sulla macch
 | Eseguibile Image Worker | `C:\Users\Shadow\.lmstudio\image-worker\bin\sd-cli.exe` | Il server MCP risiede in `C:\Users\Shadow\.lmstudio\image-worker\mcp`. |
 | Modelli audio | `C:\AI\audio-worker\models\audio.cpp` | Stable Audio 3 Medium Q8 e Stable Audio 3 Small SFX Q8. |
 | Runtime audio.cpp | `C:\Users\Shadow\.lmstudio\audio\audio.cpp\v0.9.0-vulkan` | Il server MCP è in `C:\Users\Shadow\.lmstudio\audio\mcp`. |
-| Project File e stato operativo | `C:\AI\bionic\projects` | Il Project File è la fonte canonica; lo stato di handoff è in `.orchestration`. |
+| Modello per l’ascolto audio | `C:\Users\Shadow\.lmstudio\models\ggml-org\Qwen2.5-Omni-7B-GGUF` | Qwen2.5 Omni 7B Q4_K_M più projector F16; profilo Bionic nella cartella interna `user-concrete-model-default-config`. |
+| Runtime per il test audio multimodale | `C:\Users\Shadow\.lmstudio\audio\llama.cpp\b11560-vulkan` | Build 11560; il CLI multimodale è usato per il test da terminale. |
+| Project File e stato operativo | Workspace del progetto Bionic corrente: `C:\Users\Shadow\.lmstudio\apps\bionic\projects\<BIONIC_PROJECT_ID>\workspace` | Project Worker scrive e legge qui; lo stato di handoff è in `.orchestration`. |
 | Asset finali locali | `C:\AI\assets\<PROJECT_ID>` | Organizzati per progetto; audio separato in `Audio\SoundEffects` e `Audio\Music`. |
 
 I percorsi sopra sono quelli rilevati durante i test sull’host Windows verificato. Nell’architettura a due macchine i modelli appartengono al PC cloud; il trasferimento dei soli asset via rclone non replica il catalogo dei modelli.
 
-**Eccezione da riordinare:** Project File e stato di orchestrazione si trovano ancora in `C:\AI\bionic\projects`. Questa è una posizione preesistente mantenuta durante le modifiche ai Worker; non rispetta ancora del tutto l’obiettivo di lasciare sotto `C:\AI` soltanto modelli e asset. Lo spostamento richiede di aggiornare e verificare i percorsi del Project Worker e non è stato eseguito in questa fase.
+Project File e stato di orchestrazione sono collocati nella workspace del progetto Bionic attivo. Il Project Worker riceve questa radice tramite `BIONIC_PROJECTS_DIR`; quando si passa a un diverso progetto Bionic, la radice va associata al relativo workspace prima di usare i tool. Dopo ogni scrittura Regia rilegge il documento e ne verifica hash e revisione prima di chiedere approvazione o fare handoff.
 
 ### Trasferimento file con rclone
 
@@ -263,15 +289,15 @@ Quando il PC cloud sarà collegato, potrà scaricare tramite rclone gli input au
 
 ## MCP: strumenti e installazione
 
-Gli MCP sono piccoli server che espongono strumenti ai modelli. In questo progetto separano l’interazione creativa dalla gestione dei file e dalla produzione: Bionic espone alla Regia il Project Worker; Codex usa i worker produttivi durante il coordinamento. I server locali vengono avviati come processi Node.js tramite trasporto standard input/output (stdio), non come servizi web sempre attivi.
+Gli MCP sono server reali che espongono strumenti ai modelli e gestiscono i passaggi tra i ruoli. I test di componente usano gli stessi server e contratti in modalità di prova, che registra o simula il passaggio senza avviare la produzione. Il test completo usa i server in modalità reale. I server locali vengono avviati come processi Node.js tramite trasporto standard input/output (stdio), non come servizi web sempre attivi.
 
 ```mermaid
 flowchart LR
     R[Regia in Bionic] -->|strumenti di progetto e handoff| PW[Project Worker MCP]
     C[Codex] -->|avvia e coordina| IW[Image Worker MCP]
     C -->|recupero e trasferimento asset| AW[Asset Worker MCP]
-    C -. integrazione MCP presente, pipeline da collegare .-> SW[Audio Worker MCP]
-    PW -->|avvia il Coordinatore| C
+    C -->|produzione e revisione audio| SW[Audio Worker MCP]
+    PW -->|handoff, test di componente e cancello Programmatore| C
     IW --> IMG[Generazione e pubblicazione immagini]
     AW --> FILE[File finali verificati]
     SW --> AUDIO[Generazione e controllo audio]
@@ -279,11 +305,53 @@ flowchart LR
 
 ### Dove si configurano
 
-Il **Project Worker** è l’unico MCP collegato direttamente a Bionic: fornisce alla Regia gli strumenti per creare e leggere il Project File, registrare il progetto, fare handoff a Codex e recuperare l’handback. In questa installazione è già registrato nella configurazione MCP interna di Bionic, sotto `C:\Users\Shadow\.lmstudio\apps\bionic\.internal`. È una configurazione gestita dall’applicazione: non va duplicata né modificata a mano durante una normale installazione. Il comando `lms` disponibile in questo PC non offre un sottocomando `mcp`; quindi l’aggiunta dei server a Bionic si fa dalle impostazioni MCP dell’app, se occorre ripristinarla.
+Il **Project Worker** è l’MCP collegato a Bionic. Fornisce alla Regia gli strumenti per creare e leggere il Project File, registrare il progetto, avviare il Coordinatore, eseguire i passaggi di prova dei test di componente e avviare il Programmatore dopo scelta e conferma separate. È registrato nella configurazione MCP interna di Bionic sotto `C:\Users\Shadow\.lmstudio\apps\bionic\.internal`. Il comando `lms` disponibile in questo PC non offre un sottocomando `mcp`; quindi il ripristino della registrazione si esegue dalle impostazioni MCP dell’app.
 
-I quattro server sono configurati anche per Codex in `C:\Users\Shadow\.codex\config.toml`: Project Worker, Image Worker, Asset Worker e Audio Worker. Il Coordinatore può inoltre avviare alcuni worker come processi MCP figli quando servono. La presenza di un server nella configurazione di Codex non implica che ogni fase lo utilizzi: la pipeline narrativa verificata collega Project Worker, Image Worker e Asset Worker; Audio Worker è configurato, ma va ancora collegato e verificato nel flusso completo.
+Il Project Worker offre due strumenti per il Programmatore: `select_programmer` registra Claude o Codex senza eseguire codice; `start_programmer` accetta solo la selezione pendente e una conferma esplicita separata. Entrambi usano la directory progetto indicata e configurata tra le radici ammesse. Il comando avviato non riceve un override del modello. Se il provider scelto manca, il tool restituisce un errore e non passa all’altro.
+
+I quattro server sono configurati anche per Codex in `C:\Users\Shadow\.codex\config.toml`: Project Worker, Image Worker, Asset Worker e Audio Worker. Il Coordinatore abilita i soli strumenti Audio Worker necessari nella fase `audio_cue_production`: ricerca asset, generazione, ispezione, anteprima loop, ascolto locale, finalizzazione e pubblicazione. La fase audio è separata da Writer e Disegnatore e non richiede Claude.
+
+## Test da terminale
+
+### Conversazione Regia attraverso Codex
+
+In Codex, «fammi parlare con la Regia» attiva il tramite per il progetto selezionato. `start_regia_session` restituisce una sessione persistente; `talk_to_regia` inoltra il messaggio esatto e restituisce la risposta da mostrare come **Regia**. «Torna a Codex» usa `stop_regia_session`: la cronologia resta conservata e un avvio successivo la riprende. `get_regia_session` recupera modalità, ultimo risultato e richieste pendenti dopo un riavvio. Codex non deve inventare risposte della Regia né sostituirne le decisioni creative.
+
+Il modello non dispone di tool diretti in questo trasporto. Può proporre il Project File completo in inglese; Codex lo salva tramite `update_project_file` con hash atteso, poi lo rilegge prima di dichiarare il salvataggio. I risultati del modello non costituiscono approvazioni dell’utente. L’handoff approvato usa `frontend="codex"`, verificando la sessione persistente anziché una chat Bionic. Il percorso `frontend="bionic"` resta quello predefinito e conserva la verifica originale della chat. Anche la produzione avviata da Codex usa i worker esistenti e il ritorno persistente; le approvazioni del Programmatore restano separate.
+
+Le sessioni sono in `.orchestration/regia-relay` accanto al Project File; transcript, errori e proposte non vengono eliminati. Ogni messaggio ha un UUID: una chiamata incerta si recupera con lo stesso UUID e lo stesso testo, senza rigenerare una risposta già salvata. Una richiesta fallita/interrotta resta bloccata finché viene ispezionata e scartata esplicitamente con `discard_regia_turn`. La conversazione ha un limite esplicito di contesto: al raggiungimento occorre consolidare il Project File e richiedere una nuova sessione; la vecchia cronologia resta disponibile. La mutua esclusione con il Coordinatore impedisce sovrapposizioni sulla GPU. Un altro modello già caricato va liberato prima di parlare con Regia; non viene scaricato arbitrariamente dal tramite.
+
+La registrazione Project Worker di Codex è stata allineata alla workspace canonica Bionic corrente tramite il solo valore `BIONIC_PROJECTS_DIR`. È una cartella condivisa, utilizzabile anche con Bionic chiuso. Se si sceglie un altro progetto, entrambi i client devono puntare alla sua radice; non creare copie del Project File. Dopo l’aggiornamento ricollegare Project Worker o aprire una nuova attività Codex per caricare i nuovi tool. Impostare per Project Worker un timeout MCP di almeno 2100 secondi, dato che il caricamento/generazione locale può superare il timeout predefinito.
+
+Da `project-worker/mcp`, la prova dedicata è `npm run test:component:relay`: genera scenario, seed e directory nuovi sotto `production-tests/components`, usa Regia e MCP reali, simula la richiesta del Coordinatore, controlla riavvio/richiesta idempotente e sospensione/ripresa, senza avviare produzione. `npm test` copre anche persistenza, errori e separazione dei percorsi Bionic/Codex con adattatori di test.
+
+Verifica del 24 ottobre 2026: **26 test automatici passati** e prova componente reale `20261024165920360_b7e258f95bf675ce` completata con cronologia ripresa e nessun job produttivo. Il tramite accetta prosa italiana senza riscriverla e usa un contesto di 32768 token; il limite esplicito del transcript evita troncamenti silenziosi. Due errori iniziali (timeout e formato JSON obbligatorio) sono stati corretti conservando le prove fallite. Non è stato eseguito un ciclo produttivo completo dal nuovo ingresso. Dettagli in [Verifica Codex → Regia](production-tests/CODEX-REGIA-RELAY-2026-10-24.md).
+
+Il test di componente usa un input nuovo per ogni esecuzione e mette alla prova un ruolo reale alla volta. I server MCP reali registrano l’interazione e forniscono risposte controllate, senza produrre asset o avviare implementazione. Il test completo usa un Project File e un progetto Pixi’VN/Ink temporanei, gli MCP in modalità reale e controlla i file effettivamente consegnati.
+
+Da `C:\Users\Shadow\.lmstudio\project-worker\mcp`:
+
+```powershell
+npm test
+npm run test:component -- --role regia
+npm run test:complete -- --root="C:\Users\Shadow\.lmstudio\production-tests\complete\<nuova-cartella>"
+```
+
+Verifica Regia del 24 ottobre 2026: `npm test` supera 20 controlli. Il runner `npm run test:component -- --role regia` conserva manifest con seed univoco, output CLI grezzi, errori e traccia MCP; verifica la rilettura del Project File e fornisce al secondo turno brief e risposta precedente. La conversazione di prova richiede italiano e riepilogo canonico inglese. Il modello riceve il nome esatto del documento già creato dal runner. Questo percorso verifica il dialogo del modello reale e gli strumenti MCP invocati dal runner: non verifica chiamate MCP autonome del modello, l'interfaccia Bionic o un handoff produttivo. I risultati dettagliati sono in [Rapporto componente Regia](production-tests/REGIA-2026-10-24.md).
+
+Se un test completo termina con handback `error`, conserva il manifest e gli output parziali. Dopo aver corretto la causa e verificato che il Project Worker abbia un handback completato, la ripresa esplicita usa lo stesso Project File e registra un nuovo job:
+
+```powershell
+npm run test:complete:resume -- --root="C:\Users\Shadow\.lmstudio\production-tests\complete\<cartella-del-test-fallito>"
+```
+
+Per preparare un nuovo progetto completo, eseguire `npm create pixi-vn@latest` nella cartella `game` del test e scegliere **Visual Novel**, **Ink + TypeScript**, **Web page** e i valori predefiniti per il resto. Ogni nuovo test parte da una cartella mai usata prima. La ripresa è disponibile solo per un test fallito e conserva i job e gli artefatti precedenti. Il manifest registra input, modello, handoff, output, verifiche e fallimenti; il test non modifica database Bionic né installazione Bionic. `AGENTS.md` contiene i dettagli operativi e i percorsi delle configurazioni.
 
 ### Requisiti comuni
+
+Esito componente Scrittore del 24 ottobre 2026: **non superato**. Le prove con Hemmingway mostrano alterazioni del canone e azioni oltre il finale richiesto; le correzioni al prompt non hanno ancora risolto questi difetti. Il percorso di test è stato allineato all'API di produzione, con istanza verificata e registrazione corretta. `npm test`: 21 controlli passati. Il dettaglio e gli artefatti sono nel rapporto collegato sotto.
+
+Il test componente dello Scrittore si avvia con `npm run test:component -- --role writer` dalla cartella `project-worker\mcp`. Usa il prompt narrativo, la LocalChatApi e i parametri del profilo Writer della produzione; richiede una sola istanza Hemmingway caricata e libera, risolta tramite `lms ps --json`; verifica un brief nuovo con vincoli fisici, un finale definito e una revisione locale richiesta da un Reviewer simulato. Il runner conserva anche i prompt effettivi nel manifest e rimuove gli indicatori CLI di caricamento dall'artefatto, mantenendo i log grezzi. Non avvia il Reviewer reale né gli asset. Vedere [Rapporto componente Scrittore](production-tests/WRITER-2026-10-24.md) per esiti e limiti.
 
 - Windows, Node.js e npm. In questa macchina sono presenti Node.js 24 e npm 11.
 - Codex CLI per i worker usati dal Coordinatore.
@@ -351,14 +419,15 @@ Il codice MCP e lo staging temporaneo sono sotto `.lmstudio`; `C:\AI\image-worke
 **Percorso del server:** `C:\Users\Shadow\.lmstudio\audio\mcp\server.mjs`.
 
 1. Eseguire `npm ci` da `C:\Users\Shadow\.lmstudio\audio\mcp`.
-2. Verificare il runtime `audio.cpp` Vulkan e i modelli installati in `C:\AI\audio-worker\models`. Il worker usa anche Python e i moduli `numpy` e `soundfile` per ispezione e preview. In questa macchina il comando `python` non risulta disponibile nel `PATH`: installare Python e questi moduli, poi verificare che `python --version` e `python -c "import numpy, soundfile"` funzionino da una nuova finestra PowerShell.
-3. Aggiungere il server a Codex. La configurazione attuale usa `C:\Program Files\nodejs\node.exe`; il comando di registrazione è:
+2. Verificare il runtime `audio.cpp` Vulkan e i modelli installati in `C:\AI\audio-worker\models`. Il worker usa il Python isolato presente nel runtime Stable Audio e i moduli `numpy` e `soundfile` per ispezione e preview; non richiede il comando `python` nel `PATH`.
+3. Per scaricare il modello locale di ascolto in LM Studio usare `lms get --gguf https://huggingface.co/ggml-org/Qwen2.5-Omni-7B-GGUF` e selezionare `Q4_K_M`. Il profilo Bionic con il system prompt si trova sotto `C:\Users\Shadow\.lmstudio\apps\bionic\.internal\user-concrete-model-default-config\ggml-org\Qwen2.5-Omni-7B-GGUF`.
+4. Aggiungere il server a Codex. La configurazione attuale usa `C:\Program Files\nodejs\node.exe`; il comando di registrazione è:
 
    ```powershell
    codex mcp add audio-worker -- 'C:\Program Files\nodejs\node.exe' C:\Users\Shadow\.lmstudio\audio\mcp\server.mjs
    ```
 
-4. Eseguire `codex mcp list`; poi controllare lo strumento `system_status` per verificare runtime, modelli e cartelle. Per completare l’installazione funzionale occorre anche collegare questo MCP alla pipeline del Coordinatore: la sola registrazione in Codex non avvia ancora generazione sonora nel flusso narrativo end-to-end.
+5. Eseguire `codex mcp list`; poi controllare `system_status` per verificare runtime, modelli, ascolto Qwen e destinazioni rclone. Il Coordinatore usa Audio Worker nella fase autorizzata `audio_cue_production`; prima di un handoff, il Project File deve specificare per ogni cue categoria, loop, descrizione, trigger e stop condition.
 
 ### Controllo e manutenzione
 
