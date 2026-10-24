@@ -1,0 +1,71 @@
+{
+  "schema": "audio-worker-cue-v1",
+  "project_id": "audio-coordinator-e2e-20261012",
+  "scene_id": "lobby-test",
+  "cue_id": "MUSIC-01-lobby-bed",
+  "category": "music",
+  "description": "A restrained vintage lounge/cabaret instrumental lobby bed: lightly wistful, gently comic, warm, unobtrusive and suitable under dialogue.",
+  "loop": true,
+  "loop_reason": "Continuous unobtrusive background music under the reception dialogue.",
+  "trigger": "Start at the beginning of the reception scene.",
+  "stop_condition": "Fade or stop at the scene transition.",
+  "requested_duration_seconds": 30,
+  "model": "stable_audio_medium",
+  "backend": "audio.cpp v0.9.0 Vulkan",
+  "model_path": "C:\\AI\\audio-worker\\models\\audio.cpp\\Stable-Audio-3-Medium\\stable-audio-3-medium-q8_0.gguf",
+  "prompt": "Instrumental vintage hotel lobby lounge cue with a subtle 1930s cabaret / old ballroom character, warm muted piano and soft upright bass, brushed jazz percussion, a faint accordion or clarinet color, lightly wistful but gently comic, relaxed tempo and restrained dynamics, even texture suitable under spoken dialogue, no vocals, no abrupt accents, no big ending, consistent arrangement throughout. Seamless looping game audio, maintain a consistent texture and energy, avoid a distinct ending, abrupt fade, or new transient at the end; the audio will be repeated.",
+  "seed": null,
+  "steps": 12,
+  "reference_audio": null,
+  "output": "C:\\Users\\Shadow\\.lmstudio\\audio\\worker\\work\\jobs\\audio-coordinator-e2e-20261012\\lobby-test\\MUSIC-01-lobby-bed\\MUSIC-01-lobby-bed-2026-10-12T18-25-52-120Z.wav",
+  "technical_inspection": {
+    "path": "C:\\Users\\Shadow\\.lmstudio\\audio\\worker\\work\\jobs\\audio-coordinator-e2e-20261012\\lobby-test\\MUSIC-01-lobby-bed\\MUSIC-01-lobby-bed-2026-10-12T18-25-52-120Z.wav",
+    "format": "WAV",
+    "subtype": "PCM_16",
+    "sample_rate": 44100,
+    "channels": 2,
+    "frames": 1323000,
+    "duration_seconds": 30,
+    "finite_samples": true,
+    "peak": 0.8231506,
+    "rms": 0.1276288,
+    "clipped_sample_fraction": 0,
+    "boundary_metrics_diagnostic_only": {
+      "first_100ms_rms": 0.2709731,
+      "last_100ms_rms": 0.0006767,
+      "boundary_sample_jump": 0.0274868,
+      "first_last_100ms_rms_delta": 0.2702964
+    },
+    "sha256": "2048f5154165edfa8b0514f878cbd3ec21f8ac66db1463a4852b91636d4c9205",
+    "note": "Boundary metrics do not establish a perceptually seamless loop; audition repeated playback."
+  },
+  "loop_status": "requires_repeated_listening_and_loop-point_approval",
+  "generated_at": "2026-10-12T18:26:13.949Z",
+  "status": "candidate",
+  "codex_reviews": [
+    {
+      "reviewer": "Codex",
+      "score": 62,
+      "major_error": true,
+      "summary": "The cue matches the requested instruments, but the technical inspection shows a severe boundary-energy drop: first 100 ms RMS 0.270973 versus last 100 ms 0.000677. That risks an obvious jump on every loop; the positive listener report does not resolve this contradiction.",
+      "retry_prompt": "Keep the full 30-second loop at steady volume. Begin within the ongoing texture without an opening transient or fade, avoid a musical ending or fade-out, and finish at the same energy and texture as the beginning.",
+      "decision": "revision_required",
+      "candidate_sha256": "2048f5154165edfa8b0514f878cbd3ec21f8ac66db1463a4852b91636d4c9205",
+      "perception_evidence_path": "C:\\Users\\Shadow\\.lmstudio\\audio\\worker\\work\\jobs\\audio-coordinator-e2e-20261012\\lobby-test\\MUSIC-01-lobby-bed\\MUSIC-01-lobby-bed-2026-10-12T18-25-52-120Z.wav.review-2026-10-12T18-31-33-521Z.json",
+      "loop_evidence_path": "C:\\Users\\Shadow\\.lmstudio\\audio\\worker\\work\\loop-previews\\MUSIC-01-lobby-bed-2026-10-12T18-25-52-120Z-loop-preview-1791829881432.wav.review-2026-10-12T18-31-45-908Z.json",
+      "reviewed_at": "2026-10-12T18:31:45.928Z"
+    }
+  ],
+  "codex_review": {
+    "reviewer": "Codex",
+    "score": 62,
+    "major_error": true,
+    "summary": "The cue matches the requested instruments, but the technical inspection shows a severe boundary-energy drop: first 100 ms RMS 0.270973 versus last 100 ms 0.000677. That risks an obvious jump on every loop; the positive listener report does not resolve this contradiction.",
+    "retry_prompt": "Keep the full 30-second loop at steady volume. Begin within the ongoing texture without an opening transient or fade, avoid a musical ending or fade-out, and finish at the same energy and texture as the beginning.",
+    "decision": "revision_required",
+    "candidate_sha256": "2048f5154165edfa8b0514f878cbd3ec21f8ac66db1463a4852b91636d4c9205",
+    "perception_evidence_path": "C:\\Users\\Shadow\\.lmstudio\\audio\\worker\\work\\jobs\\audio-coordinator-e2e-20261012\\lobby-test\\MUSIC-01-lobby-bed\\MUSIC-01-lobby-bed-2026-10-12T18-25-52-120Z.wav.review-2026-10-12T18-31-33-521Z.json",
+    "loop_evidence_path": "C:\\Users\\Shadow\\.lmstudio\\audio\\worker\\work\\loop-previews\\MUSIC-01-lobby-bed-2026-10-12T18-25-52-120Z-loop-preview-1791829881432.wav.review-2026-10-12T18-31-45-908Z.json",
+    "reviewed_at": "2026-10-12T18:31:45.928Z"
+  }
+}

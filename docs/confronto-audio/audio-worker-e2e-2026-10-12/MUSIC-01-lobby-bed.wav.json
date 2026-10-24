@@ -1,0 +1,111 @@
+{
+  "schema": "audio-worker-cue-v1",
+  "project_id": "audio-coordinator-e2e-20261012",
+  "scene_id": "lobby-test",
+  "cue_id": "MUSIC-01-lobby-bed",
+  "category": "music",
+  "description": "A restrained vintage lounge/cabaret instrumental lobby bed: lightly wistful, gently comic, warm, unobtrusive and suitable under dialogue.",
+  "loop": true,
+  "loop_reason": "Continuous unobtrusive background music under the reception dialogue.",
+  "trigger": "Start at the beginning of the reception scene.",
+  "stop_condition": "Fade or stop at the scene transition.",
+  "requested_duration_seconds": 30,
+  "model": "stable_audio_medium",
+  "backend": "audio.cpp v0.9.0 Vulkan",
+  "model_path": "C:\\AI\\audio-worker\\models\\audio.cpp\\Stable-Audio-3-Medium\\stable-audio-3-medium-q8_0.gguf",
+  "prompt": "Create a 30-second seamless loop of restrained vintage hotel lobby lounge music: muted piano, soft upright bass, brushed percussion and faint clarinet or accordion. Lightly wistful and gently comic, low-key and unobtrusive under dialogue. Keep the same moderate loudness, texture, tempo and instrumentation from the very first sample to the very last. Begin already in the established musical texture; do not start with a hit, transient or fade-in. Do not fade out, resolve, cadence, stop or become quieter at the end. End on a sustained part of the same texture that can connect directly back to the opening. No vocals, no abrupt accents, no intro, no outro. Seamless looping game audio, maintain a consistent texture and energy, avoid a distinct ending, abrupt fade, or new transient at the end; the audio will be repeated.",
+  "seed": null,
+  "steps": 12,
+  "reference_audio": null,
+  "output": "C:\\AI\\assets\\audio-coordinator-e2e-20261012\\Audio\\Music\\MUSIC-01-lobby-bed.wav",
+  "technical_inspection": {
+    "path": "C:\\Users\\Shadow\\.lmstudio\\audio\\worker\\work\\jobs\\audio-coordinator-e2e-20261012\\lobby-test\\MUSIC-01-lobby-bed\\MUSIC-01-lobby-bed-2026-10-12T18-27-13-361Z.wav",
+    "format": "WAV",
+    "subtype": "PCM_16",
+    "sample_rate": 44100,
+    "channels": 2,
+    "frames": 1323000,
+    "duration_seconds": 30,
+    "finite_samples": true,
+    "peak": 0.6673584,
+    "rms": 0.1158733,
+    "clipped_sample_fraction": 0,
+    "boundary_metrics_diagnostic_only": {
+      "first_100ms_rms": 0.1591683,
+      "last_100ms_rms": 0.1366275,
+      "boundary_sample_jump": 0.018162,
+      "first_last_100ms_rms_delta": 0.0225409
+    },
+    "sha256": "863ae842cdd5eb13dd4f7865ce3fad4ab35c70c416c076d7ad14394191b62893",
+    "note": "Boundary metrics do not establish a perceptually seamless loop; audition repeated playback."
+  },
+  "loop_status": "requires_repeated_listening_and_loop-point_approval",
+  "generated_at": "2026-10-12T18:27:22.785Z",
+  "status": "published",
+  "codex_reviews": [
+    {
+      "reviewer": "Codex",
+      "score": 88,
+      "major_error": false,
+      "summary": "The second candidate keeps its beginning and ending energy close (first/last 100 ms RMS difference 0.0225, compared with 0.2703 on the rejected first candidate). Qwen found it aligned with the brief and judged the three-pass raw preview seamless, with no issues. It is suitable as an unobtrusive loop bed.",
+      "retry_prompt": null,
+      "decision": "approved_for_finalization",
+      "candidate_sha256": "863ae842cdd5eb13dd4f7865ce3fad4ab35c70c416c076d7ad14394191b62893",
+      "perception_evidence_path": "C:\\Users\\Shadow\\.lmstudio\\audio\\worker\\work\\jobs\\audio-coordinator-e2e-20261012\\lobby-test\\MUSIC-01-lobby-bed\\MUSIC-01-lobby-bed-2026-10-12T18-27-13-361Z.wav.review-2026-10-12T18-29-11-736Z.json",
+      "loop_evidence_path": "C:\\Users\\Shadow\\.lmstudio\\audio\\worker\\work\\loop-previews\\MUSIC-01-lobby-bed-2026-10-12T18-27-13-361Z-loop-preview-1791829650813.wav.review-2026-10-12T18-29-24-086Z.json",
+      "reviewed_at": "2026-10-12T18:32:30.315Z"
+    }
+  ],
+  "codex_review": {
+    "score": 88,
+    "major_error": false,
+    "summary": "The second candidate keeps its beginning and ending energy close (first/last 100 ms RMS difference 0.0225, compared with 0.2703 on the rejected first candidate). Qwen found it aligned with the brief and judged the three-pass raw preview seamless, with no issues. It is suitable as an unobtrusive loop bed.",
+    "reviewer": "Codex",
+    "approved_at": "2026-10-12T18:32:30.359Z"
+  },
+  "audio_sha256": "863ae842cdd5eb13dd4f7865ce3fad4ab35c70c416c076d7ad14394191b62893",
+  "perception_review": {
+    "status": "analyzed",
+    "clip_duration_seconds": "30",
+    "audible_summary": "A vintage lounge instrumental with a restrained, gently wistful mood, featuring muted piano, soft bass, brushed percussion, and faint clarinet.",
+    "perceived_category": "music",
+    "brief_alignment": "aligned",
+    "alignment_evidence": [
+      "The music matches the description of a vintage hotel lounge instrumental with a restrained, gently wistful mood, featuring muted piano, soft bass, brushed percussion, and faint clarinet. The texture and loudness are stable throughout the clip, and there are no issues with the seam quality as this is a single pass of a requested loop."
+    ],
+    "issues": [],
+    "loop_assessment": {
+      "requested": true,
+      "can_assess": false,
+      "observation": "The seam quality cannot be assessed from a single pass of a requested loop."
+    },
+    "uncertainties": [],
+    "confidence": 100,
+    "audio_sha256": "863ae842cdd5eb13dd4f7865ce3fad4ab35c70c416c076d7ad14394191b62893",
+    "evidence_path": "C:\\Users\\Shadow\\.lmstudio\\audio\\worker\\work\\jobs\\audio-coordinator-e2e-20261012\\lobby-test\\MUSIC-01-lobby-bed\\MUSIC-01-lobby-bed-2026-10-12T18-27-13-361Z.wav.review-2026-10-12T18-29-11-736Z.json"
+  },
+  "loop_perception_review": {
+    "status": "analyzed",
+    "clip_duration_seconds": "90",
+    "audible_summary": "A vintage lounge instrumental with muted piano, soft bass, brushed percussion, and faint clarinet.",
+    "perceived_category": "music",
+    "brief_alignment": "aligned",
+    "alignment_evidence": [
+      "The music maintains a consistent texture and loudness throughout the clip, with no noticeable intro or outro, and no fade or vocals."
+    ],
+    "issues": [],
+    "loop_assessment": {
+      "requested": true,
+      "can_assess": true,
+      "observation": "The transitions between the repeated playback are seamless, indicating a loop without any audible discontinuity."
+    },
+    "uncertainties": [],
+    "confidence": 100,
+    "audio_sha256": "0d88afdd8c668f8be98e09721a54433e70387a47488a0ab64d4b5bc0cabf9072",
+    "evidence_path": "C:\\Users\\Shadow\\.lmstudio\\audio\\worker\\work\\loop-previews\\MUSIC-01-lobby-bed-2026-10-12T18-27-13-361Z-loop-preview-1791829650813.wav.review-2026-10-12T18-29-24-086Z.json"
+  },
+  "finalized_at": "2026-10-12T18:32:30.359Z",
+  "remote_path": "imagecloud:AudioWorker/Music/final/audio-coordinator-e2e-20261012/MUSIC-01-lobby-bed.wav",
+  "remote_manifest_path": "imagecloud:AudioWorker/Music/final/audio-coordinator-e2e-20261012/MUSIC-01-lobby-bed.wav.json",
+  "published_at": "2026-10-12T18:32:30.380Z"
+}

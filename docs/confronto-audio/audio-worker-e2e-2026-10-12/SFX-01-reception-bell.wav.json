@@ -1,0 +1,92 @@
+{
+  "schema": "audio-worker-cue-v1",
+  "project_id": "audio-coordinator-e2e-20261012",
+  "scene_id": "lobby-test",
+  "cue_id": "SFX-01-bell",
+  "category": "sound_effect",
+  "description": "A single gentle brass reception service-bell strike with a short natural decay.",
+  "loop": false,
+  "loop_reason": "A reception interaction accent occurs once.",
+  "trigger": "Play when the reception bell is tapped.",
+  "stop_condition": "Let the bell decay naturally; no music or voice.",
+  "requested_duration_seconds": 5,
+  "model": "stable_audio_small_sfx",
+  "backend": "audio.cpp v0.9.0 Vulkan",
+  "model_path": "C:\\AI\\audio-worker\\models\\audio.cpp\\Stable-Audio-3-Small-SFX\\stable-audio-3-small-sfx-q8_0.gguf",
+  "prompt": "One clear, gentle brass hotel service bell strike, single transient, bright but soft metal resonance and short natural decay. No music, voice, room ambience, repeated strikes, clicks or abrupt cutoff.",
+  "seed": null,
+  "steps": 8,
+  "reference_audio": null,
+  "output": "C:\\AI\\assets\\audio-coordinator-e2e-20261012\\Audio\\SoundEffects\\SFX-01-reception-bell.wav",
+  "technical_inspection": {
+    "path": "C:\\Users\\Shadow\\.lmstudio\\audio\\worker\\work\\jobs\\audio-coordinator-e2e-20261012\\lobby-test\\SFX-01-bell\\SFX-01-bell-2026-10-12T18-24-52-889Z.wav",
+    "format": "WAV",
+    "subtype": "PCM_16",
+    "sample_rate": 44100,
+    "channels": 2,
+    "frames": 220500,
+    "duration_seconds": 5,
+    "finite_samples": true,
+    "peak": 0.4979858,
+    "rms": 0.0172704,
+    "clipped_sample_fraction": 0,
+    "boundary_metrics_diagnostic_only": {
+      "first_100ms_rms": 0.0000282,
+      "last_100ms_rms": 0.0000261,
+      "boundary_sample_jump": 0.0005969,
+      "first_last_100ms_rms_delta": 0.000002
+    },
+    "sha256": "2688e0334f0ba7c3b04bda9ac79ded38144b5e2d993614c8b5293bb693411bba",
+    "note": "Boundary metrics do not establish a perceptually seamless loop; audition repeated playback."
+  },
+  "loop_status": "not_applicable",
+  "generated_at": "2026-10-12T18:25:05.723Z",
+  "status": "published",
+  "codex_reviews": [
+    {
+      "reviewer": "Codex",
+      "score": 96,
+      "major_error": false,
+      "summary": "One gentle brass bell strike with a short natural decay, matching the cue. Qwen found no unwanted voice, music, repeated strikes, abrupt cutoff or other issue; the WAV is finite, unclipped and exactly five seconds.",
+      "retry_prompt": null,
+      "decision": "approved_for_finalization",
+      "candidate_sha256": "2688e0334f0ba7c3b04bda9ac79ded38144b5e2d993614c8b5293bb693411bba",
+      "perception_evidence_path": "C:\\Users\\Shadow\\.lmstudio\\audio\\worker\\work\\jobs\\audio-coordinator-e2e-20261012\\lobby-test\\SFX-01-bell\\SFX-01-bell-2026-10-12T18-24-52-889Z.wav.review-2026-10-12T18-28-59-290Z.json",
+      "loop_evidence_path": null,
+      "reviewed_at": "2026-10-12T18:31:57.929Z"
+    }
+  ],
+  "codex_review": {
+    "score": 96,
+    "major_error": false,
+    "summary": "One gentle brass bell strike with a short natural decay, matching the cue. Qwen found no unwanted voice, music, repeated strikes, abrupt cutoff or other issue; the WAV is finite, unclipped and exactly five seconds.",
+    "reviewer": "Codex",
+    "approved_at": "2026-10-12T18:31:57.951Z"
+  },
+  "audio_sha256": "2688e0334f0ba7c3b04bda9ac79ded38144b5e2d993614c8b5293bb693411bba",
+  "perception_review": {
+    "status": "analyzed",
+    "clip_duration_seconds": "5",
+    "audible_summary": "A single, clear, gentle brass bell strike with a short natural decay.",
+    "perceived_category": "sound_effect",
+    "brief_alignment": "aligned",
+    "alignment_evidence": [
+      "The sound matches the description of a single, clear, gentle brass bell strike with a short natural decay. There is no music, voice, repeated strikes, or abrupt cutoff."
+    ],
+    "issues": [],
+    "loop_assessment": {
+      "requested": false,
+      "can_assess": false,
+      "observation": "This is a one-shot cue, not a loop."
+    },
+    "uncertainties": [],
+    "confidence": 100,
+    "audio_sha256": "2688e0334f0ba7c3b04bda9ac79ded38144b5e2d993614c8b5293bb693411bba",
+    "evidence_path": "C:\\Users\\Shadow\\.lmstudio\\audio\\worker\\work\\jobs\\audio-coordinator-e2e-20261012\\lobby-test\\SFX-01-bell\\SFX-01-bell-2026-10-12T18-24-52-889Z.wav.review-2026-10-12T18-28-59-290Z.json"
+  },
+  "loop_perception_review": null,
+  "finalized_at": "2026-10-12T18:31:57.951Z",
+  "remote_path": "imagecloud:AudioWorker/SoundEffects/final/audio-coordinator-e2e-20261012/SFX-01-reception-bell.wav",
+  "remote_manifest_path": "imagecloud:AudioWorker/SoundEffects/final/audio-coordinator-e2e-20261012/SFX-01-reception-bell.wav.json",
+  "published_at": "2026-10-12T18:31:57.960Z"
+}

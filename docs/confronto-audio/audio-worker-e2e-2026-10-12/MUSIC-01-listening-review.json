@@ -1,0 +1,44 @@
+{
+  "reviewer": "Qwen2.5 Omni 7B Q4_K_M",
+  "audio_path": "C:\\Users\\Shadow\\.lmstudio\\audio\\worker\\work\\jobs\\audio-coordinator-e2e-20261012\\lobby-test\\MUSIC-01-lobby-bed\\MUSIC-01-lobby-bed-2026-10-12T18-27-13-361Z.wav",
+  "technical_inspection": {
+    "path": "C:\\Users\\Shadow\\.lmstudio\\audio\\worker\\work\\jobs\\audio-coordinator-e2e-20261012\\lobby-test\\MUSIC-01-lobby-bed\\MUSIC-01-lobby-bed-2026-10-12T18-27-13-361Z.wav",
+    "format": "WAV",
+    "subtype": "PCM_16",
+    "sample_rate": 44100,
+    "channels": 2,
+    "frames": 1323000,
+    "duration_seconds": 30,
+    "finite_samples": true,
+    "peak": 0.6673584,
+    "rms": 0.1158733,
+    "clipped_sample_fraction": 0,
+    "boundary_metrics_diagnostic_only": {
+      "first_100ms_rms": 0.1591683,
+      "last_100ms_rms": 0.1366275,
+      "boundary_sample_jump": 0.018162,
+      "first_last_100ms_rms_delta": 0.0225409
+    },
+    "sha256": "863ae842cdd5eb13dd4f7865ce3fad4ab35c70c416c076d7ad14394191b62893",
+    "note": "Boundary metrics do not establish a perceptually seamless loop; audition repeated playback."
+  },
+  "report": {
+    "status": "analyzed",
+    "clip_duration_seconds": "30",
+    "audible_summary": "A vintage lounge instrumental with a restrained, gently wistful mood, featuring muted piano, soft bass, brushed percussion, and faint clarinet.",
+    "perceived_category": "music",
+    "brief_alignment": "aligned",
+    "alignment_evidence": [
+      "The music matches the description of a vintage hotel lounge instrumental with a restrained, gently wistful mood, featuring muted piano, soft bass, brushed percussion, and faint clarinet. The texture and loudness are stable throughout the clip, and there are no issues with the seam quality as this is a single pass of a requested loop."
+    ],
+    "issues": [],
+    "loop_assessment": {
+      "requested": true,
+      "can_assess": false,
+      "observation": "The seam quality cannot be assessed from a single pass of a requested loop."
+    },
+    "uncertainties": [],
+    "confidence": 100,
+    "audio_sha256": "863ae842cdd5eb13dd4f7865ce3fad4ab35c70c416c076d7ad14394191b62893"
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "reviewer": "Qwen2.5 Omni 7B Q4_K_M",
+  "audio_path": "C:\\Users\\Shadow\\.lmstudio\\audio\\worker\\work\\jobs\\audio-coordinator-e2e-20261012\\lobby-test\\MUSIC-01-lobby-bed\\MUSIC-01-lobby-bed-2026-10-12T18-25-52-120Z.wav",
+  "technical_inspection": {
+    "path": "C:\\Users\\Shadow\\.lmstudio\\audio\\worker\\work\\jobs\\audio-coordinator-e2e-20261012\\lobby-test\\MUSIC-01-lobby-bed\\MUSIC-01-lobby-bed-2026-10-12T18-25-52-120Z.wav",
+    "format": "WAV",
+    "subtype": "PCM_16",
+    "sample_rate": 44100,
+    "channels": 2,
+    "frames": 1323000,
+    "duration_seconds": 30,
+    "finite_samples": true,
+    "peak": 0.8231506,
+    "rms": 0.1276288,
+    "clipped_sample_fraction": 0,
+    "boundary_metrics_diagnostic_only": {
+      "first_100ms_rms": 0.2709731,
+      "last_100ms_rms": 0.0006767,
+      "boundary_sample_jump": 0.0274868,
+      "first_last_100ms_rms_delta": 0.2702964
+    },
+    "sha256": "2048f5154165edfa8b0514f878cbd3ec21f8ac66db1463a4852b91636d4c9205",
+    "note": "Boundary metrics do not establish a perceptually seamless loop; audition repeated playback."
+  },
+  "report": {
+    "status": "analyzed",
+    "clip_duration_seconds": "30",
+    "audible_summary": "A vintage lounge instrumental with muted piano, soft bass, brushed percussion, and faint clarinet.",
+    "perceived_category": "music",
+    "brief_alignment": "aligned",
+    "alignment_evidence": [
+      "Stable texture and loudness",
+      "Muted piano",
+      "Soft bass",
+      "Brushed percussion",
+      "Faint clarinet"
+    ],
+    "issues": [],
+    "loop_assessment": {
+      "requested": true,
+      "can_assess": false,
+      "observation": "Seam cannot be assessed from one pass."
+    },
+    "uncertainties": [
+      "Seam quality cannot be determined from a single pass"
+    ],
+    "confidence": 85,
+    "audio_sha256": "2048f5154165edfa8b0514f878cbd3ec21f8ac66db1463a4852b91636d4c9205"
+  }
+}

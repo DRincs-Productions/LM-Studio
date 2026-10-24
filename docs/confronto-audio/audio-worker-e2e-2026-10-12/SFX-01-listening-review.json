@@ -1,0 +1,44 @@
+{
+  "reviewer": "Qwen2.5 Omni 7B Q4_K_M",
+  "audio_path": "C:\\Users\\Shadow\\.lmstudio\\audio\\worker\\work\\jobs\\audio-coordinator-e2e-20261012\\lobby-test\\SFX-01-bell\\SFX-01-bell-2026-10-12T18-24-52-889Z.wav",
+  "technical_inspection": {
+    "path": "C:\\Users\\Shadow\\.lmstudio\\audio\\worker\\work\\jobs\\audio-coordinator-e2e-20261012\\lobby-test\\SFX-01-bell\\SFX-01-bell-2026-10-12T18-24-52-889Z.wav",
+    "format": "WAV",
+    "subtype": "PCM_16",
+    "sample_rate": 44100,
+    "channels": 2,
+    "frames": 220500,
+    "duration_seconds": 5,
+    "finite_samples": true,
+    "peak": 0.4979858,
+    "rms": 0.0172704,
+    "clipped_sample_fraction": 0,
+    "boundary_metrics_diagnostic_only": {
+      "first_100ms_rms": 0.0000282,
+      "last_100ms_rms": 0.0000261,
+      "boundary_sample_jump": 0.0005969,
+      "first_last_100ms_rms_delta": 0.000002
+    },
+    "sha256": "2688e0334f0ba7c3b04bda9ac79ded38144b5e2d993614c8b5293bb693411bba",
+    "note": "Boundary metrics do not establish a perceptually seamless loop; audition repeated playback."
+  },
+  "report": {
+    "status": "analyzed",
+    "clip_duration_seconds": "5",
+    "audible_summary": "A single, clear, gentle brass bell strike with a short natural decay.",
+    "perceived_category": "sound_effect",
+    "brief_alignment": "aligned",
+    "alignment_evidence": [
+      "The sound matches the description of a single, clear, gentle brass bell strike with a short natural decay. There is no music, voice, repeated strikes, or abrupt cutoff."
+    ],
+    "issues": [],
+    "loop_assessment": {
+      "requested": false,
+      "can_assess": false,
+      "observation": "This is a one-shot cue, not a loop."
+    },
+    "uncertainties": [],
+    "confidence": 100,
+    "audio_sha256": "2688e0334f0ba7c3b04bda9ac79ded38144b5e2d993614c8b5293bb693411bba"
+  }
+}
