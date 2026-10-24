@@ -41,3 +41,17 @@ I WAV, le preview e i manifest copiati qui sono gli stessi file prodotti dal Wor
 La preview contiene quattro ripetizioni del segmento da 30 secondi. Le metriche misurano soltanto proprietà del segnale e non certificano che la giunta sia impercettibile; inoltre non è stato fatto un ascolto umano documentato. Perciò il loop resta **da correggere e ascoltare**, non approvato. Nessun candidato è stato finalizzato o pubblicato tramite rclone; non sono stati creati asset definitivi. Le prove non hanno modificato il Project File canonico.
 
 Conclusione provvisoria: mantenere **Small SFX per effetti** e **Medium come candidato musicale**, subordinando l'accettazione musicale alla correzione della coda, all'ascolto della preview ripetuta e a un nuovo controllo del loop.
+
+## Aggiornamento — prova integrata del 12 ottobre 2026
+
+Una seconda prova ha verificato il flusso Audio Worker, la revisione percettiva locale Qwen e il gate Codex. È un test d’integrazione e retry, non un confronto a parità di prompt tra i due generatori.
+
+| Cue | Generatore | Esito revisione | Risultato |
+|---|---|---|---|
+| Campanello, one-shot da 5 s | Stable Audio 3 Small SFX Q8 | Qwen: allineato, nessun problema. Codex: 96/100, nessun errore grave. | Pubblicato nella cartella SoundEffects del progetto di test. |
+| Musica lounge, loop da 30 s — candidato iniziale | Stable Audio 3 Medium Q8 | Qwen: contenuto allineato, preview valutata pulita. Codex ha rilevato il grande calo RMS ai bordi (0,270973 contro 0,000677) e assegnato 62/100 con errore grave. | Respinto; il worker ha negato la finalizzazione. |
+| Musica lounge — retry | Stable Audio 3 Medium Q8 | Qwen: allineata e senza discontinuità percepita nella preview grezza 3×. Codex: 88/100, nessun errore grave; differenza RMS ai bordi 0,022541. | Finalizzato e pubblicato nella cartella Music del progetto di test. |
+
+Il secondo test conferma che una valutazione percettiva può non rilevare un problema di livello ai bordi: il Coordinatore deve confrontare il rapporto d’ascolto con le misure tecniche e richiedere un retry quando le evidenze sono in conflitto. Le valutazioni percettive sono state prodotte da Qwen; non è stato documentato un ascolto umano.
+
+I campioni del test, i manifest e le revisioni sono raccolti in [audio-worker-e2e-2026-10-12](confronto-audio/audio-worker-e2e-2026-10-12). Il rapporto completo è [Test del flusso Audio Worker](../RAPPORTO-TEST-AUDIO-WORKER.md). La prova è rimasta isolata e non ha modificato il Project File canonico. Il test Writer/immagine non è stato ripetuto perché quel Project Worker ha un handback narrativo pendente.

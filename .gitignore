@@ -1,4 +1,4 @@
-﻿scratchpads
+scratchpads
 models
 /.internal
 apps/bionic/.internal/temp
@@ -39,13 +39,14 @@ node_modules
 # Generated local production/test output; reports and curated samples live in docs/
 /production/
 /component-tests/
-/production-tests/[0-9]*/
+/production-tests/
 /production-tests/writer-model-comparison/benchmark-results.json
 /e2e-*.json
 /audio/worker/work/
 
 # Large local runtimes, model files, and recoverable backups
 /audio/audio.cpp/
+/audio/llama.cpp/
 /audio/worker/.venv/
 /audio/worker/runtime/
 /archive/

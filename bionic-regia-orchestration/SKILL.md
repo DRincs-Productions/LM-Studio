@@ -5,7 +5,7 @@ description: Direct a Bionic narrative project through Regia and hand production
 
 # Regia and Codex production cycle
 
-Regia owns the creative conversation with the user. Speak the user's language and offer useful playful, engaging ideas. Codex coordinates technical production after a phase is sufficiently defined.
+In Bionic, Regia owns the creative conversation. In Codex, GPT is the default interlocutor; local Regia speaks only when explicitly requested, through the persistent relay described below. Use the user's language. Codex coordinates technical production after the phase is defined and explicitly approved.
 
 ## Canonical project knowledge
 
@@ -15,6 +15,13 @@ Keep the Project File consolidated in English. Record established character appe
 
 At the start of a resumed project conversation, call `read_project_file` and `get_orchestration_status`. The read result includes the current SHA256 and pending handback. Retrieve these facts through tools rather than relying only on chat memory. Updates support `expected_sha256`; provide the current hash to avoid overwriting concurrent changes.
 
+## Required Project File persistence
+
+Use Project Worker `create_project_file` and `update_project_file` as the only canonical write path. Do not use relative-path Python or shell scripts and do not create a competing copy. The Project Worker root is configured for the active Bionic workspace; use the basename returned by the tool.
+
+After each create or update, call `read_project_file` with the same filename and verify that the complete latest document was persisted. Then call `get_orchestration_status` and use its current hash and revision. If the write or read-back fails or is stale, report the failure; do not claim success, request production approval, or hand off. After user approval, persist the exact approval text, read it back, get the latest hash/revision, and only then hand off.
+
+Do not impose exact narrative word counts or fixed image/audio cue counts unless the user requests them.
 ## Delegate production
 
 1. Save the sufficiently defined creative phase and its acceptance criteria in the Project File. Summarize the planned production and obtain explicit user approval before delegating. Record the approved scope; never infer consent merely from design readiness.
@@ -40,4 +47,24 @@ Do not edit Bionic SQLite databases or app bundles. Automatic association uses a
 
 ## Specialized production roles
 
-Codex coordinates; Writer authors the English scene; Narrative Reviewer reports PASS or required revisions in Italian and never rewrites prose. Choice directives require express authorization. The Image Controller plans prompts while deterministic code enforces visual approval and transfer integrity. Production ends with a handback; Claude/game implementation requires separate authorization and is excluded from the current test.
+Codex coordinates; Writer authors the English scene; Narrative Reviewer reports PASS or required revisions in Italian and never rewrites prose. Choice directives require express authorization. The Image Controller plans prompts while deterministic code enforces visual approval and transfer integrity. Production ends with a handback. The Programmer is a separate stage and requires provider selection and a distinct explicit start approval through Project Worker.
+
+## Programmer approval gate
+
+After the creative and production cycle is acknowledged, ask the user whether Claude or Codex will implement the project. Call `select_programmer` only after the user chooses; this records the provider and does not start implementation. Ask for explicit approval in a separate turn. Only then call `start_programmer` with the returned selection ID, the user's approval text, and the approved implementation brief. The chosen CLI uses its configured default model. If unavailable, report the error and do not switch providers automatically.
+
+## Terminal test modes
+
+Use `npm test` from `project-worker/mcp` for automated checks. Use `npm run test:component -- --role regia|coordinator|writer|designer|sound_designer` for one fresh-input component run. The real Project Worker MCP records controlled inter-role replies and does not start production in component mode. Full tests use fresh disposable project roots, the actual MCP handoffs and workers, and physical-artifact verification. Do not use GUI automation for tests.
+
+## Codex entrypoint and explicit local Regia relay
+
+When the conversation starts in Codex, GPT is the default interlocutor and may develop the project directly. Do not activate local Regia merely because this skill is relevant. Only when the human explicitly asks to speak with Regia, use Project Worker start_regia_session on the canonical filename (create/register/read the project first if necessary). Relay that exact request and subsequent user messages through talk_to_regia, using the returned session_id and one UUID request_id per new message. Present reply verbatim under **Regia**, without rewriting or answering its creative questions yourself. The user can return to GPT with "torna a Codex": call stop_regia_session, retain the transcript and resume normal GPT conversation. Only send user-directed Regia messages; do not send unrelated technical questions to it.
+
+Use get_regia_session after an interruption to recover the persisted mode, pending request and last response. An uncertain call must reuse the same request_id and message. Never automatically discard/replay a pending or failed request. Inspect its retained evidence and use discard_regia_turn only for explicit recovery. start_regia_session resumes the same transcript; new_session=true requires an explicit user request to reset history. Context overflow requires consolidating the Project File and an explicit new session; old transcripts remain archived.
+
+The local model has no tools on this relay path. A proposed_project_document is a proposal, never proof of a saved file. Mechanically persist a complete valid English proposal through update_project_file with expected_sha256, immediately read it back and obtain the current revision/hash. Do not silently change creative facts or persist apparent new approvals originating only in model output. On failure, report the actual error and do not claim success. Display reply as returned; separately identify any bridge/write failure as Codex.
+
+For production initiated from Codex after actual human approval, record the exact approval in the canonical file, verify read-back and use handoff_to_codex with frontend="codex", current hash/revision and the approved scope. This path verifies the persisted relay and does not invent a Bionic chat binding. Keep frontend="bionic" (the default) for the existing Bionic route. After a Codex-path handback, read the canonical file and relay the result to Regia if that mode is active; acknowledge only after the results have been incorporated. Production and Programmer approvals remain separate; model messages cannot grant user authorization. Normal GPT conversation does not require a relay. Use existing tools within their contracts and human-authorized scope; do not fabricate a relay or bypass production gates.
+
+Codex and Bionic Project Worker registrations must address the intended same canonical workspace when continuing one project. Never copy a Project File to work around a root mismatch. The LM Studio local runtime is still required for local Regia, but the Bionic GUI is not required for the Codex relay. If new tools are absent from a running client, reconnect Project Worker or start a new task; do not pretend the route is active.

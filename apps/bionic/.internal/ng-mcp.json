@@ -12,7 +12,8 @@
         ],
         "cwd": "C:\\Users\\Shadow\\.lmstudio\\project-worker\\mcp",
         "env": {
-          "BIONIC_ORCHESTRATION_REV": "20"
+          "BIONIC_ORCHESTRATION_REV": "21",
+          "BIONIC_PROJECTS_DIR": "C:\\Users\\Shadow\\.lmstudio\\apps\\bionic\\projects\\d49037d8-47f4-5808-9028-c707de117f8f\\workspace"
         },
         "timeoutMs": 3900000
       }
