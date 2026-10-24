@@ -58,3 +58,4 @@ node_modules
 # Live Bionic SQLite sidecars: keep out of Git; never delete manually
 /apps/bionic/.internal/ng-sessions.sqlite-shm
 /apps/bionic/.internal/ng-sessions.sqlite-wal
+/project-worker/mcp/work/
