@@ -49,6 +49,8 @@ Do not edit Bionic SQLite databases or app bundles. Automatic association uses a
 
 Codex coordinates; Writer authors the English scene; Narrative Reviewer reports PASS or required revisions in Italian and never rewrites prose. Choice directives require express authorization. The Image Controller plans prompts while deterministic code enforces visual approval and transfer integrity. Production ends with a handback. The Programmer is a separate stage and requires provider selection and a distinct explicit start approval through Project Worker.
 
+For narrative production, Codex and Qwen first propose scene plans independently. Codex merges them into a validated `SceneContract` containing canon facts, character knowledge, allowed beats, forbidden changes, POV and endpoint. An invalid contract gets one bounded repair attempt, then stops before Writer generation if still invalid. The Writer receives this contract and relevant canon context but cannot modify canonical state. The Narrative Reviewer returns a verdict and localized revision requests; Codex performs the final constraint and continuity check before any authorized state update. Keep style feedback separate from canon validation.
+
 ## Programmer approval gate
 
 After the creative and production cycle is acknowledged, ask the user whether Claude or Codex will implement the project. Call `select_programmer` only after the user chooses; this records the provider and does not start implementation. Ask for explicit approval in a separate turn. Only then call `start_programmer` with the returned selection ID, the user's approval text, and the approved implementation brief. The chosen CLI uses its configured default model. If unavailable, report the error and do not switch providers automatically.
@@ -56,6 +58,8 @@ After the creative and production cycle is acknowledged, ask the user whether Cl
 ## Terminal test modes
 
 Use `npm test` from `project-worker/mcp` for automated checks. Use `npm run test:component -- --role regia|coordinator|writer|designer|sound_designer` for one fresh-input component run. The real Project Worker MCP records controlled inter-role replies and does not start production in component mode. Full tests use fresh disposable project roots, the actual MCP handoffs and workers, and physical-artifact verification. Do not use GUI automation for tests.
+
+An isolated Writer model evaluation uses three separate runs (`normal`, `hot`, `violent`) with fresh premise, canon, scenario, Project File, seed/run ID and output directory per run. The runner uses controlled simulated revision replies and does not start the real Narrative Reviewer or downstream production. Compare candidate models with a matched fixture within each category; judge brief adherence, canon, continuity, tone and endpoint rather than word count or stylistic polish. See `AGENTS.md` for exact test safety and reporting requirements.
 
 ## Codex entrypoint and explicit local Regia relay
 

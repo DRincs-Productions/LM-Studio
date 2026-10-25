@@ -11,7 +11,7 @@ import { Store, sha, waitHandback, alive } from './core.mjs';
 import { discoverBinding, MemoryManager } from './bionic.mjs';
 import { runJob } from './runner.mjs';
 import { selectProgrammer, recordComponentTest } from './programmer.mjs';
-import { narrativeContentChecks, narrativePresentationChecks, reviewPassEvidenceIssues, deterministicImagePlan, writerInstruction, reviewerInstruction, compactNarrativeCanon, readLmStudioChatStream, visualMomentPrompts, requiredTimelineChecks, writerRevisionScopeChecks, singlePlaybackChecks, narrativeCanonBoundaryChecks } from './production.mjs';
+import { narrativeContentChecks, narrativePresentationChecks, reviewPassEvidenceIssues, deterministicImagePlan, writerInstruction, reviewerInstruction, compactNarrativeCanon, readLmStudioChatStream, visualMomentPrompts, requiredTimelineChecks, writerRevisionScopeChecks, singlePlaybackChecks, narrativeCanonBoundaryChecks, validateSceneContract, createSceneContract, sourceSpecifiesPov } from './production.mjs';
 
 const handback = { summary: 'Prototype complete. Alex remains blonde and wears a black leather jacket.', completedTasks: ['Created prototype'], assets: [], problems: [], decisions: ['Choose a mission'], questionForUser: 'Which mission should Alex take?' };
 async function fixture(t) {
@@ -228,6 +228,78 @@ test('narrative prompts keep relevant canon below the model context budget', () 
   assert.doesNotMatch(targeted, /Old alternatives/);
   assert.match(writerInstruction(longStory, 'Follow the approved timeline.'), /Complete-Test Canon Clarification.*overrides any older conflicting/i);
   assert.deepEqual(writerRevisionScopeChecks('A '.repeat(400) + 'ending.', 'A '.repeat(300) + 'B '.repeat(100) + 'ending.'), []);
+});
+
+test('SceneContract enforces mode, preserves unknown POV and requires a bounded typed schema', () => {
+  const contract = {
+    scene_id: 'scene-test', mode: 'normal', pov: null, location: 'unspecified', participants: ['Mara'],
+    canon_facts: ['Mara is closing the shop.'], known_by_character: { Mara: ['She is closing the shop.'] },
+    unknowns: ['The shop address is unspecified.'], required_beats: ['Mara closes the shop.'],
+    forbidden_changes: ['Do not add another named character.'], closing_condition: 'End when Mara closes the door.',
+    creative_permissions: { sensory_details: true, minor_gestures: true, dialogue_within_known_facts: true, new_plot_events: false }
+  };
+  assert.deepEqual(validateSceneContract(contract, 'scene-test'), []);
+  assert.ok(validateSceneContract({ ...contract, mode: 'adult and dark' }, 'scene-test').some(issue => /mode must be normal, adult, or dark/.test(issue)));
+  assert.ok(validateSceneContract({ ...contract, pov: 'third_person' }, 'scene-test', 'Mara is closing the shop.').some(issue => /must leave pov null/.test(issue)));
+  assert.deepEqual(validateSceneContract({ ...contract, pov: 'third_person' }, 'scene-test', 'Use third-person POV.'), []);
+  assert.equal(sourceSpecifiesPov('The narrator uses third-person point of view.'), true);
+  assert.equal(sourceSpecifiesPov('The scene is set in a repair shop.'), false);
+  assert.ok(validateSceneContract({ ...contract, scene_id: 'other' }, 'scene-test').some(issue => /scene_id/.test(issue)));
+  assert.ok(validateSceneContract({ ...contract, creative_permissions: { ...contract.creative_permissions, new_plot_events: 'maybe' } }, 'scene-test').some(issue => /creative_permissions/.test(issue)));
+  assert.ok(validateSceneContract({ ...contract, unexpected: true }, 'scene-test').some(issue => /exactly match/.test(issue)));
+});
+
+test('SceneContract runs Codex and Qwen proposals in parallel, then validates Codex merge before Writer', async t => {
+  const root = await fs.mkdtemp(path.resolve('work', 'scene contract fixture '));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const base = {
+    scene_id: 'scene-contract-test', mode: 'normal', pov: null, location: 'repair shop', participants: ['Mara'],
+    canon_facts: ['Mara carries a key in her left hand.'], known_by_character: { Mara: ['She carries the key.'] },
+    unknowns: ['The shop address is unspecified.'], required_beats: ['Mara places the key on the counter at the end.'],
+    forbidden_changes: ['Do not add named characters.'], closing_condition: 'End immediately after the key is placed.',
+    creative_permissions: { sensory_details: true, minor_gestures: true, dialogue_within_known_facts: true, new_plot_events: false }
+  };
+  let codexProposalStarted = false, qwenProposalStarted = false, mergeStarted = false;
+  const codexPlanner = async (prompt, outputPath) => {
+    if (prompt.includes('QWEN INDEPENDENT PROPOSAL')) {
+      mergeStarted = true;
+      assert.equal(codexProposalStarted, true);
+      assert.equal(qwenProposalStarted, true);
+      await fs.writeFile(outputPath, JSON.stringify(base));
+      return JSON.stringify(base);
+    }
+    codexProposalStarted = true;
+    await new Promise(resolve => setTimeout(resolve, 10));
+    await fs.writeFile(outputPath, JSON.stringify(base));
+    return JSON.stringify(base);
+  };
+  const predict = async (role, prompt, options) => {
+    assert.equal(role, 'planner');
+    assert.equal(options.systemPromptOverride.includes('SceneContract'), true);
+    qwenProposalStarted = true;
+    await new Promise(resolve => setTimeout(resolve, 10));
+    return JSON.stringify(base);
+  };
+  const result = await createSceneContract({
+    sceneId: base.scene_id, canonical: '# Canon\nMara carries a key in her left hand.', summary: 'Mara closes the repair shop.',
+    out: root, predict, codexPlanner
+  });
+  assert.equal(mergeStarted, true);
+  assert.deepEqual(result.contract, base);
+  assert.equal((await fs.readFile(result.path, 'utf8')).includes('"mode": "normal"'), true);
+  assert.equal(result.sha256.length, 64);
+  assert.equal(await fs.stat(path.join(root, 'scene-contract-codex-proposal.json')).then(s => s.isFile()), true);
+  assert.equal(await fs.stat(path.join(root, 'scene-contract-qwen-proposal.json')).then(s => s.isFile()), true);
+});
+
+test('Writer and Narrative Reviewer receive the SceneContract as advisory, below Project File and approved brief', () => {
+  const contract = { scene_id: 'fixture', mode: 'normal', pov: null, required_beats: ['Show the handoff.'] };
+  const writer = writerInstruction('# Canon\nMara is 32.', 'Show the handoff.', '', '', contract);
+  const reviewer = reviewerInstruction('# Canon\nMara is 32.', 'Show the handoff.', '# Scene: Test\n\n## Narrative\nMara hands over the parcel.\n\n## Italian Summary\nConsegna il pacco.', [], contract);
+  assert.match(writer, /APPROVED SCENE CONTRACT/);
+  assert.match(writer, /does not override the Project File or approved brief/);
+  assert.match(reviewer, /canonical Project File and approved scope take precedence/);
+  assert.match(reviewer, /Show the handoff/);
 });
 test('LM Studio SSE chat parser waits for and returns the final aggregated chat.end result', async () => {
   const encoder = new TextEncoder();

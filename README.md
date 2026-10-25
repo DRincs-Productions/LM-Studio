@@ -93,22 +93,30 @@ A fine produzione, il Coordinatore restituisce un handback persistente con risul
 flowchart TD
     C[Coordinatore]
     subgraph SCRITTORE[Scrittore]
+        P[Planner Codex]
+        Q[Proposta parallela Qwen3 8B]
+        M[Merge Codex · SceneContract]
         W[Hemmingway]
         R[Qwen3 8B]
         X[Controllo finale Codex]
+        P --> M
+        Q --> M
+        M --> W
         W -->|richiesta di review| R
         R -->|richiede modifiche · massimo 3 cicli| W
         R -->|PASS| X
     end
-    C --> W
+    C --> P
     X --> C
 ```
 
-Lo Scrittore produce la prima bozza narrativa in inglese a partire dal brief approvato e dalle informazioni canoniche. Il modello Writer attualmente configurato è **Hemmingway 1 Abliterated Extreme**.
+Prima della scrittura, Codex e Qwen3 8B preparano proposte di piano in parallelo. Codex le unisce in un `SceneContract` strutturato con fatti canonici, conoscenze dei personaggi, beat, divieti e condizione finale. La validazione controlla schema e POV; se il contratto non è valido, si tenta una sola correzione circoscritta e il flusso si ferma prima del Writer se resta invalido. Il contratto accompagna la bozza e viene ricontrollato nella review finale; non aggiorna il canone. Codex coordina il flusso e resta responsabile delle decisioni sul canone: il Writer trasforma il contratto in prosa, il Narrative Reviewer verifica la scena e Codex controlla l’esito prima dell’handback.
+
+Lo Scrittore produce la prima bozza narrativa in inglese a partire dal brief approvato, dal contratto di scena e dalle informazioni canoniche. Il modello Writer operativo resta **Hemmingway 1 Abliterated Extreme**; è stato aggiunto il profilo **MS3.2 PaintedFantasy v4.1 24B Q4_K_M** come candidato per prove isolate, senza cambiare il modello operativo. Il profilo usa temperatura 0,8, top-p 0,95, min-p 0,05, repeat penalty 1,02 e contesto 8192. Le impostazioni di campionamento seguono i valori consigliati nella [scheda PaintedFantasy v4.1](https://huggingface.co/zerofata/MS3.2-PaintedFantasy-v4.1-24B); il percorso GGUF installato è `mradermacher/MS3.2-PaintedFantasy-v4.1-24B-GGUF/MS3.2-PaintedFantasy-v4.1-24B.Q4_K_M.gguf`.
 
 Il ciclo Writer → Narrative Reviewer può richiedere correzioni mirate; il Reviewer narrativo attualmente configurato è **Qwen3 8B Narrative Reviewer**. Dopo il suo esito, Codex esegue un controllo finale e può correggere direttamente problemi locali di formato o formulazione, preservando la storia già approvata. La configurazione limita le modifiche finali per evitare riscritture estese.
 
-Il confronto e i campioni dei Writer provati sono documentati in [Confronto dei modelli di narrazione](docs/CONFRONTO-MODELLI-DI-NARRAZIONE.md).
+Il confronto dei test Writer isolati è in [Confronto dei modelli di narrazione](docs/CONFRONTO-MODELLI-NARRAZIONE.md); il [rapporto storico dei test narrativi completi](docs/CONFRONTO-MODELLI-DI-NARRAZIONE.md) conserva i campioni e i risultati precedenti.
 
 ### Disegnatore
 
@@ -145,7 +153,7 @@ Il Disegnatore prepara le immagini coerenti con personaggi, ambienti e momenti n
 
 Codex definisce il prompt visivo, il Worker genera le immagini e Codex esamina i risultati. Un’immagine viene accettata se la valutazione visiva raggiunge la soglia prevista e non rileva errori visivi gravi; altrimenti il processo può correggere il prompt e riprovare entro il limite configurato. Il controller visivo separato non è attualmente installato: il Coordinatore prepara direttamente la richiesta visiva.
 
-`generate_image` consente di specificare `steps`, `cfg_scale`, `style` e LoRA registrate facoltative; il server impedisce sovrascritture in staging e considera fallita una generazione se la CLI dichiara che non ha applicato alcun tensore richiesto. Gli adapter restano esclusi dai default e sono bloccati per la produzione finché il relativo stato nel catalogo non è `ready`. I default sono Krea2 Turbo 8 passi/CFG 1, RedCraft 12/CFG 1 e Krea2 Anime 12/CFG 1. Width, height, seed, percorso modello, encoder, VAE, adapter e parametri effettivi vengono registrati nel risultato. Le prove precedenti mostrano RedCraft valido ma con posa incompleta, SNOFS non applicato, e Krea2 Anime con stile corretto ma nudità non rispettata. Il nuovo test della LoRA per l’orientamento anatomico ha rilevato `0 / 512` tensori applicati; Codex ha rifiutato la revisione dell’immagine esplicita, quindi il confronto è rimasto incompleto e l’adapter è bloccato. Consulta il [catalogo LoRA](docs/IMAGE-LORAS.md) e il [manifest del test](production-tests/components/designer_lora_20261025085231_f7c272db16/manifest.json). Il confronto modelli è in [Rapporto confronto modelli immagini](production-tests/DESIGNER-MODEL-COMPARISON-2026-10-24.md). Tutti i candidati di test restano in staging e non vengono pubblicati.
+`generate_image` consente di specificare `steps`, `cfg_scale`, `style` e LoRA registrate facoltative; il server impedisce sovrascritture in staging e considera fallita una generazione se la CLI dichiara che non ha applicato alcun tensore richiesto. Gli adapter restano esclusi dai default e sono bloccati per la produzione finché il relativo stato nel catalogo non è `ready`. I default sono Krea2 Turbo 8 passi/CFG 1, RedCraft 12/CFG 1 e Krea2 Anime 12/CFG 1. Width, height, seed, percorso modello, encoder, VAE, adapter e parametri effettivi vengono registrati nel risultato. La nuova prova della LoRA `flaccid_erect_krea2_loraholic` ha applicato `512 / 512` tensori su RedCraft con i pesi +3 e -3. Il candidato +3 ha ottenuto 78/100 senza errore grave, sotto la soglia di accettazione; la valutazione del candidato -3 è stata rifiutata. La compatibilità tecnica è quindi confermata, ma la convalida visiva non è completa e l’adapter resta escluso dalla produzione. Dettagli nel [catalogo LoRA](docs/IMAGE-LORAS.md) e nel [manifest](production-tests/components/designer_lora_20261025093323_ee11c97f74/manifest.json). Il confronto modelli è in [Rapporto confronto modelli immagini](production-tests/DESIGNER-MODEL-COMPARISON-2026-10-24.md). Tutti i candidati di test restano in staging e non vengono pubblicati.
 
 Nel confronto componenti senza LoRA del 25 ottobre 2026 (`node project-worker/mcp/orchestration/image-three-krea2-component-test.mjs`), Krea2 Turbo e RedCraft hanno ottenuto entrambi 86/100 senza errori gravi; Krea2 Anime v2.0 ha ottenuto 48/100 con un errore grave per inquadratura troppo stretta e ambiente non privato. Tutti e tre hanno generato PNG 1024×1024 e sono stati revisionati; nessun candidato è stato finalizzato o pubblicato. Il run, i seed, gli hash, i percorsi dei modelli/encoder/VAE e le chiamate MCP sono registrati in `production-tests/components/designer_krea2_20261025090850_2110272945/manifest.json`. Nel test è stato corretto il flag di caricamento `sd-cli` per i checkpoint Krea2 autonomi (`--diffusion-model`) rispetto al checkpoint RedCraft (`-m`).
 
@@ -203,7 +211,7 @@ Codex non riceve direttamente il WAV tramite il percorso CLI usato per la revisi
 
 Prima di generare, il Coordinatore cerca gli audio già finalizzati nello spazio del progetto e ne confronta manifest, categoria e comportamento loop con il cue. Se trova un asset adatto, lo riusa e ne verifica hash e manifest. I nuovi WAV approvati vengono finalizzati in `C:\AI\assets\<PROJECT_ID>\Audio\Music` o `C:\AI\assets\<PROJECT_ID>\Audio\SoundEffects`, poi pubblicati in percorsi distinti tramite rclone. Il manifest conserva hash, rapporto percettivo, decisione Codex e stato di pubblicazione.
 
-Il confronto dei modelli e i campioni sono documentati in [Confronto dei modelli audio](docs/CONFRONTO-MODELLI-AUDIO.md). La prova completa degli strumenti Audio Worker, dell’ascolto Qwen e della decisione Codex è riportata in [Test del flusso Audio Worker](RAPPORTO-TEST-AUDIO-WORKER.md). Il runner del Coordinatore è predisposto per la fase audio; l’handoff Bionic non è stato ripetuto mentre il Project File canonico aveva un handback narrativo pendente.
+Il confronto dei modelli è documentato in [Confronto dei modelli audio](docs/CONFRONTO-MODELLI-AUDIO.md) e [Confronto dei tre modelli Writer](docs/CONFRONTO-MODELLI-NARRAZIONE.md). La prova completa degli strumenti Audio Worker, dell’ascolto Qwen e della decisione Codex è riportata in [Test del flusso Audio Worker](RAPPORTO-TEST-AUDIO-WORKER.md). Il runner del Coordinatore è predisposto per la fase audio; l’handoff Bionic non è stato ripetuto mentre il Project File canonico aveva un handback narrativo pendente.
 
 ### Programmatore
 
@@ -337,7 +345,7 @@ Da `project-worker/mcp`, la prova dedicata è `npm run test:component:relay`: ge
 
 Verifica del 24 ottobre 2026: **26 test automatici passati** e prova componente reale `20261024165920360_b7e258f95bf675ce` completata con cronologia ripresa e nessun job produttivo. Il tramite accetta prosa italiana senza riscriverla e usa un contesto di 32768 token; il limite esplicito del transcript evita troncamenti silenziosi. Due errori iniziali (timeout e formato JSON obbligatorio) sono stati corretti conservando le prove fallite. Non è stato eseguito un ciclo produttivo completo dal nuovo ingresso. Dettagli in [Verifica Codex → Regia](production-tests/CODEX-REGIA-RELAY-2026-10-24.md).
 
-Il test di componente usa un input nuovo per ogni esecuzione e mette alla prova un ruolo reale alla volta. I server MCP reali registrano l’interazione e forniscono risposte controllate, senza produrre asset o avviare implementazione. Il test completo usa un Project File e un progetto Pixi’VN/Ink temporanei, gli MCP in modalità reale e controlla i file effettivamente consegnati.
+Il test di componente usa un input nuovo per ogni esecuzione e mette alla prova un ruolo reale alla volta. Regia, Coordinatore e Scrittore verificano le interazioni senza avviare fasi downstream. Il test Designer genera e revisiona un’immagine candidata in staging. Il test audio usa Stable Audio come modello sotto prova e Codex soltanto come Coordinatore: crea un WAV, lo ispeziona, lo fa ascoltare a Qwen, registra la revisione e, se supera il gate, lo finalizza e pubblica in un percorso locale/remoto univoco del run. Nessun test componente avvia il Programmatore. Il test completo usa un Project File e un progetto Pixi’VN/Ink temporanei, gli MCP in modalità reale e controlla i file effettivamente consegnati.
 
 Da `C:\Users\Shadow\.lmstudio\project-worker\mcp`:
 
@@ -357,11 +365,23 @@ npm run test:complete:resume -- --root="C:\Users\Shadow\.lmstudio\production-tes
 
 Per preparare un nuovo progetto completo, eseguire `npm create pixi-vn@latest` nella cartella `game` del test e scegliere **Visual Novel**, **Ink + TypeScript**, **Web page** e i valori predefiniti per il resto. Ogni nuovo test parte da una cartella mai usata prima. La ripresa è disponibile solo per un test fallito e conserva i job e gli artefatti precedenti. Il manifest registra input, modello, handoff, output, verifiche e fallimenti; il test non modifica database Bionic né installazione Bionic. `AGENTS.md` contiene i dettagli operativi e i percorsi delle configurazioni.
 
+Il test audio completo del componente si avvia con `node project-worker/mcp/orchestration/audio-component-test.mjs` dalla radice `.lmstudio`. Il runner genera premise, seed, Project File e cue fixture nuovi; Codex coordina Project Worker e Audio Worker e non interpreta il ruolo del Sound Designer né inventa il cue. Stable Audio genera il candidato, Qwen lo ascolta e Codex, come Coordinatore, valuta le evidenze. Solo un candidato con punteggio almeno 80 e senza errori gravi viene finalizzato in `C:\AI\assets\<RUN_ID>\Audio\<Music|SoundEffects>` e pubblicato sotto `imagecloud:AudioWorker/<Music|SoundEffects>/final/<RUN_ID>/`; la pubblicazione verifica dimensioni di WAV e manifest. Un run conserva output, log MCP e prove anche se fallisce. Il test non avvia il Programmatore. Il test completo del 24 ottobre 2026 ha pubblicato il WAV `20261024192544995_8d9dc7555236cb1a`: 100/100, nessun errore grave, hash verificato e dimensioni remote controllate. Dettagli in [Rapporto test componente audio completo](production-tests/SOUND-DESIGNER-AUDIO-FULL-COMPONENT-2026-10-24.md).
+
 ### Requisiti comuni
 
 Esito componente Scrittore del 24 ottobre 2026: **non superato**. Le prove con Hemmingway mostrano alterazioni del canone e azioni oltre il finale richiesto; le correzioni al prompt non hanno ancora risolto questi difetti. Il percorso di test è stato allineato all'API di produzione, con istanza verificata e registrazione corretta. `npm test`: 21 controlli passati. Il dettaglio e gli artefatti sono nel rapporto collegato sotto.
 
-Il test componente dello Scrittore si avvia con `npm run test:component -- --role writer` dalla cartella `project-worker\mcp`. Usa il prompt narrativo, la LocalChatApi e i parametri del profilo Writer della produzione; richiede una sola istanza Hemmingway caricata e libera, risolta tramite `lms ps --json`; verifica un brief nuovo con vincoli fisici, un finale definito e una revisione locale richiesta da un Reviewer simulato. Il runner conserva anche i prompt effettivi nel manifest e rimuove gli indicatori CLI di caricamento dall'artefatto, mantenendo i log grezzi. Non avvia il Reviewer reale né gli asset. Vedere [Rapporto componente Scrittore](production-tests/WRITER-2026-10-24.md) per esiti e limiti.
+La valutazione isolata del Writer richiede tre esecuzioni distinte per lo stesso modello: narrazione normale, scena hot consensuale con personaggi adulti, e scena cruenta di violenza fittizia. Ogni run crea premise, canone, scenario, Project File, seed e cartella nuovi; si giudicano aderenza al brief, continuità, tono e finale, senza usare conteggio parole o rifinitura stilistica come gate. Per PaintedFantasy, caricare da terminale il modello una volta (`lms load ms3.2-paintedfantasy-v4.1-24b --identifier writer-paintedfantasy-test --context-length 8192 --gpu 0.85 --parallel 1 --yes`) e poi, dalla cartella `project-worker\mcp`, eseguire separatamente:
+
+```powershell
+npm run test:component -- --role writer --writer-profile paintedfantasy --writer-case normal
+npm run test:component -- --role writer --writer-profile paintedfantasy --writer-case hot
+npm run test:component -- --role writer --writer-profile paintedfantasy --writer-case violent
+```
+
+Il runner usa LocalChatApi, conserva prompt e output nel manifest e impiega una richiesta di revisione controllata simulata; non avvia il Narrative Reviewer reale, produzione o creazione asset. Il modello operativo e i test precedenti Hemmingway restano invariati. Vedere [Rapporto componente Scrittore](production-tests/WRITER-2026-10-24.md) per gli esiti precedenti.
+
+Prova componente PaintedFantasy del 25 ottobre 2026: i tre run sono stati completati, ma nessuno ha superato tutti i vincoli del proprio brief. Il caso normale perde la continuità della chiave, continua oltre il finale richiesto e inventa una storia familiare per la radio. Il caso hot produce una scena erotica esplicita tra adulti, ma la revisione non mantiene il vincolo dell’anello né rende reciproco il consenso verbale richiesto. Il caso cruento mostra sangue ma resta meno grafico del brief e aggiunge una direttiva visiva dopo l’endpoint. Manifest e valutazioni Codex: [normale](production-tests/components/20261025100743302_8b1e8043d248/manifest.json), [hot](production-tests/components/20261025101110320_c215b36dd46a/manifest.json), [cruenta](production-tests/components/20261025101532916_664092e28662/manifest.json). Il primo tentativo normale è stato conservato come fallimento di configurazione: il modello rifiutava il parametro `reasoning`; il profilo ora non lo invia.
 
 - Windows, Node.js e npm. In questa macchina sono presenti Node.js 24 e npm 11.
 - Codex CLI per i worker usati dal Coordinatore.
@@ -462,3 +482,10 @@ flowchart LR
     D1 -->|produzione conclusa| H1[Handback a Bionic]
     H1 --> R2[Riattiva Regia nella stessa chat]
 ```
+
+Confronto controllato Hemmingway–PaintedFantasy del 25 ottobre 2026: entrambi hanno completato i tre cicli isolati (normale, hot, cruento), ma nessuno ha superato tutte le categorie. Hemmingway resta il preferito con confidenza bassa: è stato più aderente nel caso cruento e ha chiuso meglio la scena hot, ma ha comunque violato canon o endpoint in ogni caso e non ha applicato tutte le revisioni. PaintedFantasy ha seguito meglio la richiesta di consenso verbale nel caso hot, ma ha aggiunto contenuto dopo gli endpoint e una seconda ferita nel caso cruento. Nessuno ha passato interamente un caso; per ora non sostituiamo il Writer predefinito. Rapporto e link ai sei run con valutazioni individuali: [Confronto Writer](production-tests/WRITER-COMPARISON-2026-10-25.md). Il runner ora limita solo il prompt registrato via MCP e conserva quello completo negli artefatti locali, per rispettare il limite di dimensione del tool.
+
+Confronto controllato Hemmingway–Cydonia 24B v4.3 del 25 ottobre 2026: entrambi i modelli hanno completato tre cicli Writer isolati con la stessa traccia entro ciascuna coppia (normale, hot, cruento); ogni caso ha premise e canone distinti, Project File, seed e directory autonomi. Nessuno dei due ha superato tutti i vincoli. Cydonia ha seguito meglio la correzione del dettaglio della radio nel caso normale e ha esplicitato il consenso nel caso hot, ma ha introdotto cronologia incoerente nel normale, anello rimosso dopo l'inizio del contatto nel draft hot e duplicazioni/invenzioni nel cruento. Hemmingway ha mantenuto una prosa più coerente nel cruento e il finale hot richiesto, ma nel normale ha oltrepassato il punto finale e nel cruento ha inventato dettagli; la revisione simulata ha anche spostato ulteriormente l'endpoint in alcuni casi. Nessuna base sufficiente per cambiare il Writer predefinito: Hemmingway resta operativo, Cydonia è un'alternativa da rivalutare con un prompt di revisione meno destabilizzante. Il runner accetta `--writer-brief-file` per applicare lo stesso brief in una coppia comparativa. Metodo, comandi e valutazioni per run: [Confronto Hemmingway–Cydonia](production-tests/WRITER-COMPARISON-CYDONIA-HEMMINGWAY-2026-10-25.md).
+
+Test componente Planner del 25 ottobre 2026: `npm run test:planner` ha completato quattro fixture nuove usando Codex e Qwen3 8B in parallelo, con merge Codex e validazione dei contratti prima del Writer. Nella valutazione cieca bilanciata in due round, Codex ha ottenuto 99,125/100 e vinto 8 confronti su 8; Qwen ha ottenuto 92/100. I punteggi sono indicativi perché Codex ha valutato anche le proprie proposte. Decisione: Codex pianificatore e merger principale, Qwen proposta indipendente di controllo. Non sono state avviate scrittura, produzione o creazione asset. [Rapporto e manifest del run](production-tests/components/planner-20261025195515-9a0ffc2b/assessment.md).
+Test Writer isolato Hemmingway–Cydonia del 25 ottobre 2026: tre coppie di run normali, hot consensuali e cruenti hanno usato brief abbinati, Project File e run distinti. Hemmingway è il vincitore comparativo con confidenza moderata-bassa (due casi a favore, uno in parità), ma nessuno dei due ha rispettato tutti i vincoli. Cydonia ha impiegato 11:51 complessivi di generazione contro 23:15 di Hemmingway; i tempi includono draft e revisione simulata. [Confronto, valutazioni e manifest](production-tests/components/hemmingway-cydonia-20261025-2f1c02ed/assessment.md).

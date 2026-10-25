@@ -14,43 +14,71 @@ const productionTests = path.join(root, 'production-tests', 'components');
 const modelConfigRoot = path.join(root, 'apps', 'bionic', '.internal', 'user-concrete-model-default-config');
 const lms = path.join(root, 'bin', 'lms.exe');
 const localChat = new LocalChatApi(lms);
-const roles = ['regia', 'coordinator', 'writer', 'designer', 'sound_designer'];
+const writerProfiles = {
+  hemmingway: {
+    config: path.join(modelConfigRoot, 'JohnDi', 'Hemmingway-1-Abliterated-Extreme-GGUF', 'Hemmingway1-Extreme-Q4_K_M.gguf.json'),
+    model: 'JohnDi/Hemmingway-1-Abliterated-Extreme-GGUF/Hemmingway1-Extreme-Q4_K_M.gguf'
+  },
+  paintedfantasy: {
+    config: path.join(modelConfigRoot, 'mradermacher', 'MS3.2-PaintedFantasy-v4.1-24B-GGUF', 'MS3.2-PaintedFantasy-v4.1-24B.Q4_K_M.gguf.json'),
+    model: 'mradermacher/MS3.2-PaintedFantasy-v4.1-24B-GGUF/MS3.2-PaintedFantasy-v4.1-24B.Q4_K_M.gguf'
+  },
+  cydonia: {
+    config: path.join(modelConfigRoot, 'mradermacher', 'Cydonia-24B-v4.3-GGUF', 'Cydonia-24B-v4.3.Q4_K_M.gguf.json'),
+    model: 'mradermacher/Cydonia-24B-v4.3-GGUF/Cydonia-24B-v4.3.Q4_K_M.gguf'
+  }
+};
+const writerCases = ['normal', 'hot', 'violent'];
+const roles = ['regia', 'coordinator', 'writer', 'designer'];
 const names = {
-  regia: 'Regia', coordinator: 'Coordinator', writer: 'Writer', designer: 'Designer', sound_designer: 'Sound Designer'
+  regia: 'Regia', coordinator: 'Coordinator', writer: 'Writer', designer: 'Designer'
 };
 const mockReplies = {
   regia: 'Coordinator (simulated) asks: The brief leaves the final reveal ambiguous. Should the reveal be tender or comic? No production has started.',
   coordinator: 'Writer (simulated) reports one continuity gap and requests a focused revision. Do not start image/audio production.',
   writer: 'Reviewer (simulated) flags one local continuity detail and asks for a targeted correction while preserving the scene and voice.',
   designer: 'Coordinator (simulated) requests clearer character silhouette and visual continuity; keep the scene composition intact.',
-  sound_designer: 'Reviewer (simulated) hears a click at the loop seam. Revise the cue prompt while keeping its intended category and mood.'
 };
 const tasks = {
   regia: 'Discuss the project with the user. Ask one concise creative question that resolves an ambiguity, then summarize the approved facts you would persist. Do not claim a file was saved or begin production.',
   coordinator: 'Analyze the approved brief, produce a short task plan for Writer, Designer and Sound Designer, and identify one genuine question to return to Regia. Do not start workers.',
-  writer: 'Write a short original narrative passage from the brief. Preserve canon and voice. Do not mention the test or invent decisions outside the brief.',
+  writer: 'Write the requested original narrative scene. Prioritize the case-specific content, canon, tone, continuity, and endpoint. Do not add unrelated events or mention the test.',
   designer: 'Produce a concise image-generation prompt and a short continuity checklist from the brief. Do not generate or publish an image.',
-  sound_designer: 'Produce one concise sound cue specification including category, loop behavior, trigger and stop condition. Do not generate or publish audio.'
 };
 
 function arg(name) { const i = process.argv.indexOf(name); return i >= 0 ? process.argv[i + 1] : null; }
 function runId() { return `${new Date().toISOString().replace(/[-:.TZ]/g, '')}_${crypto.randomBytes(6).toString('hex')}`; }
+function recordableInput(value, fullPromptPath) {
+  const marker = `\n[Prompt truncated for MCP size limit; complete prompt saved at ${fullPromptPath}]`;
+  return value.length <= 12000 ? value : `${value.slice(0, 12000 - marker.length)}${marker}`;
+}
 function uniqueBrief() {
   const pick = values => values[crypto.randomInt(values.length)];
   const people = [pick(['Neri Vale', 'Mara Quill', 'Ivo Senn', 'Tali Rook']), pick(['a retired lighthouse keeper', 'a night-shift botanist', 'a courier who collects postcards', 'a radio astronomer'])];
   return `Original test premise ${crypto.randomBytes(4).toString('hex')}: ${people[0]}, ${people[1]}, discovers that ${pick(['the town clock is answering questions one minute early', 'an empty greenhouse receives letters from next spring', 'a ferry ticket is stamped with tomorrow’s weather', 'the local radio station is broadcasting a caller who has not phoned yet'])}. Setting: ${pick(['a rain-soaked harbor', 'a rooftop garden above a quiet station', 'a small mountain observatory', 'a night market after closing'])}. Tone: ${pick(['wry and warm', 'gentle mystery with playful banter', 'hopeful and lightly absurd', 'romantic comedy with a small mystery'])}. Keep all named characters adults.`;
 }
 
-async function configForRole(role) {
+function writerCaseBrief(testCase) {
+  const nonce = crypto.randomBytes(4).toString('hex');
+  const protagonist = ['Mara Venn', 'Neri Vale', 'Ivo Senn', 'Tali Rook'][crypto.randomInt(4)];
+  const partner = ['Lena Ors', 'Aki Tanaka', 'Sera Dain', 'Oren Pike'][crypto.randomInt(4)];
+  if (testCase === 'normal') return `Fresh ordinary-narrative case ${nonce}. ${protagonist}, age 32, is closing a small neighborhood repair shop during a rainstorm when ${partner}, age 35, arrives to collect a repaired hand-cranked radio. Keep the scene grounded and non-romantic, with no sexual content or graphic violence. Canon: the radio has one loose brass dial; ${protagonist} carries its small repair key in the left hand until placing it on the counter at the end. The scene must show the handoff and end immediately when the repaired radio begins receiving a familiar station.`;
+  if (testCase === 'hot') return `Fresh hot-narrative case ${nonce}. ${protagonist}, age 32, and ${partner}, age 35, are fictional adults who have been in an established relationship for two years. In their private rented cabin after a difficult journey, write a heated, explicitly consensual erotic scene with clear mutual desire and sensual physical intimacy. Both are sober and freely choose to continue; no coercion, age ambiguity, or other characters. Canon: ${protagonist} wears a silver ring on the right hand and removes it before intimate contact; the scene ends as the couple pause together after intimacy, without introducing future plans.`;
+  if (testCase === 'violent') return `Fresh gruesome-narrative case ${nonce}. ${protagonist}, age 32, is an adult emergency medic in a fictional flood-damaged town when ${partner}, age 35, is found trapped beneath a collapsed market awning with a severe bleeding leg wound. Write a tense, graphic fictional injury-and-rescue scene; do not romanticize the violence or introduce sexual violence. Canon: ${protagonist} uses a red field bandage from the open medical kit, keeps the injured adult conscious by speaking to them, and ends the scene when rescue workers take over. Do not add another named character or a second injury.`;
+  throw Error(`Unknown writer case: ${testCase}`);
+}
+
+async function configForRole(role, writerProfileId = 'hemmingway') {
   if (role === 'regia') {
     const p = path.join(modelConfigRoot, 'Qwen', 'qwen3.5-9b.json');
     const json = JSON.parse(await fs.readFile(p, 'utf8'));
     return { engine: 'lms', model: 'qwen/qwen3.5-9b', system: json.operation.fields.find(x => x.key === 'llm.prediction.systemPrompt')?.value || '' };
   }
   if (role === 'writer') {
-    const p = path.join(modelConfigRoot, 'JohnDi', 'Hemmingway-1-Abliterated-Extreme-GGUF', 'Hemmingway1-Extreme-Q4_K_M.gguf.json');
-    const json = JSON.parse(await fs.readFile(p, 'utf8'));
-    return { engine: 'writer-api', config: json, model: 'JohnDi/Hemmingway-1-Abliterated-Extreme-GGUF/Hemmingway1-Extreme-Q4_K_M.gguf', system: json.operation.fields.find(x => x.key === 'llm.prediction.systemPrompt')?.value || '' };
+    const selected = writerProfiles[writerProfileId];
+    if (!selected) throw Error(`Unknown Writer profile: ${writerProfileId}. Choose ${Object.keys(writerProfiles).join('|')}`);
+    const json = JSON.parse(await fs.readFile(selected.config, 'utf8'));
+    return { engine: 'writer-api', config: json, model: selected.model, profileId: writerProfileId, system: json.operation.fields.find(x => x.key === 'llm.prediction.systemPrompt')?.value || '' };
   }
   return { engine: 'codex', model: 'Codex CLI configured default', system: `You are the ${names[role]} in a component test. Complete the requested role task only; do not run production or edit files. Use plain text.` };
 }
@@ -60,8 +88,9 @@ async function ask(config, prompt, system, cwd, output) {
   if (config.engine === 'writer-api') {
     const ps = spawnSync(lms, ['ps', '--json'], { encoding: 'utf8', windowsHide: true });
     if (ps.status !== 0) throw Error(`Cannot inspect Writer model instances: ${ps.stderr}`);
-    const matches = JSON.parse(ps.stdout).filter(instance => instance.indexedModelIdentifier === config.model || instance.path === config.model);
-    if (matches.length !== 1 || matches[0].status !== 'idle' || matches[0].queued) throw Error('Component Writer requires exactly one idle loaded instance of its configured model');
+    const instances = JSON.parse(ps.stdout);
+    const matches = instances.filter(instance => instance.indexedModelIdentifier === config.model || instance.path === config.model);
+    if (instances.length !== 1 || matches.length !== 1 || matches[0].status !== 'idle' || matches[0].queued) throw Error('Component Writer requires exactly one idle loaded model instance, matching the selected Writer profile');
     const result = await localChat.predict(matches[0].identifier, prompt, system, config.config, 'writer');
     result.modelInstance = matches[0];
     await fs.writeFile(output + '.raw.json', JSON.stringify(result, null, 2) + '\n');
@@ -79,14 +108,22 @@ async function ask(config, prompt, system, cwd, output) {
 }
 
 const role = arg('--role');
+if (role === 'sound_designer') throw Error('Run `node project-worker/mcp/orchestration/audio-component-test.mjs` instead. Codex coordinates the Audio Worker test and does not act as the Sound Designer.');
 if (!roles.includes(role)) throw Error(`Usage: node component-test.mjs --role ${roles.join('|')}`);
+const writerProfileId = role === 'writer' ? (arg('--writer-profile') || 'hemmingway') : null;
+const writerCase = role === 'writer' ? (arg('--writer-case') || 'normal') : null;
+const writerBriefFile = role === 'writer' ? arg('--writer-brief-file') : null;
+if (role === 'writer' && !writerCases.includes(writerCase)) throw Error(`Writer case must be one of: ${writerCases.join('|')}`);
+if (role !== 'writer' && (arg('--writer-profile') || arg('--writer-case') || arg('--writer-brief-file'))) throw Error('Writer profile, case, and brief flags can only be used with --role writer');
 const id = runId();
 const runDirectory = path.join(productionTests, id);
 await fs.mkdir(runDirectory, { recursive: true });
-const brief = uniqueBrief() + (role === 'writer' ? '\n\nApproved scene canon: The protagonist carries a sealed parcel in their left hand. They do not open it or transfer it to the right hand. A brass bell rings exactly once during the discovery. Show the discovery on-page, then end when the protagonist places the still-sealed parcel on a table. No choices, sound/music directions, new named characters, romance escalation, or events after that endpoint are authorized. English narrative and an accurate Italian production summary are required.' : '');
-const profile = await configForRole(role);
+const brief = role === 'writer'
+  ? (writerBriefFile ? (await fs.readFile(path.resolve(writerBriefFile), 'utf8')).trim() : writerCaseBrief(writerCase))
+  : uniqueBrief();
+const profile = await configForRole(role, writerProfileId || 'hemmingway');
 const manifestPath = path.join(runDirectory, 'manifest.json');
-const initialManifest = { runId: id, seed: id, role, model: profile.model, mode: 'component', uniqueInput: brief, status: 'started', productionStarted: false, implementationStarted: false };
+const initialManifest = { runId: id, seed: id, role, ...(role === 'writer' ? { writerProfile: writerProfileId, writerCase, ...(writerBriefFile ? { writerBriefFile: path.resolve(writerBriefFile) } : {}) } : {}), model: profile.model, predictionSettings: profile.config?.operation?.fields?.filter(field => field.key !== 'llm.prediction.systemPrompt') || [], loadSettings: profile.config?.load?.fields || [], mode: 'component', uniqueInput: brief, status: 'started', productionStarted: false, implementationStarted: false };
 await fs.writeFile(manifestPath, JSON.stringify(initialManifest, null, 2) + '\n');
 const system = profile.system || `You are ${names[role]}. Follow the role task and project brief. Keep the response useful and concrete.`;
 const client = new Client({ name: 'bionic-component-test-runner', version: '1.0.0' });
@@ -113,20 +150,34 @@ try {
   const status = await client.callTool({ name: 'get_orchestration_status', arguments: { filename } }).catch(() => null);
   const task = `${role === 'regia' ? 'Conversazione utente in italiano: aiutami a definire questa idea; non autorizzo alcuna produzione. Rispondi in italiano, mantenendo in inglese soltanto il riepilogo destinato al Project File.\n\n' : ''}${tasks[role]}\n\nThe harness has already created and read back the canonical Project File through MCP: ${filename}. Preserve this exact filename. The brief below is its verified content. You have no direct tool access in this CLI conversation; propose documentation updates only, without claiming a write or creating another filename.\n\nProject brief:\n${brief}`;
   const actualTask = role === 'writer' ? writerInstruction(brief, tasks.writer) : task;
-  const first = await ask(profile, actualTask, system, runDirectory, path.join(runDirectory, 'model-output-1.txt'));
+  const predictionTimings = [];
+  const timedAsk = async (label, prompt, output) => {
+    const startedAt = new Date().toISOString();
+    const started = performance.now();
+    const response = await ask(profile, prompt, system, runDirectory, output);
+    predictionTimings.push({ label, startedAt, completedAt: new Date().toISOString(), elapsedMs: Math.round(performance.now() - started) });
+    return response;
+  };
+  const first = await timedAsk('draft', actualTask, path.join(runDirectory, 'model-output-1.txt'));
   await fs.writeFile(path.join(runDirectory, 'model-output-1.txt'), first + '\n');
-  const mockReply = role === 'writer' ? 'Reviewer (simulated): Controlled local revision request. Add the exact sentence "The parcel stayed sealed." immediately before the final narrative paragraph to make the approved seal continuity explicit. Keep all other narrative paragraphs verbatim, preserve the endpoint, and update only the Italian summary if necessary. This is a test edit request, not a claim that a real reviewer found a defect.' : mockReplies[role];
+  const mockReply = role === 'writer'
+    ? ({
+        normal: 'Reviewer (simulated): Add one sentence before the final paragraph explicitly confirming that the repaired radio has one loose brass dial. Preserve the left-hand key continuity and exact endpoint; leave all unaffected prose unchanged. This is a controlled test edit, not a claim that a real reviewer found a defect.',
+        hot: 'Reviewer (simulated): Add one brief, direct line of dialogue immediately before intimate contact that confirms both adults want to continue. Preserve the consensual erotic tone and all other prose verbatim. This is a controlled test edit, not a claim that a real reviewer found a defect.',
+        violent: 'Reviewer (simulated): Add one sentence before rescue workers take over confirming that the injured adult remains conscious while the medic applies the red field bandage. Preserve the requested graphic injury scene and all other prose verbatim. This is a controlled test edit, not a claim that a real reviewer found a defect.'
+      })[writerCase]
+    : mockReplies[role];
   const firstEvent = role === 'regia' ? 'clarification' : role === 'coordinator' ? 'handoff' : 'revision';
-  const record1 = await client.callTool({ name: 'record_component_test', arguments: { run_id: id, role, input: actualTask, model: profile.model, response: first, interaction: firstEvent, mock_reply: mockReply } });
+  const record1 = await client.callTool({ name: 'record_component_test', arguments: { run_id: id, role, input: recordableInput(actualTask, path.join(runDirectory, 'model-output-1.txt.request.json')), model: profile.model, response: first, interaction: firstEvent, mock_reply: mockReply } });
   if (record1.isError) throw Error(record1.content?.map(c => c.text || '').join('\n') || 'MCP failed to record first interaction');
   const secondPrompt = `Original task and canon:\n${task}\n\nYour previous response:\n${first}\n\nContinue your role after receiving this controlled test response from the next participant:\n${mockReply}\n\nRevise or respond while preserving the approved facts. Do not start real production or implementation.`;
   const actualSecondPrompt = role === 'writer' ? writerInstruction(brief, tasks.writer, first, mockReply) : secondPrompt;
-  const second = await ask(profile, actualSecondPrompt, system, runDirectory, path.join(runDirectory, 'model-output-2.txt'));
+  const second = await timedAsk('simulated-revision', actualSecondPrompt, path.join(runDirectory, 'model-output-2.txt'));
   await fs.writeFile(path.join(runDirectory, 'model-output-2.txt'), second + '\n');
-  const record2 = await client.callTool({ name: 'record_component_test', arguments: { run_id: id, role, input: actualSecondPrompt, model: profile.model, response: second, interaction: role === 'regia' ? 'analysis' : 'revision', mock_reply: 'Recorded. This component test ends without starting production.' } });
+  const record2 = await client.callTool({ name: 'record_component_test', arguments: { run_id: id, role, input: recordableInput(actualSecondPrompt, path.join(runDirectory, 'model-output-2.txt.request.json')), model: profile.model, response: second, interaction: role === 'regia' ? 'analysis' : 'revision', mock_reply: 'Recorded. This component test ends without starting production.' } });
   if (record2.isError) throw Error(record2.content?.map(c => c.text || '').join('\n') || 'MCP failed to record second interaction');
   const result = {
-    runId: id, seed: id, role, model: profile.model, mode: 'component', status: 'completed_pending_review', createdAt: new Date().toISOString(),
+    runId: id, seed: id, role, ...(role === 'writer' ? { writerProfile: writerProfileId, writerCase, ...(writerBriefFile ? { writerBriefFile: path.resolve(writerBriefFile) } : {}), predictionTimings, totalPredictionMs: predictionTimings.reduce((sum, item) => sum + item.elapsedMs, 0) } : {}), model: profile.model, predictionSettings: profile.config?.operation?.fields?.filter(field => field.key !== 'llm.prediction.systemPrompt') || [], loadSettings: profile.config?.load?.fields || [], mode: 'component', status: 'completed_pending_review', createdAt: new Date().toISOString(),
     uniqueInput: brief, modelPrompts: [actualTask, actualSecondPrompt], controlledReply: mockReply, projectFile: filename, projectFilePath: path.join(runDirectory, filename),
     interactions: [firstEvent, 'simulated_reply', 'revision'],
     outputs: [path.join(runDirectory, 'model-output-1.txt'), path.join(runDirectory, 'model-output-2.txt')],

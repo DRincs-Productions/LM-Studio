@@ -1,6 +1,8 @@
 # Confronto dei modelli di narrazione
 
-Ultimo aggiornamento: 4 ottobre 2026
+> **Nota sul processo attuale:** questo è un rapporto storico dei test svolti con la pipeline precedente. La pipeline narrativa corrente prepara un `SceneContract` con proposte parallele di Codex e Qwen, merge e validazione a cura di Codex, scrittura, revisione narrativa e controllo finale di Codex. Il Writer non può cambiare il canone. Per i confronti isolati aggiornati e per i risultati Hemmingway–Cydonia, consultare [CONFRONTO-MODELLI-NARRAZIONE.md](CONFRONTO-MODELLI-NARRAZIONE.md).
+
+Ultimo aggiornamento: 25 ottobre 2026
 Ambiente: Windows, LM Studio CLI. La GUI non è stata usata.
 
 ## Protocollo
@@ -79,3 +81,7 @@ I campioni precedenti sono stati spostati, per conservarli e lasciare pulita la 
 - **Asset trasferito:** `C:\AI\assets\8cabd04f-763a-47a7-b36b-9e464efc9a87\adc6d3f1-de20-4e38-9e47-adf5216e630c\8cabd04f-763a-47a7-b36b-9e464efc9a87_adc6d3f1-de20-4e38-9e47-adf5216e630c_hotel_reception.png`; SHA256 uguale al file pubblicato.
 - **Esclusioni rispettate:** Claude, suoni/musica e generazione su un PC cloud separato esclusi; Image Worker eseguito sull'host di test.
 - **Tracciabilità:** [risultato completo](confronto-modelli-narrazione/hemmingway/production-result.json), [revisione Reviewer](confronto-modelli-narrazione/hemmingway/production-reviewer.md), [revisione Codex](confronto-modelli-narrazione/hemmingway/production-codex-review.json).
+
+## Confronto componente Hemmingway–Cydonia (25 ottobre 2026)
+
+Nuovo confronto isolato con tre coppie di fixture identiche per caso (normale, hot consensuale tra adulti, violenza cruenta fittizia). **Hemmingway è il vincitore comparativo** con confidenza moderata-bassa: due casi a suo favore e un pareggio, soprattutto per maggiore aderenza ai beat e risposta alle correzioni. Nessuno dei due ha rispettato tutti i vincoli. Cydonia è però molto più rapido: 11:51 complessivi di generazione contro 23:15 di Hemmingway, includendo draft e correzione simulata. Tempi e limiti del confronto, valutazioni cieche e sei manifest sono nel [rapporto dettagliato](../production-tests/components/hemmingway-cydonia-20261025-2f1c02ed/assessment.md).
