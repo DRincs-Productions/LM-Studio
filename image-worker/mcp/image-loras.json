@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "loras": {
+    "flaccid_erect_krea2_loraholic": {
+      "file": "flaccid_erect_krea2_loraholic.safetensors",
+      "minWeight": -6.0,
+      "maxWeight": 6.0,
+      "profiles": ["redcraft_redmix_hybrid"],
+      "generator": "adult",
+      "style": "standard",
+      "source": "https://civitai.red/models/2832299/flaccid-erection-slider-krea2",
+      "validationStatus": "blocked_runtime_compatibility"
+    }
+  }
+}

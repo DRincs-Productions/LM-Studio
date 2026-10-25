@@ -117,17 +117,20 @@ flowchart TD
     C[Coordinatore]
     subgraph DISEGNATORE[Disegnatore]
         I[Image Worker]
-        M[Seleziona modello]
-        SDXL[SDXL Lightning 4-step]
-        LUSTIFY[Lustify Zenith v9]
+        M[Seleziona stile e contenuto]
+        KREA[Krea2 Turbo]
+        ANIME[Krea2 Anime]
+        REDCRAFT[RedCraft]
         G[Genera un'immagine]
         R[Codex]
         O[Pubblica con rclone]
         I --> M
-        M -->|standard| SDXL
-        M -->|adulti| LUSTIFY
-        SDXL --> G
-        LUSTIFY --> G
+        M -->|standard non anime| KREA
+        M -->|stile anime, normale o adulto| ANIME
+        M -->|adulti non anime| REDCRAFT
+        KREA --> G
+        ANIME --> G
+        REDCRAFT --> G
         G -->|richiesta di revisione| R
         R -->|non approvata · corregge il prompt e riprova| I
         R -->|almeno 80 punti e nessun errore grave| O
@@ -136,9 +139,15 @@ flowchart TD
     O --> C
 ```
 
-Il Disegnatore prepara le immagini coerenti con personaggi, ambienti e momenti narrativi. Il generatore è **`sd-cli.exe`**; i checkpoint attualmente installati sono **SDXL Lightning 4-step** per immagini standard e **Lustify NSFW Checkpoint Zenith v9** per immagini per adulti consensuali.
+Il Disegnatore prepara le immagini coerenti con personaggi, ambienti e momenti narrativi. Il generatore è **`sd-cli.exe`**. La selezione combina stile e contenuto: **Krea2 Turbo** è il profilo standard non anime; **RedCraft v3.0** è il profilo adulto non anime; se il Project File indica lo stile anime, **Krea2 Anime v2.0** prevale sul tipo di contenuto e viene usato sia per immagini normali sia per immagini adulte. Riferimenti: [Krea2 Anime v2.0](https://civitai.red/models/2908999/krea2-anime?modelVersionId=3357716) e [RedCraft v3.0](https://civitai.red/models/958009/redcraft-or-or-hybrid-h3-and-krea2t-and-qw21-fixed-w6a8?modelVersionId=3139241).
+
+**Krea2 con il LoKR SNOFS** resta installato per prove di compatibilità ma non è selezionato: il percorso `sd-cli` non applica i pesi dell’adapter (0/768 tensori riconosciuti nelle prove) e il sampling fallisce. Questo non è un giudizio sulla qualità visiva di SNOFS. Un runtime alternativo non-ComfyUI è stato individuato, ma non è stato installato né validato con questo adapter.
 
 Codex definisce il prompt visivo, il Worker genera le immagini e Codex esamina i risultati. Un’immagine viene accettata se la valutazione visiva raggiunge la soglia prevista e non rileva errori visivi gravi; altrimenti il processo può correggere il prompt e riprovare entro il limite configurato. Il controller visivo separato non è attualmente installato: il Coordinatore prepara direttamente la richiesta visiva.
+
+`generate_image` consente di specificare `steps`, `cfg_scale`, `style` e LoRA registrate facoltative; il server impedisce sovrascritture in staging e considera fallita una generazione se la CLI dichiara che non ha applicato alcun tensore richiesto. Gli adapter restano esclusi dai default e sono bloccati per la produzione finché il relativo stato nel catalogo non è `ready`. I default sono Krea2 Turbo 8 passi/CFG 1, RedCraft 12/CFG 1 e Krea2 Anime 12/CFG 1. Width, height, seed, percorso modello, encoder, VAE, adapter e parametri effettivi vengono registrati nel risultato. Le prove precedenti mostrano RedCraft valido ma con posa incompleta, SNOFS non applicato, e Krea2 Anime con stile corretto ma nudità non rispettata. Il nuovo test della LoRA per l’orientamento anatomico ha rilevato `0 / 512` tensori applicati; Codex ha rifiutato la revisione dell’immagine esplicita, quindi il confronto è rimasto incompleto e l’adapter è bloccato. Consulta il [catalogo LoRA](docs/IMAGE-LORAS.md) e il [manifest del test](production-tests/components/designer_lora_20261025085231_f7c272db16/manifest.json). Il confronto modelli è in [Rapporto confronto modelli immagini](production-tests/DESIGNER-MODEL-COMPARISON-2026-10-24.md). Tutti i candidati di test restano in staging e non vengono pubblicati.
+
+Nel confronto componenti senza LoRA del 25 ottobre 2026 (`node project-worker/mcp/orchestration/image-three-krea2-component-test.mjs`), Krea2 Turbo e RedCraft hanno ottenuto entrambi 86/100 senza errori gravi; Krea2 Anime v2.0 ha ottenuto 48/100 con un errore grave per inquadratura troppo stretta e ambiente non privato. Tutti e tre hanno generato PNG 1024×1024 e sono stati revisionati; nessun candidato è stato finalizzato o pubblicato. Il run, i seed, gli hash, i percorsi dei modelli/encoder/VAE e le chiamate MCP sono registrati in `production-tests/components/designer_krea2_20261025090850_2110272945/manifest.json`. Nel test è stato corretto il flag di caricamento `sd-cli` per i checkpoint Krea2 autonomi (`--diffusion-model`) rispetto al checkpoint RedCraft (`-m`).
 
 ### Progettista sonoro
 
@@ -258,7 +267,8 @@ La GPU, i modelli e i percorsi del PC cloud devono essere verificati sulla macch
 | Dati o programmi | Destinazione architetturale | Note |
 |---|---|---|
 | Modelli linguistici LM Studio | `C:\Users\Shadow\.lmstudio\models` | Regia Qwen 3.5 9B; Writer Hemmingway 1 Abliterated Extreme; Narrative Reviewer Qwen3 8B. Sono modelli locali di LM Studio. |
-| Checkpoint immagini | `C:\AI\image-worker\models` | SDXL Lightning 4-step e Lustify Zenith v9. |
+| Checkpoint immagini | `C:\AI\image-worker\models` | `krea2_turbo_fp8_scaled.safetensors` (standard), `redcraftREDMIXHybridA2A_30Krea2.safetensors` (adulto non anime) e `krea2Anime_v20_fp8.safetensors` (anime, qualunque rating). Il LoKR `C:\AI\image-worker\loras\snofs_krea_v1_5.safetensors` è presente ma non utilizzabile nel percorso `sd-cli` verificato. |
+| Encoder e VAE immagini | `C:\Users\Shadow\AppData\Local\Comfy-Desktop\ComfyUI-Shared\models` | `text_encoders\qwen3vl_4b_fp8_scaled.safetensors` e `vae\qwen_image_vae.safetensors`, usati da `sd-cli`; questo percorso contiene solo i componenti condivisi e non implica l’uso di ComfyUI come runtime. Se la cartella condivisa viene rimossa, questi due file dovranno essere ricollocati e aggiornati nella configurazione del Worker. |
 | Eseguibile Image Worker | `C:\Users\Shadow\.lmstudio\image-worker\bin\sd-cli.exe` | Il server MCP risiede in `C:\Users\Shadow\.lmstudio\image-worker\mcp`. |
 | Modelli audio | `C:\AI\audio-worker\models\audio.cpp` | Stable Audio 3 Medium Q8 e Stable Audio 3 Small SFX Q8. |
 | Runtime audio.cpp | `C:\Users\Shadow\.lmstudio\audio\audio.cpp\v0.9.0-vulkan` | Il server MCP è in `C:\Users\Shadow\.lmstudio\audio\mcp`. |

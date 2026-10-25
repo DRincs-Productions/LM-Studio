@@ -15,20 +15,22 @@ const WORKER_HOME = "C:\\Users\\Shadow\\.lmstudio\\image-worker";
 
 const SDCLI = path.join(WORKER_HOME, "bin", "sd-cli.exe");
 const MODELS = path.join(ROOT, "models");
+const SHARED_MODELS = "C:\\Users\\Shadow\\AppData\\Local\\Comfy-Desktop\\ComfyUI-Shared\\models";
+const LORAS = path.join(ROOT, "loras");
+const LORA_CATALOG_PATH = path.join(WORKER_HOME, "mcp", "image-loras.json");
 
 const WORK = path.join(WORKER_HOME, "work", "current");
 const FINAL = path.join(ROOT, "output", "final");
 
-const NORMAL_MODEL = path.join(
-  MODELS,
-  "sdxl_lightning_4step.safetensors"
-);
-
-
-const ADULT_MODEL = path.join(
-  MODELS,
-  "lustifyNSFWCheckpoint_zenithV9.safetensors"
-);
+const ENCODER = path.join(SHARED_MODELS, "text_encoders", "qwen3vl_4b_fp8_scaled.safetensors");
+const VAE = path.join(SHARED_MODELS, "vae", "qwen_image_vae.safetensors");
+const PROFILES = {
+  krea2_turbo: { file: "krea2_turbo_fp8_scaled.safetensors", loadFlag: "--diffusion-model", generator: "normal", style: "standard", steps: 8, cfgScale: 1 },
+  redcraft_redmix_hybrid: { file: "redcraftREDMIXHybridA2A_30Krea2.safetensors", loadFlag: "-m", generator: "adult", style: "standard", steps: 12, cfgScale: 1 },
+  krea2_anime_v20: { file: "krea2Anime_v20_fp8.safetensors", loadFlag: "--diffusion-model", generator: "both", style: "anime", steps: 12, cfgScale: 1 }
+};
+const PROFILE_PATHS = Object.fromEntries(Object.entries(PROFILES).map(([id, profile]) => [id, path.join(MODELS, profile.file)]));
+const LORA_CATALOG = JSON.parse(await fs.readFile(LORA_CATALOG_PATH, "utf8")).loras;
 
 const CODEX = "codex";
 
@@ -39,6 +41,7 @@ const RCLONE_TIMEOUT_MS = 120000;
 
 // Maximum time allowed for one Codex review.
 const CODEX_TIMEOUT_MS = 120000;
+const IMAGE_TIMEOUT_MS = 60 * 60 * 1000;
 
 // =========================================================
 // SERVER
@@ -225,12 +228,17 @@ server.tool(
 
     const result = {
       sd_cli: await exists(SDCLI),
-      normal_model: await exists(NORMAL_MODEL),
-      adult_model: await exists(ADULT_MODEL),
-
       sd_cli_path: SDCLI,
-      normal_model_path: NORMAL_MODEL,
-      adult_model_path: ADULT_MODEL,
+      normal_model: await exists(PROFILE_PATHS.krea2_turbo),
+      adult_model: await exists(PROFILE_PATHS.redcraft_redmix_hybrid),
+      anime_model: await exists(PROFILE_PATHS.krea2_anime_v20),
+      normal_model_path: PROFILE_PATHS.krea2_turbo,
+      adult_model_path: PROFILE_PATHS.redcraft_redmix_hybrid,
+      anime_model_path: PROFILE_PATHS.krea2_anime_v20,
+      profiles: Object.fromEntries(await Promise.all(Object.entries(PROFILE_PATHS).map(async ([id, modelPath]) => [id, { path: modelPath, available: await exists(modelPath), ...PROFILES[id] }]))),
+      encoder: { path: ENCODER, available: await exists(ENCODER) },
+      vae: { path: VAE, available: await exists(VAE) },
+      loras: Object.fromEntries(await Promise.all(Object.entries(LORA_CATALOG).map(async ([id, item]) => [id, { path: path.join(LORAS, item.file), available: await exists(path.join(LORAS, item.file)), minWeight: item.minWeight, maxWeight: item.maxWeight, profiles: item.profiles, validationStatus: item.validationStatus }]))),
 
       work_directory: WORK,
       final_directory: FINAL,
@@ -260,13 +268,19 @@ server.tool(
 server.tool(
   "generate_image",
 
-  "Generate exactly one image. Use normal for non-explicit scenes and adult for explicit consensual adult sexual scenes.",
+  "Generate exactly one image. Anime style always selects Krea2 Anime. Adult non-anime selects RedCraft. Registered LoRAs are optional and are applied only when explicitly requested.",
 
   {
     generator: z.enum([
       "normal",
       "adult"
     ]),
+
+    style: z.enum(["standard", "anime"]).optional().default("standard"),
+    adult_model: z.enum(["redcraft", "krea2_snofs"]).optional(),
+    steps: z.number().int().min(1).max(100).optional(),
+    cfg_scale: z.number().min(0).max(30).optional(),
+    loras: z.array(z.object({ id: z.string().min(1).max(100), weight: z.number().finite() })).max(4).optional().default([]),
 
     prompt: z.string().min(1),
 
@@ -291,6 +305,11 @@ server.tool(
 
   async ({
     generator,
+    style,
+    adult_model,
+    steps,
+    cfg_scale,
+    loras,
     prompt,
     negative_prompt,
     seed,
@@ -304,10 +323,37 @@ server.tool(
     // Select model
     // ---------------------------------------------
 
-    const model =
-      generator === "adult"
-        ? ADULT_MODEL
-        : NORMAL_MODEL;
+    if (adult_model === "krea2_snofs") {
+      return { content: [{ type: "text", text: "FAILED\nREASON: SNOFS is a LoKR adapter and is not compatible with the verified sd-cli runtime." }] };
+    }
+    if (adult_model && generator !== "adult") {
+      return { content: [{ type: "text", text: "FAILED\nREASON: adult_model can only be set when generator=adult." }] };
+    }
+    const profileId = style === "anime" ? "krea2_anime_v20" : generator === "adult" ? "redcraft_redmix_hybrid" : "krea2_turbo";
+    if (generator === "adult" && adult_model && adult_model !== "redcraft") {
+      return { content: [{ type: "text", text: `FAILED\nREASON: unsupported adult model: ${adult_model}` }] };
+    }
+    const profile = PROFILES[profileId];
+    const model = PROFILE_PATHS[profileId];
+
+    const selectedLoras = [];
+    for (const requested of loras) {
+      const registration = LORA_CATALOG[requested.id];
+      if (!registration) return { content: [{ type: "text", text: `FAILED\nREASON: unregistered LoRA id: ${requested.id}` }] };
+      if (registration.validationStatus !== "ready" && process.env.IMAGE_WORKER_ALLOW_UNVALIDATED_LORAS !== "1") {
+        return { content: [{ type: "text", text: `FAILED\nREASON: ${requested.id} is not validated for this runtime (${registration.validationStatus}); it is disabled for production generation.` }] };
+      }
+      if (generator !== "adult" || style !== "standard" || profileId !== "redcraft_redmix_hybrid") {
+        return { content: [{ type: "text", text: `FAILED\nREASON: ${requested.id} is registered only for adult, standard RedCraft generation.` }] };
+      }
+      if (!registration.profiles.includes(profileId) || registration.generator !== generator || registration.style !== style) {
+        return { content: [{ type: "text", text: `FAILED\nREASON: ${requested.id} is not registered for the selected generation route.` }] };
+      }
+      if (requested.weight < registration.minWeight || requested.weight > registration.maxWeight || requested.weight === 0) {
+        return { content: [{ type: "text", text: `FAILED\nREASON: ${requested.id} weight must be nonzero and within ${registration.minWeight}..${registration.maxWeight}.` }] };
+      }
+      selectedLoras.push({ ...requested, file: path.join(LORAS, registration.file) });
+    }
 
     // ---------------------------------------------
     // Verify installation
@@ -336,6 +382,9 @@ PATH: ${model}`
         }]
       };
     }
+    for (const dependency of [ENCODER, VAE, ...selectedLoras.map(item => item.file)]) {
+      if (!(await exists(dependency))) return { content: [{ type: "text", text: `FAILED\nREASON: required model dependency not found\nPATH: ${dependency}` }] };
+    }
 
     // ---------------------------------------------
     // Output
@@ -347,79 +396,25 @@ PATH: ${model}`
         : `${filename}.png`
     );
 
-    const outputPath = path.join(
-      WORK,
-      outputName
-    );
-
-    // Remove old image with same filename.
-    try {
-      await fs.unlink(outputPath);
-    } catch {
-      // fine
-    }
+    const outputPath = path.join(WORK, outputName);
+    if (!isInsideRoot(outputPath)) return { content: [{ type: "text", text: "FAILED\nREASON: output path is outside the worker staging directory" }] };
+    if (await exists(outputPath)) return { content: [{ type: "text", text: `FAILED\nREASON: refusing to overwrite an existing image\nPATH: ${outputPath}` }] };
 
     // ---------------------------------------------
     // Arguments
     // ---------------------------------------------
 
-    let args;
-
-    if (generator === "normal") {
-      args = [
-        "-m", model,
-
-        "-p", prompt,
-        "-n", negative_prompt,
-
-        "-W", String(width ?? 1920),
-        "-H", String(height ?? 1080),
-
-        "--steps", "4",
-
-        "--sampling-method",
-        "euler",
-
-        "--cfg-scale",
-        "1",
-
-        "--seed",
-        String(seed),
-
-        "--backend",
-        "cuda0",
-
-        "-o",
-        outputPath
-      ];
-    } else {
-      args = [
-        "-m", model,
-
-        "-p", prompt,
-        "-n", negative_prompt,
-
-        "-W", "1024",
-        "-H", "576",
-
-        "--steps", "20",
-
-        "--sampling-method",
-        "euler",
-
-        "--cfg-scale",
-        "4",
-
-        "--seed",
-        String(seed),
-
-        "--backend",
-        "cuda0",
-
-        "-o",
-        outputPath
-      ];
-    }
+    const args = [
+      profile.loadFlag, model, "--llm", ENCODER, "--vae", VAE, "--lora-model-dir", LORAS,
+      "-p", prompt + selectedLoras.map(item => ` <lora:${item.id}:${item.weight}>`).join(""),
+      "-n", negative_prompt,
+      "-W", String(width ?? 1024), "-H", String(height ?? 1024),
+      "--steps", String(steps ?? profile.steps),
+      "--sampling-method", "euler", "--scheduler", "simple",
+      "--cfg-scale", String(cfg_scale ?? profile.cfgScale),
+      "--seed", String(seed), "--backend", "cuda0", "-o", outputPath
+    ];
+    if (selectedLoras.length > 0) args.push("--lora-apply-mode", "at_runtime");
 
     // ---------------------------------------------
     // Generate
@@ -427,15 +422,17 @@ PATH: ${model}`
 
     const result = await runProcess(
       SDCLI,
-      args
+      args,
+      { timeoutMs: IMAGE_TIMEOUT_MS }
     );
 
     const created =
       await exists(outputPath);
 
+    const loraApplication = `${result.stdout}\n${result.stderr}`.match(/\(\s*(\d+)\s*\/\s*(\d+)\s*\)\s*LoRA tensors have been applied/i);
+    const appliedLoraTensors = loraApplication ? Number(loraApplication[1]) : null;
     if (
-      result.exitCode !== 0 ||
-      !created
+      result.exitCode !== 0 || !created || (selectedLoras.length > 0 && !(appliedLoraTensors > 0))
     ) {
       return {
         content: [{
@@ -445,6 +442,8 @@ PATH: ${model}`
 EXIT_CODE: ${result.exitCode}
 FILE_CREATED: ${created}
 PATH: ${outputPath}
+LORAS_REQUESTED: ${selectedLoras.map(item => `${item.id}@${item.weight}`).join(",") || "none"}
+LORA_TENSORS_APPLIED: ${selectedLoras.length ? (loraApplication?.[0] ?? "unconfirmed or zero tensors") : "not requested"}
 
 STDOUT:
 ${result.stdout}
@@ -464,8 +463,18 @@ ${result.stderr}`
         text:
 `SUCCESS
 GENERATOR: ${generator}
+STYLE: ${style}
+PROFILE: ${profileId}
+MODEL_LOAD_FLAG: ${profile.loadFlag}
+MODEL_PATH: ${model}
+ENCODER_PATH: ${ENCODER}
+VAE_PATH: ${VAE}
 PATH: ${outputPath}
 SEED: ${seed}
+STEPS: ${steps ?? profile.steps}
+CFG_SCALE: ${cfg_scale ?? profile.cfgScale}
+LORAS: ${selectedLoras.map(item => `${item.id}@${item.weight}`).join(",") || "none"}
+LORA_TENSORS_APPLIED: ${selectedLoras.length ? loraApplication[0] : "not requested"}
 FILE_SIZE_BYTES: ${stats.size}`
       }]
     };
@@ -689,6 +698,15 @@ ${result.stderr}`
 
     const text =
       result.stdout.trim();
+
+    if (/\b(?:can't|can’t|cannot|unable to|declined to)\s+(?:evaluate|review|inspect|assess)\b/i.test(text)) {
+      return {
+        content: [{
+          type: "text",
+          text: `REVIEW_FAILED\nREASON: Codex declined to evaluate this image.\n\nRAW_RESPONSE:\n${text}`
+        }]
+      };
+    }
 
     const score =
       parseNumber(text, "SCORE");
