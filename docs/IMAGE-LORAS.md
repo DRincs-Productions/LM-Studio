@@ -2,7 +2,7 @@
 
 Questa pagina è il riferimento operativo per Codex e gli agenti che preparano richieste d’immagine. Le LoRA sono facoltative: non vanno applicate a ogni generazione. Se una LoRA corrisponde a un requisito esplicito della scena, Codex può selezionarla tramite `generate_image.loras`, specificando l’ID registrato e il peso entro il suo intervallo. Se il requisito non c’è, omettere `loras`.
 
-SNOFS è un’eccezione già installata. È un adapter LoKR incompatibile con il percorso `sd-cli` verificato e non fa parte di questo catalogo né della selezione facoltativa standard.
+SNOFS è stato rimosso e non è più previsto per l’uso. Le vecchie prove di compatibilità con `sd-cli` sono solo storico e non vanno ripetute.
 
 ## LoRA registrate
 

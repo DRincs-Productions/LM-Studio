@@ -26,6 +26,10 @@ const writerProfiles = {
   cydonia: {
     config: path.join(modelConfigRoot, 'mradermacher', 'Cydonia-24B-v4.3-GGUF', 'Cydonia-24B-v4.3.Q4_K_M.gguf.json'),
     model: 'mradermacher/Cydonia-24B-v4.3-GGUF/Cydonia-24B-v4.3.Q4_K_M.gguf'
+  },
+  zwielicht: {
+    config: path.join(modelConfigRoot, 'mradermacher', 'Zwielicht-27B-GGUF', 'Zwielicht-27B.Q4_K_M.gguf.json'),
+    model: 'mradermacher/Zwielicht-27B-GGUF/Zwielicht-27B.Q4_K_M.gguf'
   }
 };
 const writerCases = ['normal', 'hot', 'violent'];
