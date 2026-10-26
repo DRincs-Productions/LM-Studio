@@ -30,6 +30,10 @@ const writerProfiles = {
   zwielicht: {
     config: path.join(modelConfigRoot, 'mradermacher', 'Zwielicht-27B-GGUF', 'Zwielicht-27B.Q4_K_M.gguf.json'),
     model: 'mradermacher/Zwielicht-27B-GGUF/Zwielicht-27B.Q4_K_M.gguf'
+  },
+  qwenwriter27b: {
+    config: path.join(modelConfigRoot, 'llmfan46', 'Qwen3.5-27B-Writer-V2-uncensored-heretic-GGUF', 'Qwen3.5-27B-Writer-V2-uncensored-heretic-Q4_K_S.gguf.json'),
+    model: 'llmfan46/Qwen3.5-27B-Writer-V2-uncensored-heretic-GGUF/Qwen3.5-27B-Writer-V2-uncensored-heretic-Q4_K_S.gguf'
   }
 };
 const writerCases = ['normal', 'hot', 'violent'];
@@ -90,13 +94,17 @@ async function configForRole(role, writerProfileId = 'hemmingway') {
 async function ask(config, prompt, system, cwd, output) {
   await fs.writeFile(output + '.request.json', JSON.stringify({ model: config.model, engine: config.engine, prompt, system, config: config.config }, null, 2) + '\n');
   if (config.engine === 'writer-api') {
-    const ps = spawnSync(lms, ['ps', '--json'], { encoding: 'utf8', windowsHide: true });
-    if (ps.status !== 0) throw Error(`Cannot inspect Writer model instances: ${ps.stderr}`);
-    const instances = JSON.parse(ps.stdout);
-    const matches = instances.filter(instance => instance.indexedModelIdentifier === config.model || instance.path === config.model);
-    if (instances.length !== 1 || matches.length !== 1 || matches[0].status !== 'idle' || matches[0].queued) throw Error('Component Writer requires exactly one idle loaded model instance, matching the selected Writer profile');
-    const result = await localChat.predict(matches[0].identifier, prompt, system, config.config, 'writer');
-    result.modelInstance = matches[0];
+    await localChat.ensure();
+    const response = await fetch('http://127.0.0.1:1234/api/v1/models', { signal: AbortSignal.timeout(10000) });
+    if (!response.ok) throw Error(`Cannot inspect Writer model instances: LM Studio API returned HTTP ${response.status}`);
+    const inventory = await response.json();
+    const loadedModels = (inventory.models || []).filter(model => model.type === 'llm' && model.loaded_instances?.length);
+    const expectedKey = path.basename(path.dirname(config.model)).replace(/-gguf$/i, '').toLowerCase();
+    const matchingModels = loadedModels.filter(model => model.key === expectedKey);
+    if (loadedModels.length !== 1 || matchingModels.length !== 1 || matchingModels[0].loaded_instances.length !== 1) throw Error(`Component Writer requires exactly one loaded instance of ${expectedKey}; found ${loadedModels.map(model => `${model.key} (${model.loaded_instances?.length || 0})`).join(', ') || 'none'}`);
+    const instance = matchingModels[0].loaded_instances[0];
+    const result = await localChat.predict(instance.id, prompt, system, config.config, 'writer');
+    result.modelInstance = { ...instance, modelKey: matchingModels[0].key, displayName: matchingModels[0].display_name, quantization: matchingModels[0].quantization, sizeBytes: matchingModels[0].size_bytes, contextLength: instance.config?.context_length };
     await fs.writeFile(output + '.raw.json', JSON.stringify(result, null, 2) + '\n');
     return result.text;
   }
@@ -112,13 +120,25 @@ async function ask(config, prompt, system, cwd, output) {
 }
 
 const role = arg('--role');
+const regiaCase = arg('--regia-case');
+if (regiaCase && role !== 'regia') throw Error('--regia-case can only be used with --role regia');
+if (role === 'regia' && regiaCase) {
+  if (!['empty', 'modify', 'resume'].includes(regiaCase)) throw Error('--regia-case must be empty, modify, or resume');
+  const result = spawnSync(process.execPath, [path.join(root, 'project-worker', 'mcp', 'orchestration', 'regia-component-test.mjs'), '--case', regiaCase], {
+    cwd: path.join(root, 'project-worker', 'mcp'), stdio: 'inherit', windowsHide: true
+  });
+  if (result.error || result.status !== 0) throw Error(`Regia ${regiaCase} component test failed (${result.status ?? result.error?.message ?? 'unknown error'})`);
+  process.exit(0);
+}
 if (role === 'sound_designer') throw Error('Run `node project-worker/mcp/orchestration/audio-component-test.mjs` instead. Codex coordinates the Audio Worker test and does not act as the Sound Designer.');
 if (!roles.includes(role)) throw Error(`Usage: node component-test.mjs --role ${roles.join('|')}`);
 const writerProfileId = role === 'writer' ? (arg('--writer-profile') || 'hemmingway') : null;
 const writerCase = role === 'writer' ? (arg('--writer-case') || 'normal') : null;
 const writerBriefFile = role === 'writer' ? arg('--writer-brief-file') : null;
+const comparisonSeed = role === 'writer' ? arg('--comparison-seed') : null;
 if (role === 'writer' && !writerCases.includes(writerCase)) throw Error(`Writer case must be one of: ${writerCases.join('|')}`);
-if (role !== 'writer' && (arg('--writer-profile') || arg('--writer-case') || arg('--writer-brief-file'))) throw Error('Writer profile, case, and brief flags can only be used with --role writer');
+if (comparisonSeed && !/^[a-f0-9]{16}$/.test(comparisonSeed)) throw Error('--comparison-seed must be 16 lowercase hexadecimal characters');
+if (role !== 'writer' && (arg('--writer-profile') || arg('--writer-case') || arg('--writer-brief-file') || arg('--comparison-seed'))) throw Error('Writer profile, case, brief, and comparison seed flags can only be used with --role writer');
 const id = runId();
 const runDirectory = path.join(productionTests, id);
 await fs.mkdir(runDirectory, { recursive: true });
@@ -127,7 +147,7 @@ const brief = role === 'writer'
   : uniqueBrief();
 const profile = await configForRole(role, writerProfileId || 'hemmingway');
 const manifestPath = path.join(runDirectory, 'manifest.json');
-const initialManifest = { runId: id, seed: id, role, ...(role === 'writer' ? { writerProfile: writerProfileId, writerCase, ...(writerBriefFile ? { writerBriefFile: path.resolve(writerBriefFile) } : {}) } : {}), model: profile.model, predictionSettings: profile.config?.operation?.fields?.filter(field => field.key !== 'llm.prediction.systemPrompt') || [], loadSettings: profile.config?.load?.fields || [], mode: 'component', uniqueInput: brief, status: 'started', productionStarted: false, implementationStarted: false };
+const initialManifest = { runId: id, seed: id, ...(comparisonSeed ? { comparisonSeed } : {}), role, ...(role === 'writer' ? { writerProfile: writerProfileId, writerCase, ...(writerBriefFile ? { writerBriefFile: path.resolve(writerBriefFile) } : {}) } : {}), model: profile.model, predictionSettings: profile.config?.operation?.fields?.filter(field => field.key !== 'llm.prediction.systemPrompt') || [], loadSettings: profile.config?.load?.fields || [], mode: 'component', uniqueInput: brief, status: 'started', productionStarted: false, implementationStarted: false };
 await fs.writeFile(manifestPath, JSON.stringify(initialManifest, null, 2) + '\n');
 const system = profile.system || `You are ${names[role]}. Follow the role task and project brief. Keep the response useful and concrete.`;
 const client = new Client({ name: 'bionic-component-test-runner', version: '1.0.0' });
@@ -181,7 +201,7 @@ try {
   const record2 = await client.callTool({ name: 'record_component_test', arguments: { run_id: id, role, input: recordableInput(actualSecondPrompt, path.join(runDirectory, 'model-output-2.txt.request.json')), model: profile.model, response: second, interaction: role === 'regia' ? 'analysis' : 'revision', mock_reply: 'Recorded. This component test ends without starting production.' } });
   if (record2.isError) throw Error(record2.content?.map(c => c.text || '').join('\n') || 'MCP failed to record second interaction');
   const result = {
-    runId: id, seed: id, role, ...(role === 'writer' ? { writerProfile: writerProfileId, writerCase, ...(writerBriefFile ? { writerBriefFile: path.resolve(writerBriefFile) } : {}), predictionTimings, totalPredictionMs: predictionTimings.reduce((sum, item) => sum + item.elapsedMs, 0) } : {}), model: profile.model, predictionSettings: profile.config?.operation?.fields?.filter(field => field.key !== 'llm.prediction.systemPrompt') || [], loadSettings: profile.config?.load?.fields || [], mode: 'component', status: 'completed_pending_review', createdAt: new Date().toISOString(),
+    runId: id, seed: id, ...(comparisonSeed ? { comparisonSeed } : {}), role, ...(role === 'writer' ? { writerProfile: writerProfileId, writerCase, ...(writerBriefFile ? { writerBriefFile: path.resolve(writerBriefFile) } : {}), predictionTimings, totalPredictionMs: predictionTimings.reduce((sum, item) => sum + item.elapsedMs, 0) } : {}), model: profile.model, predictionSettings: profile.config?.operation?.fields?.filter(field => field.key !== 'llm.prediction.systemPrompt') || [], loadSettings: profile.config?.load?.fields || [], mode: 'component', status: 'completed_pending_review', createdAt: new Date().toISOString(),
     uniqueInput: brief, modelPrompts: [actualTask, actualSecondPrompt], controlledReply: mockReply, projectFile: filename, projectFilePath: path.join(runDirectory, filename),
     interactions: [firstEvent, 'simulated_reply', 'revision'],
     outputs: [path.join(runDirectory, 'model-output-1.txt'), path.join(runDirectory, 'model-output-2.txt')],

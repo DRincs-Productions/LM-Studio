@@ -10,15 +10,19 @@ Il progetto usa hardware di seconda mano e comprende Shadow PC nell’ambiente d
 
 ## Architettura generale
 
-La conversazione creativa può svolgersi con GPT in Codex oppure con la Regia locale, direttamente in Bionic o attraverso Codex come tramite. Le decisioni confluiscono nello stesso Project File. Dopo l’approvazione esplicita della fase creativa, il Coordinatore governa la produzione e le risorse locali. Scrittore, Disegnatore e Progettista sonoro preparano i contenuti; i risultati ritornano al punto d’ingresso usato dall’utente. La programmazione richiede una scelta e un’approvazione separate.
+La conversazione creativa standard può svolgersi con GPT in Codex, che coordina anche la produzione e le risorse locali. In alternativa, la Regia locale può dialogare direttamente in Bionic o, su richiesta esplicita, attraverso Codex come tramite; dopo l’approvazione della fase creativa passa il progetto al Coordinatore Codex. Tutte le decisioni confluiscono nello stesso Project File. Scrittore, Disegnatore e Progettista sonoro preparano i contenuti; i risultati ritornano al punto d’ingresso usato dall’utente. La programmazione richiede una scelta e un’approvazione separate.
 
 ```mermaid
 flowchart TD
-    U[Utente] <--> X[Codex · dialogo GPT e tramite]
+    U <--> X[Codex · dialogo GPT e coordinamento]
     U <--> B[Bionic · dialogo diretto]
     X <-->|su richiesta esplicita| R[Regia]
     B <--> R
-    R --> C[Coordinatore]
+    R -->|richiesta fonti| PW[Project Worker]
+    F[Ink e docs selezionati] -->|sola lettura| PW
+    PW -->|fonti restituite| R
+    X --> C[Coordinatore]
+    R -->|handoff approvato| C
     C --> PRODUZIONE
     subgraph PRODUZIONE[Produzione]
         W[Scrittore]
@@ -45,10 +49,13 @@ flowchart LR
     end
     C[Coordinatore]
     P[Programmatore]
+    PW[Project Worker MCP]
     U <-->|dialogo| REGIA
     U <-->|dialogo GPT| CX[Codex]
     CX <-->|tramite su richiesta| REGIA
-    F -->|Analisi| Q
+    REGIA -->|lettura richiesta| PW
+    F -->|Ink e docs in sola lettura| PW
+    PW -->|fonti consultate| REGIA
     REGIA -->|handoff del progetto approvato| C
     C -->|dubbi o proposta di sviluppo| REGIA
     REGIA -->|specifica approvata per l’implementazione| P
@@ -58,7 +65,7 @@ Prima di proporre una nuova fase, la Regia deve leggere il Project File e la doc
 
 Le decisioni canoniche vengono conservate nel Project File Markdown, scritto in inglese per essere utilizzato da tutta la pipeline. Quando ritiene definita una fase, la Regia presenta il piano all’utente e richiede un’approvazione esplicita. Solo dopo l’approvazione passa Project File e contesto operativo al Coordinatore.
 
-**Limite attuale:** il Project Worker MCP offre a Regia la lettura del Project File e dello stato di orchestrazione, ma non espone ancora strumenti dedicati per esplorare la cartella del progetto software, la sua documentazione completa o la libreria degli asset. Per soddisfare pienamente questo ruolo, tali fonti devono essere rese consultabili in modo sicuro e circoscritto al progetto; la Regia non deve presumere di averle lette quando non sono accessibili.
+Il Project Worker MCP consente alla Regia di associare la cartella di gioco scelta dall’utente e leggere in sola lettura i file Ink e i documenti Markdown sotto `docs/`. Non espone gli altri file del progetto né consente alla Regia di modificarli. Quando propone una modifica, indica le fonti consultate e il cambiamento suggerito e attende l’approvazione; la scrittura del gioco resta al Programmatore dopo il gate separato.
 
 ### Coordinatore
 
@@ -312,6 +319,8 @@ Gli MCP sono server reali che espongono strumenti ai modelli e gestiscono i pass
 ```mermaid
 flowchart LR
     R[Regia in Bionic] -->|strumenti di progetto e handoff| PW[Project Worker MCP]
+    F[Cartella di gioco selezionata] -->|solo *.ink e docs/**/*.md| PW
+    PW -->|fonti lette su richiesta| R
     C[Codex] -->|avvia e coordina| IW[Image Worker MCP]
     C -->|recupero e trasferimento asset| AW[Asset Worker MCP]
     C -->|produzione e revisione audio| SW[Audio Worker MCP]
@@ -323,7 +332,7 @@ flowchart LR
 
 ### Dove si configurano
 
-Il **Project Worker** è l’MCP collegato a Bionic. Fornisce alla Regia gli strumenti per creare e leggere il Project File, registrare il progetto, avviare il Coordinatore, eseguire i passaggi di prova dei test di componente e avviare il Programmatore dopo scelta e conferma separate. È registrato nella configurazione MCP interna di Bionic sotto `C:\Users\Shadow\.lmstudio\apps\bionic\.internal`. Il comando `lms` disponibile in questo PC non offre un sottocomando `mcp`; quindi il ripristino della registrazione si esegue dalle impostazioni MCP dell’app.
+Il **Project Worker** è l’MCP collegato a Bionic. Fornisce alla Regia gli strumenti per creare e leggere il Project File, registrare il progetto, associare una cartella di gioco selezionata dall’utente e consultare in sola lettura i sorgenti Ink e i Markdown sotto `docs/`. L’accesso è limitato alle radici Programmer configurate; link simbolici, traversal, altri tipi di file e scritture del gioco sono rifiutati. Il worker può inoltre avviare il Coordinatore, eseguire i passaggi di prova dei test di componente e avviare il Programmatore dopo scelta e conferma separate. È registrato nella configurazione MCP interna di Bionic sotto `C:\Users\Shadow\.lmstudio\apps\bionic\.internal`. Il comando `lms` disponibile in questo PC non offre un sottocomando `mcp`; quindi il ripristino della registrazione si esegue dalle impostazioni MCP dell’app.
 
 Il Project Worker offre due strumenti per il Programmatore: `select_programmer` registra Claude o Codex senza eseguire codice; `start_programmer` accetta solo la selezione pendente e una conferma esplicita separata. Entrambi usano la directory progetto indicata e configurata tra le radici ammesse. Il comando avviato non riceve un override del modello. Se il provider scelto manca, il tool restituisce un errore e non passa all’altro.
 
@@ -345,17 +354,22 @@ Da `project-worker/mcp`, la prova dedicata è `npm run test:component:relay`: ge
 
 Verifica del 24 ottobre 2026: **26 test automatici passati** e prova componente reale `20261024165920360_b7e258f95bf675ce` completata con cronologia ripresa e nessun job produttivo. Il tramite accetta prosa italiana senza riscriverla e usa un contesto di 32768 token; il limite esplicito del transcript evita troncamenti silenziosi. Due errori iniziali (timeout e formato JSON obbligatorio) sono stati corretti conservando le prove fallite. Non è stato eseguito un ciclo produttivo completo dal nuovo ingresso. Dettagli in [Verifica Codex → Regia](production-tests/CODEX-REGIA-RELAY-2026-10-24.md).
 
-Il test di componente usa un input nuovo per ogni esecuzione e mette alla prova un ruolo reale alla volta. Regia, Coordinatore e Scrittore verificano le interazioni senza avviare fasi downstream. Il test Designer genera e revisiona un’immagine candidata in staging. Il test audio usa Stable Audio come modello sotto prova e Codex soltanto come Coordinatore: crea un WAV, lo ispeziona, lo fa ascoltare a Qwen, registra la revisione e, se supera il gate, lo finalizza e pubblica in un percorso locale/remoto univoco del run. Nessun test componente avvia il Programmatore. Il test completo usa un Project File e un progetto Pixi’VN/Ink temporanei, gli MCP in modalità reale e controlla i file effettivamente consegnati.
+Il test di componente usa un input nuovo per ogni esecuzione e mette alla prova un ruolo reale alla volta. Regia, Coordinatore e Scrittore verificano le interazioni senza avviare fasi downstream. Il test Designer genera e revisiona un’immagine candidata in staging. Il test audio usa Stable Audio come modello sotto prova e Codex soltanto come Coordinatore: crea un WAV, lo ispeziona, lo fa ascoltare a Qwen, registra la revisione e, se supera il gate, lo finalizza e pubblica in un percorso locale/remoto univoco del run. Nessun test componente avvia il Programmatore. Il test completo parte da Codex come interlocutore e Coordinatore; usa un Project File e un progetto Pixi’VN/Ink temporanei, gli MCP in modalità reale e controlla i file effettivamente consegnati. Il percorso Regia/Bionic si prova separatamente quando è l’oggetto specifico della verifica.
+
+Nel caso `modify`, `npm create pixi-vn@latest` può avviare automaticamente installazioni npm e inizializzare preset UI: sono passaggi normali dello scaffold temporaneo, quindi il runner li lascia terminare e ne conserva l’output. Cache e prefisso npm globale vanno indirizzati alla directory del run quando supportato. Un errore reale lascia intatti directory parziale e log; non si rilancia lo scaffold nello stesso run.
 
 Da `C:\Users\Shadow\.lmstudio\project-worker\mcp`:
 
 ```powershell
 npm test
 npm run test:component -- --role regia
+npm run test:component -- --role regia --regia-case empty
+npm run test:component -- --role regia --regia-case modify
+npm run test:component -- --role regia --regia-case resume
 npm run test:complete -- --root="C:\Users\Shadow\.lmstudio\production-tests\complete\<nuova-cartella>"
 ```
 
-Verifica Regia del 24 ottobre 2026: `npm test` supera 20 controlli. Il runner `npm run test:component -- --role regia` conserva manifest con seed univoco, output CLI grezzi, errori e traccia MCP; verifica la rilettura del Project File e fornisce al secondo turno brief e risposta precedente. La conversazione di prova richiede italiano e riepilogo canonico inglese. Il modello riceve il nome esatto del documento già creato dal runner. Questo percorso verifica il dialogo del modello reale e gli strumenti MCP invocati dal runner: non verifica chiamate MCP autonome del modello, l'interfaccia Bionic o un handoff produttivo. I risultati dettagliati sono in [Rapporto componente Regia](production-tests/REGIA-2026-10-24.md).
+Verifica Regia del 24 ottobre 2026: `npm test` supera 20 controlli. Il runner legacy `npm run test:component -- --role regia` conserva manifest con seed univoco, output CLI grezzi, errori e traccia MCP; verifica la rilettura del Project File e fornisce al secondo turno brief e risposta precedente. La conversazione di prova richiede italiano e riepilogo canonico inglese. I nuovi casi dedicati verificano rispettivamente dialogo da cartella vuota, lettura autonoma di sorgenti Ink e documenti `docs/` con proposta senza scrittura, e ripresa della stessa sessione dopo restart/sospensione MCP. Nel caso Ink, il runner crea un template Pixi’VN/Ink usa e getta, inserisce documenti fixture e verifica che gli hash dei sorgenti non cambino. Nessun caso avvia produzione o implementazione. Per il test completo l’ingresso standard è Codex: il brief creativo iniziale, il Project File canonico e le approvazioni di prova vengono gestiti dal percorso Codex/Project Worker, senza usare `lms chat` come interfaccia alla Regia.
 
 Se un test completo termina con handback `error`, conserva il manifest e gli output parziali. Dopo aver corretto la causa e verificato che il Project Worker abbia un handback completato, la ripresa esplicita usa lo stesso Project File e registra un nuovo job:
 
@@ -371,7 +385,9 @@ Il test audio completo del componente si avvia con `node project-worker/mcp/orch
 
 Esito componente Scrittore del 24 ottobre 2026: **non superato**. Le prove con Hemmingway mostrano alterazioni del canone e azioni oltre il finale richiesto; le correzioni al prompt non hanno ancora risolto questi difetti. Il percorso di test è stato allineato all'API di produzione, con istanza verificata e registrazione corretta. `npm test`: 21 controlli passati. Il dettaglio e gli artefatti sono nel rapporto collegato sotto.
 
-La valutazione isolata del Writer richiede tre esecuzioni distinte per lo stesso modello: narrazione normale, scena hot consensuale con personaggi adulti, e scena cruenta di violenza fittizia. Ogni run crea premise, canone, scenario, Project File, seed e cartella nuovi; si giudicano aderenza al brief, continuità, tono e finale, senza usare conteggio parole o rifinitura stilistica come gate. Per PaintedFantasy, caricare da terminale il modello una volta (`lms load ms3.2-paintedfantasy-v4.1-24b --identifier writer-paintedfantasy-test --context-length 8192 --gpu 0.85 --parallel 1 --yes`) e poi, dalla cartella `project-worker\mcp`, eseguire separatamente:
+La valutazione isolata del Writer richiede tre esecuzioni distinte per lo stesso modello: narrazione normale, scena hot/erotica esplicita e consensuale tra adulti, e scena cruenta di violenza fittizia senza violenza sessuale. Ogni run crea premise, canone, scenario, Project File, seed e cartella nuovi. Per ciascuno si valuta la velocità (prima stesura e revisione, token/s quando disponibili), la qualità narrativa (chiarezza, voce, dialoghi, ritmo e coerenza) e l’aderenza a informazioni e vincoli (canone, beat richiesti, tono, consenso, limiti e finale). Si assegnano punteggi 1–5 con prove brevi e si segnalano invenzioni, omissioni, contraddizioni o violazioni. Conteggio parole e rifinitura superficiale da soli non sono criteri di superamento. Per PaintedFantasy, caricare da terminale il modello una volta (`lms load ms3.2-paintedfantasy-v4.1-24b --identifier writer-paintedfantasy-test --context-length 8192 --gpu 0.85 --parallel 1 --yes`) e poi, dalla cartella `project-worker\mcp`, eseguire separatamente:
+
+Per confrontare due Writer, si creano nuove tracce abbinate (una per ciascun genere) e si eseguono entrambi i modelli sulla stessa traccia; ogni esecuzione mantiene run ID, Project File e output propri. Non si riciclano premise di valutazioni precedenti: dopo una prova singola si rilanciano entrambi i modelli con nuove tracce abbinate. `--comparison-seed` identifica la traccia condivisa; è un seme fixture e non controlla la casualità interna del modello, perché l’API locale usata dal runner non espone un parametro di sampling seed.
 
 ```powershell
 npm run test:component -- --role writer --writer-profile paintedfantasy --writer-case normal
@@ -381,7 +397,21 @@ npm run test:component -- --role writer --writer-profile paintedfantasy --writer
 
 Il runner usa LocalChatApi, conserva prompt e output nel manifest e impiega una richiesta di revisione controllata simulata; non avvia il Narrative Reviewer reale, produzione o creazione asset. Il modello operativo e i test precedenti Hemmingway restano invariati. Vedere [Rapporto componente Scrittore](production-tests/WRITER-2026-10-24.md) per gli esiti precedenti.
 
+Per Qwen3.5 27B Writer V2 Uncensored Heretic si usa la variante installata Q4_K_S, con configurazione associata al suo esatto percorso GGUF. Dopo aver scaricato il modello, dalla cartella `project-worker\mcp` scaricare dalla memoria il Qwen usato nella prova Regia, caricare soltanto il Writer e avviare i tre casi in sequenza:
+
+```powershell
+lms unload codex-regia-relay
+lms load qwen3.5-27b-writer-v2-uncensored-heretic --identifier writer-qwen35-27b-test --context-length 8192 --gpu 0.85 --parallel 1 --yes
+npm run test:component -- --role writer --writer-profile qwenwriter27b --writer-case normal
+npm run test:component -- --role writer --writer-profile qwenwriter27b --writer-case hot
+npm run test:component -- --role writer --writer-profile qwenwriter27b --writer-case violent
+```
+
 Prova componente PaintedFantasy del 25 ottobre 2026: i tre run sono stati completati, ma nessuno ha superato tutti i vincoli del proprio brief. Il caso normale perde la continuità della chiave, continua oltre il finale richiesto e inventa una storia familiare per la radio. Il caso hot produce una scena erotica esplicita tra adulti, ma la revisione non mantiene il vincolo dell’anello né rende reciproco il consenso verbale richiesto. Il caso cruento mostra sangue ma resta meno grafico del brief e aggiunge una direttiva visiva dopo l’endpoint. Manifest e valutazioni Codex: [normale](production-tests/components/20261025100743302_8b1e8043d248/manifest.json), [hot](production-tests/components/20261025101110320_c215b36dd46a/manifest.json), [cruenta](production-tests/components/20261025101532916_664092e28662/manifest.json). Il primo tentativo normale è stato conservato come fallimento di configurazione: il modello rifiutava il parametro `reasoning`; il profilo ora non lo invia.
+
+Valutazione componente Qwen3.5 27B Writer V2 Uncensored Heretic del 26 ottobre 2026: tutti i casi (`normal`, `hot`, `violent`) hanno completato stesura e revisione simulata con la variante Q4_K_S, a circa 7,95–8,54 token/s. Il modello non ha superato il test: ha oltrepassato l’endpoint e ignorato una correzione nel caso normale; ha omesso l’anello e contraddetto la sobrietà nel caso hot; ha assegnato Aki al personaggio sbagliato, aggiunto una seconda lesione e superato l’endpoint nel caso cruento. Punteggi motivati, tempi e manifest: [Valutazione Qwen3.5 27B Writer](production-tests/WRITER-QWEN35-27B-UNCENSORED-2026-10-26.md).
+
+Confronto abbinato Hemmingway–Qwen3.5 del 26 ottobre 2026: tre nuovi brief condivisi fra le due varianti, con run e Project File distinti. Entrambi hanno completato normale, hot e cruento. Qwen è stato circa 3,1–3,7 volte più rapido per scena grazie a output più brevi; Hemmingway ha ottenuto una prosa più sviluppata nel hot e nel cruento, ma ha introdotto più deviazioni dal canone e dai limiti. Qwen resta più rapido, ma nessuno rispetta tutti i vincoli o tutte le revisioni: il confronto non giustifica un cambio del Writer operativo. Valutazioni, velocità, brief comuni e manifest/output: [Confronto Hemmingway–Qwen3.5](production-tests/WRITER-HEMMINGWAY-QWEN35-PAIRED-2026-10-26.md). Cinque tentativi Qwen hot falliti prima della generazione e un errore di cleanup post-generazione nel normale sono stati conservati nel registro.
 
 - Windows, Node.js e npm. In questa macchina sono presenti Node.js 24 e npm 11.
 - Codex CLI per i worker usati dal Coordinatore.

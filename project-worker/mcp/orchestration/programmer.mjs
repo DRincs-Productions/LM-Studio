@@ -15,7 +15,7 @@ function inside(candidate, root) {
   return item === base || item.startsWith(base + path.sep.toLowerCase());
 }
 
-async function allowedProjectRoot(projectRoot) {
+export async function allowedProjectRoot(projectRoot) {
   const roots = process.env.BIONIC_PROGRAMMER_ROOTS
     ? process.env.BIONIC_PROGRAMMER_ROOTS.split(path.delimiter).filter(Boolean)
     : defaultRoots;

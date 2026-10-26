@@ -11,6 +11,8 @@ import { Store, sha, waitHandback, alive } from './core.mjs';
 import { discoverBinding, MemoryManager } from './bionic.mjs';
 import { runJob } from './runner.mjs';
 import { selectProgrammer, recordComponentTest } from './programmer.mjs';
+import { attachProjectRoot, listNarrativeSources, readNarrativeSource } from './project-sources.mjs';
+import { predictWithMcpTools } from './regia-tool-loop.mjs';
 import { narrativeContentChecks, narrativePresentationChecks, reviewPassEvidenceIssues, deterministicImagePlan, writerInstruction, reviewerInstruction, compactNarrativeCanon, readLmStudioChatStream, visualMomentPrompts, requiredTimelineChecks, writerRevisionScopeChecks, singlePlaybackChecks, narrativeCanonBoundaryChecks, validateSceneContract, createSceneContract, sourceSpecifiesPov } from './production.mjs';
 
 const handback = { summary: 'Prototype complete. Alex remains blonde and wears a black leather jacket.', completedTasks: ['Created prototype'], assets: [], problems: [], decisions: ['Choose a mission'], questionForUser: 'Which mission should Alex take?' };
@@ -418,4 +420,108 @@ test('Regia can request larger local context while production defaults remain un
     assert.deepEqual(requests.map(item=>item.context_length),[8192,32768]);
     await assert.rejects(api.predict('fixture-model','A','B',{},'regia',{contextLength:-1}),/context/);
   } finally {globalThis.fetch=originalFetch;}
+});
+
+test('Regia project-source tools list and read only Ink and docs Markdown without modifying sources', async t => {
+  const f = await fixture(t);
+  const projectRoot = path.join(f.root, 'game');
+  await fs.mkdir(path.join(projectRoot, 'docs', 'characters'), { recursive: true });
+  const inkPath = path.join(projectRoot, 'ink', 'start.ink');
+  const docPath = path.join(projectRoot, 'docs', 'characters', 'new-character.md');
+  const hiddenPath = path.join(projectRoot, 'package.json');
+  await fs.mkdir(path.dirname(inkPath), { recursive: true });
+  await fs.writeFile(inkPath, '=== start ===\nA station light flickers.\n-> END\n');
+  await fs.writeFile(docPath, '# New character\nAdult archivist; speaks in concise, dry sentences.\n');
+  await fs.writeFile(hiddenPath, '{"private":true}\n');
+  const originalRoot = process.env.BIONIC_PROGRAMMER_ROOTS;
+  process.env.BIONIC_PROGRAMMER_ROOTS = f.root;
+  try {
+    const state = await attachProjectRoot(f.store, 'project.md', projectRoot);
+    assert.equal(state.projectRoot, await fs.realpath(projectRoot));
+  } finally {
+    if (originalRoot === undefined) delete process.env.BIONIC_PROGRAMMER_ROOTS;
+    else process.env.BIONIC_PROGRAMMER_ROOTS = originalRoot;
+  }
+  const inventory = await listNarrativeSources(f.store, 'project.md');
+  assert.deepEqual(inventory.files.map(file => file.path).sort(), ['docs/characters/new-character.md', 'ink/start.ink']);
+  assert.ok(inventory.files.every(file => /^[a-f0-9]{64}$/.test(file.sha256)));
+  const read = await readNarrativeSource(f.store, 'project.md', 'docs/characters/new-character.md');
+  assert.match(read.content, /concise, dry sentences/);
+  assert.equal(read.sha256, sha(read.content));
+  await assert.rejects(readNarrativeSource(f.store, 'project.md', '../project.md'), /Invalid project-relative/);
+  await assert.rejects(readNarrativeSource(f.store, 'project.md', 'package.json'), /Only Ink files/);
+  assert.equal(await fs.readFile(inkPath, 'utf8'), '=== start ===\nA station light flickers.\n-> END\n');
+  assert.equal(await fs.readFile(hiddenPath, 'utf8'), '{"private":true}\n');
+});
+
+test('Regia project-source reader rejects linked files that resolve outside the selected root', async t => {
+  const f = await fixture(t);
+  const projectRoot = path.join(f.root, 'game');
+  const docs = path.join(projectRoot, 'docs');
+  const outside = path.join(f.root, 'outside.md');
+  await fs.mkdir(docs, { recursive: true });
+  await fs.writeFile(outside, '# Outside project\n');
+  const originalRoot = process.env.BIONIC_PROGRAMMER_ROOTS;
+  process.env.BIONIC_PROGRAMMER_ROOTS = f.root;
+  try { await attachProjectRoot(f.store, 'project.md', projectRoot); }
+  finally {
+    if (originalRoot === undefined) delete process.env.BIONIC_PROGRAMMER_ROOTS;
+    else process.env.BIONIC_PROGRAMMER_ROOTS = originalRoot;
+  }
+  const link = path.join(docs, 'external.md');
+  try { await fs.symlink(outside, link, 'file'); }
+  catch (error) {
+    if (!['EPERM', 'EACCES', 'UNKNOWN'].includes(error.code)) throw error;
+    t.skip('This Windows account cannot create symbolic links');
+    return;
+  }
+  await assert.rejects(readNarrativeSource(f.store, 'project.md', 'docs/external.md'), /resolves outside|Linked sources/);
+  const inventory = await listNarrativeSources(f.store, 'project.md');
+  assert.equal(inventory.files.length, 0);
+});
+
+test('Regia can associate only a project directory inside configured Programmer roots', async t => {
+  const f = await fixture(t);
+  const approved = path.join(f.root, 'approved');
+  const rejected = path.join(f.root, 'rejected');
+  await fs.mkdir(approved, { recursive: true });
+  await fs.mkdir(rejected, { recursive: true });
+  const originalRoot = process.env.BIONIC_PROGRAMMER_ROOTS;
+  process.env.BIONIC_PROGRAMMER_ROOTS = approved;
+  try {
+    const attached = await attachProjectRoot(f.store, 'project.md', approved);
+    assert.equal(attached.projectRoot, await fs.realpath(approved));
+    await assert.rejects(attachProjectRoot(f.store, 'project.md', rejected), /outside configured Programmer roots/);
+  } finally {
+    if (originalRoot === undefined) delete process.env.BIONIC_PROGRAMMER_ROOTS;
+    else process.env.BIONIC_PROGRAMMER_ROOTS = originalRoot;
+  }
+});
+
+test('Regia tool-call loop permits only the read-only source tools and returns final prose', async () => {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  const responses = [
+    { choices: [{ message: { role: 'assistant', content: null, tool_calls: [{ id: 'tool-1', type: 'function', function: { name: 'list_narrative_sources', arguments: '{"filename":"project.md"}' } }] } }] },
+    { choices: [{ message: { role: 'assistant', content: 'Ho letto il progetto. Quale tono preferisci?', tool_calls: [] } }] }
+  ];
+  globalThis.fetch = async (_url, options) => {
+    requests.push(JSON.parse(options.body));
+    return new Response(JSON.stringify(responses.shift()), { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  let calls = 0;
+  try {
+    const result = await predictWithMcpTools({
+      model: 'regia-fixture', system: 'system', prompt: 'user',
+      tools: [{ name: 'list_narrative_sources', description: 'List files', inputSchema: { type: 'object', properties: {} } }],
+      callTool: async name => { calls++; assert.equal(name, 'list_narrative_sources'); return { content: [{ type: 'text', text: '{"files":[]}' }] }; }
+    });
+    assert.equal(result.text, 'Ho letto il progetto. Quale tono preferisci?');
+    assert.equal(result.toolCalls, 1);
+    assert.equal(calls, 1);
+    assert.equal(requests.length, 2);
+    assert.equal(requests[0].tool_choice, 'auto');
+    assert.ok(requests[1].messages.some(message => message.role === 'tool' && message.tool_call_id === 'tool-1'));
+  } finally { globalThis.fetch = originalFetch; }
+  await assert.rejects(predictWithMcpTools({ model: 'x', system: 's', prompt: 'p', tools: [{ name: 'update_project_file' }], callTool: async () => ({}) }), /read-only narrative-source/);
 });

@@ -21,6 +21,10 @@ export class LocalChatApi {
   constructor(lms = path.join(process.env.USERPROFILE, '.lmstudio', 'bin', 'lms.exe'), runner = run) { this.lms = lms; this.runner = runner; this.owned = false; this.started = false; }
   async ensure() {
     if (this.started) return;
+    try {
+      const probe = await fetch('http://127.0.0.1:1234/api/v1/models', { signal: AbortSignal.timeout(1500) });
+      if (probe.ok) { this.started = true; return; }
+    } catch {}
     const status = await this.runner(this.lms, ['server', 'status']);
     const message = (status.stdout || '') + (status.stderr || '');
     if (/server is running on port 1234/i.test(message)) { this.started = true; return; }
