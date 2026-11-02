@@ -88,3 +88,8 @@ Use the bionic-regia-orchestration skill for detailed routing, canonical-file pe
 ### Isolated Planner evaluation
 
 Run `npm run test:planner` once from `project-worker\mcp`. The component runner creates a fresh run ID and independent fixtures, obtains Codex and Qwen proposals in parallel, and has Codex merge them into validated SceneContracts. It records prompts, model/config identifiers, proposals, merged contracts, hashes and outcomes under `production-tests\components`. It must not invoke Writer, production, asset creation, finalization or publication. Preserve partial evidence and do not replay uncertain model calls. Record the blind paired comparison and selected planner arrangement in the run report.
+
+
+## Shadow Controller MCP rollout
+
+For Shadow Controller work, follow [phase 1](handoffs/01-shadow-implementation.md) and [phase 2](handoffs/02-physical-pc-validation.md) in order. Keep the README architecture note aligned with any changes. Develop and test the local project source on Shadow PC; never install the published Shadow Controller MCP package there. Real Shadow launcher GUI tests belong exclusively to the physical Windows PC phase. Start physical-PC testing with source registration and migrate that host to the npm release only after successful validation. Prioritize a verified LM Studio target-model inference check: when it works, do not inspect or interact with Shadow launcher. Preserve existing worker interfaces and VRAM coordination; do not fake session activity with random mouse movement or clicks. Record evidence and limitations without claiming unexecuted tests passed.
