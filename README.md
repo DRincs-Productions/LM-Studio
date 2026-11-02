@@ -519,20 +519,3 @@ Confronto controllato Hemmingway–Cydonia 24B v4.3 del 25 ottobre 2026: entramb
 
 Test componente Planner del 25 ottobre 2026: `npm run test:planner` ha completato quattro fixture nuove usando Codex e Qwen3 8B in parallelo, con merge Codex e validazione dei contratti prima del Writer. Nella valutazione cieca bilanciata in due round, Codex ha ottenuto 99,125/100 e vinto 8 confronti su 8; Qwen ha ottenuto 92/100. I punteggi sono indicativi perché Codex ha valutato anche le proprie proposte. Decisione: Codex pianificatore e merger principale, Qwen proposta indipendente di controllo. Non sono state avviate scrittura, produzione o creazione asset. [Rapporto e manifest del run](production-tests/components/planner-20261025195515-9a0ffc2b/assessment.md).
 Test Writer isolato Hemmingway–Cydonia del 25 ottobre 2026: tre coppie di run normali, hot consensuali e cruenti hanno usato brief abbinati, Project File e run distinti. Hemmingway è il vincitore comparativo con confidenza moderata-bassa (due casi a favore, uno in parità), ma nessuno dei due ha rispettato tutti i vincoli. Cydonia ha impiegato 11:51 complessivi di generazione contro 23:15 di Hemmingway; i tempi includono draft e revisione simulata. [Confronto, valutazioni e manifest](production-tests/components/hemmingway-cydonia-20261025-2f1c02ed/assessment.md).
-
-
-## Shadow Controller MCP — planned two-host rollout
-
-A separate Node.js/TypeScript Shadow Controller MCP is planned to make remote LM Studio inference available to Codex while keeping the visual-novel pipeline and existing worker responsibilities unchanged. The controller first verifies the configured LM Studio endpoint and the requested model's inference capability. When the model works, it **does not interact with the Shadow launcher**, regardless of whether Shadow is running or installed on the MCP host. When the model does not work, it diagnoses API/model/LM Link availability before attempting any launcher recovery. Launcher automation is optional and only runs on a host where the official launcher is installed; it must use verified UI controls and bounded retries, never random activity simulation.
-
-The rollout has two explicit handoffs:
-
-- [Phase 1: implementation and tests on Shadow PC](handoffs/01-shadow-implementation.md) — develop and run the **project source**, test MCP/API/state-machine behavior, and record that real Shadow launcher interactions cannot be tested on that host. Do not install the released MCP package on Shadow PC.
-- [Phase 2: physical Windows PC validation and npm migration](handoffs/02-physical-pc-validation.md) — test actual Shadow launcher interaction, LM Link/llmster access and remote inference; fix issues; first use the project source, then migrate the physical PC to the versioned npm release.
-
-The controller is a separate infrastructure component, not an additional narrative or production role. Codex may invoke it through a `shadow` skill, but existing Project Worker, Image Worker, Audio Worker, Asset Worker, canonical Project File, and VRAM ownership remain unchanged. This is a **plan**, not a claim of implemented or validated distributed operation.
-
-
-### Shadow Controller module topology (design requirement)
-
-The planned Node.js/TypeScript package is built with **tsup** and has two distinct MCP module families: **index/client**, normally used by Codex on its current machine, and **shadow/server**, containing capabilities executed on Shadow PC. Shadow PC is both a client and a server and therefore runs **both families directly from project source**. The physical PC starts with the local source-based client family and ultimately moves to the npm distribution. A separately hosted Shadow-side network server is **not yet confirmed necessary**; the design must first evaluate whether LM Link and existing MCP transports suffice. These roles do not change the responsibilities of the existing visual-novel production workers.
