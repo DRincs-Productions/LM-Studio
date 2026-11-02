@@ -4,6 +4,32 @@ Il progetto offre due punti d’ingresso: Codex e LM Studio con Bionic. In Codex
 
 Il sistema non è stato progettato per lavorare soltanto in locale. I modelli online possono offrire capacità di ragionamento e coordinamento nettamente superiori; possono dirigere i passaggi tra i worker e stabilire quale processo locale utilizzi la VRAM in un dato momento. Quando un modello locale non raggiunge la qualità o le capacità richieste, il coordinamento può ricorrere al cloud. I modelli locali restano utili per ridurre il consumo dei crediti Codex, la dipendenza dai servizi online e i limiti sui contenuti imposti da singoli modelli cloud, secondo le regole applicabili.
 
+## Installazione e configurazione (client e server)
+
+> **Stato:** procedura iniziale. Gli altri programmi e servizi necessari saranno documentati progressivamente, man mano che ne definiamo l'installazione. La nuova architettura client/server è ancora in progettazione: i comandi applicativi di configurazione descritti sotto non sono ancora implementati.
+
+### Client MCP (PC che usa Codex)
+
+1. Installa **rclone** dal [sito ufficiale](https://rclone.org/downloads/) e rendi disponibile il comando `rclone` nel terminale (`PATH`). Non è necessario installare `rclone-sdk`, Node.js globalmente per rclone, né avviare il server Remote Control (`rclone rcd`).
+2. Verifica l'installazione con `rclone version`.
+3. Esegui `rclone config`, scegli `n` per creare un remote, assegna un **nome stabile** (per esempio `imagecloud`) e seleziona **il provider di storage che preferisci**. OneDrive è soltanto un esempio: sono ammessi gli altri backend supportati da rclone. Completa il login/autorizzazione richiesto dal provider e salva la configurazione.
+4. Verifica il nome configurato con `rclone listremotes`. In seguito il client MCP userà il nome del remote scelto (per esempio `imagecloud:`) per i trasferimenti. **Non è previsto un controllo preventivo sull'identità dell'account**: se non ha accesso ai file/cartella condivisa, il trasferimento fallirà normalmente.
+5. Assicurati che l'account/provider scelto abbia accesso alla **cartella temporanea condivisa** con il server. Se client e server usano account diversi, configura i permessi di condivisione nel provider. Il percorso della cartella e la sua associazione al client MCP saranno definiti durante l'implementazione.
+6. **Da completare:** installazione della libreria MCP, impostazione del nome remote nella configurazione del client, accesso Firebase e collegamento al server.
+
+### Server Tauri (PC Shadow o altro host)
+
+1. Installa **rclone** dal [sito ufficiale](https://rclone.org/downloads/) e verifica `rclone version`. Il server potrà eseguire direttamente i comandi rclone come processi locali, senza `rclone-sdk` o Remote Control.
+2. Esegui `rclone config` e configura un remote verso il provider desiderato, completando l'eventuale autorizzazione. Il nome può essere `imagecloud` per continuità con la configurazione già documentata, ma non è obbligatorio; **il nome remote è una configurazione locale e non deve necessariamente coincidere con quello del client**.
+3. Verifica con `rclone listremotes`. Se esiste già una configurazione rclone, **non cancellarla o sovrascriverla**: controlla prima quale provider e percorso utilizza. Non copiare `rclone.conf` nel repository o nei log: può contenere token e credenziali.
+4. Predisponi sul provider una **cartella dedicata esclusivamente ai file temporanei dell'app**, accessibile ai client autorizzati. La pulizia automatica opererà solo all'interno di tale cartella, mai sull'intero account cloud.
+5. **Comportamento previsto del server (da implementare):** all'avvio rimuovere i file nella cartella temporanea più vecchi di 7 giorni; se lo spazio non basta per un nuovo upload, rimuovere i file temporanei più vecchi finché resta spazio per il nuovo file più **500 MiB**; se un file richiesto manca nel remote ma esiste ancora localmente, ricaricarlo su richiesta. I file remoti sono sacrificabili e non costituiscono un archivio permanente.
+6. **Da completare:** installazione Tauri/coordinatore, login Firebase, associazione dell'unico server all'utente, connessione Cloudflare e configurazione dei motori di generazione.
+
+**Nota sui trasferimenti:** il client MCP richiederà i file per nome usando il proprio remote configurato. I due remote devono puntare a percorsi accessibili allo stesso contenuto (ad esempio tramite una cartella condivisa); l'app non verificherà in anticipo che gli account del provider coincidano. Il progetto e le copie definitive degli asset restano sul PC client.
+
+---
+
 ## Hardware e ambiente
 
 Il progetto usa hardware di seconda mano e comprende Shadow PC nell’ambiente di lavoro. L’architettura assegna il progetto di gioco e i suoi file al **PC locale** e i modelli locali con i relativi worker al **PC cloud**. I test eseguiti finora sono stati effettuati su un solo host Windows con GPU NVIDIA RTX A4500: l’esecuzione distribuita e il passaggio automatico dei job tra le due macchine non sono ancora stati verificati.
