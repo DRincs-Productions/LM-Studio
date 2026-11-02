@@ -41,3 +41,11 @@ Implement a reusable Node.js/TypeScript Shadow Controller MCP, its tests, config
 
 ## Exit criteria and handoff
 Record commit SHA, dependency versions, exact commands, passing/failing test results, known limitations, LM Studio endpoint/model test evidence, and physical-PC prerequisites. Do not claim distributed operation is verified until phase 2.
+
+## Package topology decision (2026-11-02)
+- Build the Node.js TypeScript library with **tsup** (required), including declarations and explicit package exports.
+- Provide two logical module families: **index/client** for MCP capabilities invoked on the machine where Codex is running, and **shadow/server** for MCP capabilities that execute on Shadow PC. The names are logical roles, not a requirement to expose an HTTP service.
+- Shadow PC must be able to run **both families from project source** because it is both a client and a server in this setup. Do not gate the client family on detecting the physical PC.
+- Keep the Shadow-side network server **optional and undecided** until discovery confirms whether LM Link plus existing MCP transports cover all required operations. Do not expose an unauthenticated network endpoint or build an always-on service without demonstrated need.
+- Support separate MCP stdio entrypoints (and shared core library) so both families can be registered independently or together on Shadow PC. Avoid tool-name collisions and circular dependencies.
+- Add tsup build and package-export smoke tests to the phase-1 test matrix; distinguish package build verification from installing the package on Shadow PC.
