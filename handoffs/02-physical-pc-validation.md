@@ -32,3 +32,9 @@ Exercise the official Shadow launcher, real Windows UI Automation, LM Link conne
 
 ## Exit criteria
 Provide reproducible logs (redacted), real launcher UI test outcomes, inference evidence, npm package version, migration commands, rollback procedure, and any remaining limitations. No claim of full support until real physical-PC tests pass.
+
+## Dual-family deployment and tsup release checks
+- Physical PC: initially register the **index/client** MCP family from local source; use Shadow launcher automation there only when model inference is unavailable and the launcher is installed.
+- Shadow PC: register **both index/client and shadow/server families from project source**, without installing the npm release.
+- Decide whether a separate Shadow-side server process/network transport is necessary only after testing direct LM Link and the existing MCP arrangements. If not needed, keep the server family as a local MCP module/entrypoint rather than deploying a new network service.
+- Before publishing npm, verify tsup-built ESM/CJS formats as chosen, executable entrypoints, type declarations, exports, clean package installation on a disposable **physical-PC** test environment, and source-to-package parity.
