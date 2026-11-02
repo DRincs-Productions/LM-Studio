@@ -531,3 +531,8 @@ The rollout has two explicit handoffs:
 - [Phase 2: physical Windows PC validation and npm migration](handoffs/02-physical-pc-validation.md) — test actual Shadow launcher interaction, LM Link/llmster access and remote inference; fix issues; first use the project source, then migrate the physical PC to the versioned npm release.
 
 The controller is a separate infrastructure component, not an additional narrative or production role. Codex may invoke it through a `shadow` skill, but existing Project Worker, Image Worker, Audio Worker, Asset Worker, canonical Project File, and VRAM ownership remain unchanged. This is a **plan**, not a claim of implemented or validated distributed operation.
+
+
+### Shadow Controller module topology (design requirement)
+
+The planned Node.js/TypeScript package is built with **tsup** and has two distinct MCP module families: **index/client**, normally used by Codex on its current machine, and **shadow/server**, containing capabilities executed on Shadow PC. Shadow PC is both a client and a server and therefore runs **both families directly from project source**. The physical PC starts with the local source-based client family and ultimately moves to the npm distribution. A separately hosted Shadow-side network server is **not yet confirmed necessary**; the design must first evaluate whether LM Link and existing MCP transports suffice. These roles do not change the responsibilities of the existing visual-novel production workers.
