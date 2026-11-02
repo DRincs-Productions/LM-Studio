@@ -41,3 +41,32 @@ Provide reproducible logs (redacted), real launcher UI test outcomes, inference 
 
 ## Dependency and model cleanup (approval-gated)
 During implementation and physical-PC validation, inventory programs, runtimes, models, and worker dependencies that may become redundant. For each candidate, record its installation location, current consumers, replacement, storage impact, rollback or recovery method, and whether it is still needed by Bionic, LM Studio, existing MCP workers, or the Shadow Controller. Distinguish removing a project reference from uninstalling software or deleting model files. Do not uninstall, delete, or change production configurations without explicit user approval. Perform cleanup only after replacement behavior has been validated, and record approved changes and verification results in the appropriate handoff.
+
+## Architecture decisions — persistent desktop orchestration (2026-11-02)
+This section supersedes earlier assumptions that a separate Shadow-side server might be unnecessary. The server is now required; remote transport is still to be selected.
+
+### Confirmed
+- One server host (initially Shadow PC), multiple client installations. Server is a cross-platform installable Tauri desktop application, with an independently running background coordinator launched after user login (GUI session available); installers built by CI for supported Windows/Linux/macOS targets.
+- Client is the Node.js/TypeScript MCP library built with tsup; keep both client/index and Shadow-local MCP families runnable from source on Shadow PC. Shadow never installs the published npm client.
+- Firebase Authentication only, preferably Google sign-in, for user registration/login. Do not use Cloudflare as an identity provider. Remote network transport, relay and file transfer remain open design decisions. Validate Firebase SDK and available plugin integration during implementation; do not assume a Firebase connector is installed.
+- Every request has a client-stable idempotency key (requestId) and a server-generated jobId. Repeated submissions return the original job and result, not duplicate generation. Persist state and results so restarted Codex can query by either ID.
+- Durable SQLite queue, event log and crash recovery. On restart reconcile interrupted jobs with engine state and output files before retrying; automatically resume/requeue safe work. Record retry limits, job attempts, timeouts, cancellation and recovery errors. Never claim checkpoint resume if engine does not support it.
+- Resource-aware scheduling groups compatible jobs by engine/model and VRAM requirements, while enforcing fairness, priority, aging and resource limits to prevent starvation. Stop/unload unused processes/models between incompatible workloads only when ownership and safe shutdown are established. LM Studio is on-demand, not assumed running at boot. Never terminate unrelated processes or disrupt existing workers.
+- Server-generated media are volatile but retained for a configurable period; client stores accepted outputs permanently in project directories. Download confirmation must include integrity verification; protect active/in-flight and not-yet-acknowledged outputs from automatic cleanup, with explicit expiration policy and low-disk safeguards. Use platform-specific app data/cache directories, not OS temp as the only durable store.
+- Server controls LM Studio, InvokeAI, audio/video adapters, model lifecycle, queue, resource reservations, logs, local asset storage, and authenticated remote commands. Tauri UI is separate from the persistent coordinator; GUI-dependent actions run in user session.
+- Keep README.md and AGENTS.md unchanged until explicit user request. Do not uninstall programs or delete models without user approval.
+
+### Design review sequence for upcoming conversations
+1. Compare remote connectivity: Tailscale/private overlay, direct HTTPS/TLS with authentication, Cloudflare Tunnel as transport (not identity), outbound relay via Firebase-backed coordination, WebRTC/P2P, and hybrid options. Address NAT, firewalls, large file downloads, offline behavior, security, cost and operational complexity.
+2. Prioritize server features and lifecycle (scheduler, crash recovery, process management, GUI, asset TTL, observability).
+3. Select server libraries and architecture (Tauri/Rust, SQLite, process adapters, OS startup, CI installers).
+4. Define client MCP tools, login, job submission/status/recovery, asset downloads and multi-client behavior.
+5. Select client libraries, tsup packaging, transports and tests.
+6. Design Firebase Google login, device pairing, token verification/refresh, roles and authorization; check Firebase plugin availability and use it if connected.
+
+### Open questions
+- Remote transport, NAT traversal, optional relay and file delivery; no choice made yet.
+- Cache TTL, storage quota, pressure thresholds and policies for unacknowledged artifacts.
+- Which engine processes can be safely unloaded/restarted, and per-engine recovery semantics.
+- Authentication for headless CLI clients (interactive Google OAuth via device/browser flow or desktop pairing) and per-client permissions.
+- Precise supported OS versions, startup mechanism, signed installer credentials and CI release approval.
