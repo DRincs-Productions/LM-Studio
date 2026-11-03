@@ -733,24 +733,30 @@ mod tests {
     #[test]
     fn version_one_database_migration_marks_existing_active_jobs_interrupted() {
         let connection = Connection::open_in_memory().unwrap();
-        connection.pragma_update(None, "foreign_keys", "ON").unwrap();
+        connection
+            .pragma_update(None, "foreign_keys", "ON")
+            .unwrap();
         connection.execute_batch(INITIAL_SCHEMA).unwrap();
         connection.pragma_update(None, "user_version", 1).unwrap();
-        connection.execute(
-            "INSERT INTO requests (
+        connection
+            .execute(
+                "INSERT INTO requests (
                 uid, client_id, request_id, operation, payload_version,
                 payload_hash, payload_json, created_at, job_id
             ) VALUES ('user-1', 'client-1', 'legacy-1', 'narrative.generate', 1,
                 ?1, '{}', '2026-11-03T00:00:00Z', 'legacy-job-1')",
-            ["a".repeat(64)],
-        ).unwrap();
-        connection.execute(
-            "INSERT INTO jobs (
+                ["a".repeat(64)],
+            )
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO jobs (
                 job_id, uid, client_id, request_id, state, fifo_sequence, created_at, started_at
             ) VALUES ('legacy-job-1', 'user-1', 'client-1', 'legacy-1', 'running', 1,
                 '2026-11-03T00:00:00Z', '2026-11-03T00:00:01Z')",
-            [],
-        ).unwrap();
+                [],
+            )
+            .unwrap();
         connection.execute(
             "INSERT INTO job_attempts (job_id, attempt_number, cause, approved_by, started_at)
              VALUES ('legacy-job-1', 1, 'initial_request', 'client_request', '2026-11-03T00:00:01Z')",
