@@ -33,12 +33,17 @@ struct CoordinatorLease {
 impl CoordinatorLease {
     fn acquire(data_dir: &Path) -> Result<Option<Self>, RuntimeError> {
         fs::create_dir_all(data_dir)?;
-        let lock = OpenOptions::new()
+        let lock = match OpenOptions::new()
             .create(true)
             .truncate(false)
             .read(true)
             .write(true)
-            .open(data_dir.join(LOCK_FILE))?;
+            .open(data_dir.join(LOCK_FILE))
+        {
+            Ok(lock) => lock,
+            Err(error) if is_lock_contention(&error) => return Ok(None),
+            Err(error) => return Err(error.into()),
+        };
         match lock.try_lock_exclusive() {
             Ok(()) => {}
             Err(error) if is_lock_contention(&error) => return Ok(None),
@@ -85,12 +90,17 @@ impl Drop for CoordinatorLease {
 
 pub fn is_running(data_dir: &Path) -> Result<bool, RuntimeError> {
     fs::create_dir_all(data_dir)?;
-    let lock = OpenOptions::new()
+    let lock = match OpenOptions::new()
         .create(true)
         .truncate(false)
         .read(true)
         .write(true)
-        .open(data_dir.join(LOCK_FILE))?;
+        .open(data_dir.join(LOCK_FILE))
+    {
+        Ok(lock) => lock,
+        Err(error) if is_lock_contention(&error) => return Ok(true),
+        Err(error) => return Err(error.into()),
+    };
     match lock.try_lock_exclusive() {
         Ok(()) => {
             FileExt::unlock(&lock)?;
