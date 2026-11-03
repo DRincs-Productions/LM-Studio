@@ -6,35 +6,35 @@ Il sistema non è stato progettato per lavorare soltanto in locale. I modelli on
 
 ## Installazione e configurazione (client e server)
 
-> **Stato:** guida iniziale. La nuova architettura è in progettazione; i componenti applicativi non ancora disponibili saranno aggiunti quando implementati.
+> **Stato:** architettura in sviluppo. Installa solo i programmi necessari al ruolo della macchina; gli adapter opzionali saranno documentati quando definiti.
 
 ### Client MCP (PC locale)
 
 | Programma | Descrizione | Installazione |
 |---|---|---|
-| [rclone](https://rclone.org/) | Trasferimento degli asset tramite storage condiviso. | [Download ufficiale](https://rclone.org/downloads/) |
-| [Node.js](https://nodejs.org/) | Runtime previsto per il client MCP TypeScript. | [Download ufficiale](https://nodejs.org/en/download) |
-| [Codex CLI](https://github.com/openai/codex) | Client AI e punto d'ingresso MCP, se utilizzato. | `npm install -g @openai/codex` |
+| rclone | Trasferisce gli asset tramite una cartella cloud condivisa. | [Download](https://rclone.org/downloads/) |
+| Node.js | Esegue il client MCP TypeScript. | [Download](https://nodejs.org/en/download) |
+| Codex CLI *(opzionale)* | Client AI che può utilizzare gli strumenti MCP. | `npm install -g @openai/codex` |
 
 ### Server Tauri (Shadow o altro host)
 
-| Programma o servizio | Descrizione | Installazione / accesso |
+| Programma | Descrizione | Installazione |
 |---|---|---|
-| [rclone](https://rclone.org/) | Pubblicazione temporanea degli asset per i client. | [Download ufficiale](https://rclone.org/downloads/) |
-| [LM Studio](https://lmstudio.ai/) | Esecuzione dei modelli linguistici locali. | [Download ufficiale](https://lmstudio.ai/download) |
-| [Rust](https://rustup.rs/) | Toolchain per coordinatore e applicazione Tauri. | [Installazione ufficiale](https://rustup.rs/) |
-| [Node.js](https://nodejs.org/) | Tooling per sviluppo e build dell'interfaccia Tauri. | [Download ufficiale](https://nodejs.org/en/download) |
-| [Cloudflare Workers](https://developers.cloudflare.com/workers/) | Relay remoto verso il server Shadow; deploy dal repository. | [Dashboard Cloudflare](https://dash.cloudflare.com/) |
+| rclone | Pubblica temporaneamente gli asset per i client. | [Download](https://rclone.org/downloads/) |
+| LM Studio | Esegue i modelli linguistici locali. | [Download](https://lmstudio.ai/download) |
+| Rust | Compila il coordinatore e l'app Tauri. | [Installazione](https://rustup.rs/) |
+| Node.js | Compila l'interfaccia Tauri. | [Download](https://nodejs.org/en/download) |
+| Cloudflare Workers *(servizio)* | Relay remoto, distribuito dal repository. | [Dashboard](https://dash.cloudflare.com/) |
 
-I motori di generazione immagini, video e audio (tra cui `sd-cli.exe`, `audio.cpp` e gli eventuali adapter ComfyUI/InvokeAI) saranno aggiunti alla tabella quando avremo definito per ciascuno installazione e configurazione. Firebase verrà configurato in una fase successiva.
+I motori immagini, video e audio (ad esempio `sd-cli.exe`, `audio.cpp`, ComfyUI e InvokeAI) saranno aggiunti dopo la scelta degli adapter e delle rispettive istruzioni. Firebase verrà configurato successivamente.
 
 ### Configurazioni particolari
 
-**rclone (su entrambe le macchine):** verifica `rclone version`, configura il provider con `rclone config` e controlla i remote con `rclone listremotes`. Puoi scegliere qualsiasi provider supportato; OneDrive è solo un esempio. I nomi dei remote possono differire tra client e server, purché entrambi abbiano accesso alla stessa cartella condivisa. Non servono `rclone-sdk` né `rclone rcd`; non sovrascrivere configurazioni esistenti e non pubblicare `rclone.conf`, che può contenere credenziali.
+**rclone (client e server):** esegui `rclone version`, `rclone config` e `rclone listremotes`. Scegli un provider supportato e una cartella condivisa accessibile a entrambe le macchine; i nomi dei remote possono essere diversi. Non servono `rclone-sdk` o `rclone rcd`. Conserva la configurazione esistente e non pubblicare `rclone.conf`.
 
-**File temporanei:** il server userà una cartella cloud dedicata esclusivamente all'app. Il comportamento previsto (ancora da implementare) elimina all'avvio i file temporanei più vecchi di 7 giorni; prima di caricare nuovi file può eliminare i temporanei più vecchi per mantenere 500 MiB di spazio aggiuntivo. Non deve cancellare file esterni alla cartella dedicata. Se il file remoto manca ma esiste nella cache locale del server, sarà ripubblicato su richiesta. Il progetto e gli asset definitivi rimangono sul client.
+**Asset temporanei (funzionalità prevista):** solo nella cartella cloud dedicata all'app; pulizia all'avvio dei file più vecchi di 7 giorni, eventuale liberazione dello spazio per il nuovo upload più 500 MiB e ripubblicazione dalla cache locale se necessario. Gli asset definitivi restano sul client.
 
-**Connessione e deploy:** il Worker Cloudflare `shadow-mcp-relay` è stato creato, ma il relay WebSocket/Durable Object e l'autenticazione non sono ancora operativi. Il codice e il workflow GitHub Actions + Wrangler saranno sviluppati in questo repository; Firebase e l'associazione client/server verranno affrontati successivamente.
+**Cloudflare:** il Worker `shadow-mcp-relay` esiste, ma relay WebSocket, Durable Object e autenticazione non sono ancora operativi. Codice e deploy GitHub Actions + Wrangler saranno gestiti in questa repository; Firebase e pairing saranno affrontati in seguito.
 
 ---
 
