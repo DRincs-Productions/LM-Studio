@@ -773,10 +773,12 @@ mod tests {
             .unwrap();
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].event_type, "job.accepted");
-        assert!(store
-            .list_events("another-user", "client-1", &accepted.job.job_id, 10)
-            .unwrap()
-            .is_empty());
+        assert!(
+            store
+                .list_events("another-user", "client-1", &accepted.job.job_id, 10)
+                .unwrap()
+                .is_empty()
+        );
     }
 
     #[test]
