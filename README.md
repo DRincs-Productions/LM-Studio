@@ -102,10 +102,10 @@ flowchart TD
     C[Coordinatore]
     subgraph SCRITTORE[Scrittore]
         P[Planner Codex]
-        Q[Proposta parallela Qwen3 8B]
+        Q[Proposta parallela Gemini]
         M[Merge Codex · SceneContract]
         W[Hemmingway]
-        R[Qwen3 8B]
+        R[Gemini]
         X[Controllo finale Codex]
         P --> M
         Q --> M
@@ -118,7 +118,7 @@ flowchart TD
     X --> C
 ```
 
-Prima della scrittura, Codex e Qwen3 8B preparano proposte di piano in parallelo. Codex le unisce in un `SceneContract` strutturato con fatti canonici, conoscenze dei personaggi, beat, divieti e condizione finale. La validazione controlla schema e POV; se il contratto non è valido, si tenta una sola correzione circoscritta e il flusso si ferma prima del Writer se resta invalido. Il contratto accompagna la bozza e viene ricontrollato nella review finale; non aggiorna il canone. Codex coordina il flusso e resta responsabile delle decisioni sul canone: il Writer trasforma il contratto in prosa, il Narrative Reviewer verifica la scena e Codex controlla l’esito prima dell’handback.
+Prima della scrittura, Codex e Gemini prepareranno proposte di piano in parallelo. Codex le unisce in un `SceneContract` strutturato con fatti canonici, conoscenze dei personaggi, beat, divieti e condizione finale. La validazione controlla schema e POV; se il contratto non è valido, si tenta una sola correzione circoscritta e il flusso si ferma prima del Writer se resta invalido. Il contratto accompagna la bozza e viene ricontrollato nella review finale; non aggiorna il canone. Codex coordina il flusso e resta responsabile delle decisioni sul canone: il Writer trasforma il contratto in prosa, il Narrative Reviewer verifica la scena e Codex controlla l’esito prima dell’handback.
 
 Lo Scrittore produce la prima bozza narrativa in inglese a partire dal brief approvato, dal contratto di scena e dalle informazioni canoniche. Il modello Writer operativo resta **Hemmingway 1 Abliterated Extreme**; è stato aggiunto il profilo **MS3.2 PaintedFantasy v4.1 24B Q4_K_M** come candidato per prove isolate, senza cambiare il modello operativo. Il profilo usa temperatura 0,8, top-p 0,95, min-p 0,05, repeat penalty 1,02 e contesto 8192. Le impostazioni di campionamento seguono i valori consigliati nella [scheda PaintedFantasy v4.1](https://huggingface.co/zerofata/MS3.2-PaintedFantasy-v4.1-24B); il percorso GGUF installato è `mradermacher/MS3.2-PaintedFantasy-v4.1-24B-GGUF/MS3.2-PaintedFantasy-v4.1-24B.Q4_K_M.gguf`.
 
