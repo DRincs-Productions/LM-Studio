@@ -28,6 +28,7 @@ Questo progetto estende le capacità generative di Codex tramite un server Tauri
 | rclone | Pubblica temporaneamente gli asset per i client. | [Download](https://rclone.org/downloads/) |
 | Node.js | Esegue le CLI AI e gli eventuali adapter JavaScript/TypeScript. | [Download](https://nodejs.org/en/download) |
 | LM Studio | Esegue i modelli AI locali. | [Download](https://lmstudio.ai/download) |
+| **`sd-cli.exe`** | Genera le immagini con i modelli locali; backend attuale del Disegnatore. | [stable-diffusion.cpp (release)](https://github.com/leejet/stable-diffusion.cpp/releases) |
 | Codex CLI | Coordina e controlla i programmi tramite terminale. | `npm install -g @openai/codex` |
 | Gemini CLI | Revisiona richieste, risultati e asset prima della consegna. | `npm install -g @google/gemini-cli` |
 
@@ -39,7 +40,7 @@ Questo progetto estende le capacità generative di Codex tramite un server Tauri
 
 **Distribuzione:** GitHub Actions compilerà gli installer client/server e distribuirà il codice Cloudflare con Wrangler; sul PC Shadow non servono Rust o la dashboard Cloudflare per compilare o installare la release. Il Worker `shadow-mcp-relay` esiste, ma WebSocket, Durable Object e autenticazione sono ancora da implementare. Firebase sarà configurato successivamente.
 
-I motori di generazione di immagini, video e audio (tra cui `sd-cli.exe`, `audio.cpp`, ComfyUI e InvokeAI) saranno aggiunti alla tabella quando saranno confermati gli adapter e le modalità di installazione.
+Gli altri motori di generazione di immagini, video e audio (tra cui `audio.cpp`, ComfyUI e InvokeAI) saranno aggiunti alla tabella quando saranno confermati gli adapter e le modalità di installazione.
 
 ---
 
