@@ -53,8 +53,8 @@ L'utente dialoga con Codex, che invia i lavori al Coordinatore attraverso il cli
 
 ```mermaid
 flowchart TD
-    U <--> X[Codex · dialogo GPT e coordinamento]
-    X --> C[Coordinatore]
+    U[Utente] <--> X[Codex · dialogo GPT e coordinamento]
+    X <-->|WebSocket| C[Coordinatore]
     C --> PRODUZIONE
     subgraph PRODUZIONE[Produzione]
         W[Scrittore]
