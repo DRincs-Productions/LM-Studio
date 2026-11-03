@@ -211,25 +211,6 @@ Prima di generare, il Coordinatore cerca gli audio già finalizzati nello spazio
 
 Il confronto dei modelli è documentato in [Confronto dei modelli audio](docs/CONFRONTO-MODELLI-AUDIO.md) e [Confronto dei tre modelli Writer](docs/CONFRONTO-MODELLI-NARRAZIONE.md). La prova completa degli strumenti Audio Worker, dell’ascolto Qwen e della decisione Codex è riportata in [Test del flusso Audio Worker](RAPPORTO-TEST-AUDIO-WORKER.md). Il runner del Coordinatore è predisposto per la fase audio; le precedenti prove legate a Bionic restano materiale storico e non fanno parte del nuovo flusso.
 
-### Programmatore
-
-```mermaid
-flowchart LR
-    U[Utente]
-    R[Regia]
-    F[Files del progetto]
-    subgraph PROGRAMMATORE[Programmatore]
-        C[Claude o Codex]
-    end
-    U <-->|dialogo| R
-    R -->|scelta provider e conferma separata| C
-    C <-->|legge e modifica| F
-    C -->|risultati e stato aggiornato| R
-```
-
-Il Programmatore è il ruolo che **modifica concretamente il progetto software**: interviene sui file sorgente, integra scene e asset, implementa i comportamenti interattivi e verifica il risultato nel progetto. Codex gli consegna il Project File, la documentazione pertinente, i contenuti approvati, gli asset riutilizzabili e le istruzioni tecniche. Codex coordina il passaggio; non sostituisce il Programmatore nell’editing del progetto.
-
-Al termine del ciclo creativo e produttivo, Regia chiede all’utente se implementerà Claude o Codex. Dopo aver registrato la scelta, chiede una conferma esplicita separata prima di avviare l’implementazione tramite il Project Worker MCP. Il provider selezionato usa il proprio modello predefinito; se non è installato o autenticato, il passaggio si ferma e Regia informa l’utente senza cambiare provider automaticamente. Il Programmatore opera direttamente sui file del progetto e resta separato dalla conversazione creativa in LM Studio/Bionic.
 
 ## PC locale, PC cloud e condivisione dei file
 
