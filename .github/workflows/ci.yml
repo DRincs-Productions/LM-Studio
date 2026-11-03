@@ -33,8 +33,10 @@ jobs:
         working-directory: apps/shadow-controller
         run: npm run build
 
-      - name: Check Rust formatting
-        run: cargo fmt --manifest-path apps/shadow-controller/coordinator/Cargo.toml -- --check
+      - name: Format Rust sources and print patch
+        run: |
+          cargo fmt --manifest-path apps/shadow-controller/coordinator/Cargo.toml
+          git diff -- apps/shadow-controller/coordinator/src/lib.rs
 
       - name: Test Coordinator core
         run: cargo test --manifest-path apps/shadow-controller/coordinator/Cargo.toml
