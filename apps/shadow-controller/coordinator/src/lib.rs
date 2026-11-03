@@ -528,19 +528,15 @@ impl JobStore {
             return Ok(None);
         };
         let outcome = executor(&job, self);
-        let current_state = self
-            .get(&job.job_id)?
-            .ok_or(StoreError::JobNotFound)?
-            .state;
+        let current_state = self.get(&job.job_id)?.ok_or(StoreError::JobNotFound)?.state;
         let completed = match outcome {
-            JobExecutionOutcome::Succeeded { result_manifest } => self
-                .transition_with_manifest(
-                    &job.job_id,
-                    JobState::Succeeded,
-                    None,
-                    result_manifest.as_ref(),
-                    "Executor completed the job",
-                )?,
+            JobExecutionOutcome::Succeeded { result_manifest } => self.transition_with_manifest(
+                &job.job_id,
+                JobState::Succeeded,
+                None,
+                result_manifest.as_ref(),
+                "Executor completed the job",
+            )?,
             JobExecutionOutcome::Failed {
                 error_code,
                 message_redacted,
@@ -555,12 +551,7 @@ impl JobStore {
             JobExecutionOutcome::Cancelled { message_redacted }
                 if current_state == JobState::CancelRequested =>
             {
-                self.transition(
-                    &job.job_id,
-                    JobState::Cancelled,
-                    None,
-                    &message_redacted,
-                )?
+                self.transition(&job.job_id, JobState::Cancelled, None, &message_redacted)?
             }
             JobExecutionOutcome::Cancelled { .. } => self.transition(
                 &job.job_id,
@@ -853,10 +844,12 @@ mod tests {
             .unwrap();
         assert_eq!(failed.state, JobState::Failed);
         assert_eq!(failed.error_code.as_deref(), Some("engine_unavailable"));
-        assert!(store
-            .run_next(|_, _| panic!("there must be no automatic retry"))
-            .unwrap()
-            .is_none());
+        assert!(
+            store
+                .run_next(|_, _| panic!("there must be no automatic retry"))
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]
