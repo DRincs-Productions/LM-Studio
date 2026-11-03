@@ -49,6 +49,8 @@ Il progetto usa hardware di seconda mano e comprende Shadow PC nell’ambiente d
 
 ## Architettura generale
 
+**Decisione architetturale:** il ruolo Regia è eliminato. Codex è l'unica interfaccia conversazionale; il Coordinatore gestisce le code. I modelli, i profili Bionic, i prompt, gli adapter e le configurazioni dedicati esclusivamente alla Regia saranno rimossi in una successiva fase di pulizia, previa verifica delle dipendenze condivise. Non rimuovere componenti ancora utilizzati da altri worker.
+
 L'utente dialoga con Codex, che invia i lavori al Coordinatore attraverso il client MCP e la connessione WebSocket. Il Coordinatore gestisce le code e distribuisce le attività ai worker di produzione; i risultati ritornano a Codex.
 
 ```mermaid
@@ -65,37 +67,6 @@ flowchart TD
     D --> C
     S --> C
 ```
-
-### Regia
-
-La Regia locale dialoga con l’utente attraverso Bionic oppure, su richiesta esplicita, attraverso Codex. Il modello locale resta eseguito dal runtime LM Studio: il percorso Codex non richiede l’interfaccia Bionic. Nelle sessioni verificate la Regia è associata a **Qwen 3.5 9B**. Dialoga nella lingua dell’utente e aiuta a definire concept, personaggi, relazioni, ambientazioni, eventi, tono e direzione visiva e sonora.
-
-```mermaid
-flowchart LR
-    U[Utente]
-    F[Files del progetto]
-    subgraph REGIA[Regia]
-        Q[Qwen 3.5 9B]
-    end
-    C[Coordinatore]
-    P[Programmatore]
-    PW[Project Worker MCP]
-    U <-->|dialogo| REGIA
-    U <-->|dialogo GPT| CX[Codex]
-    CX <-->|tramite su richiesta| REGIA
-    REGIA -->|lettura richiesta| PW
-    F -->|Ink e docs in sola lettura| PW
-    PW -->|fonti consultate| REGIA
-    REGIA -->|handoff del progetto approvato| C
-    C -->|dubbi o proposta di sviluppo| REGIA
-    REGIA -->|specifica approvata per l’implementazione| P
-```
-
-Prima di proporre una nuova fase, la Regia deve leggere il Project File e la documentazione aggiornata del progetto, comprenderne lo stato e i progressi, e consultare i file e gli asset già disponibili. Questo le permette di conoscere personaggi, relazioni, luoghi e continuità, capire cosa è già stato realizzato e individuare contenuti riutilizzabili, evitando duplicazioni o contraddizioni. Se la documentazione non chiarisce un fatto canonico o lo stato del lavoro, la Regia lo segnala e chiede chiarimenti invece di inventarlo.
-
-Le decisioni canoniche vengono conservate nel Project File Markdown, scritto in inglese per essere utilizzato da tutta la pipeline. Quando ritiene definita una fase, la Regia presenta il piano all’utente e richiede un’approvazione esplicita. Solo dopo l’approvazione passa Project File e contesto operativo al Coordinatore.
-
-Il Project Worker MCP consente alla Regia di associare la cartella di gioco scelta dall’utente e leggere in sola lettura i file Ink e i documenti Markdown sotto `docs/`. Non espone gli altri file del progetto né consente alla Regia di modificarli. Quando propone una modifica, indica le fonti consultate e il cambiamento suggerito e attende l’approvazione; la scrittura del gioco resta al Programmatore dopo il gate separato.
 
 ### Coordinatore
 
