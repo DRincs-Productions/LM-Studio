@@ -46,7 +46,7 @@ Release publishing is selected by the prefix of a pushed Git tag: `lib-v<version
 
 Codex is authorized to create as many releases and prereleases as needed without requesting approval for each version. Version numbers may be consumed or skipped. The exact preparation, tagging, CI inspection and publication verification procedure is documented in [AGENTS.md](AGENTS.md#releases-and-github-actions), including use of the connected `@github` tools. These workflows are planned and are not implemented yet; a tag alone cannot currently publish the new components.
 
-Firebase project `shadow-controller-20261103` (display name: **Shadow Controller**) was created on 2026-11-03 without linking a billing account. Project creation does not establish that Google sign-in, pairing, authorization or the F1 security gate are implemented or verified.
+Firebase project `shadow-controller-20261103` (display name: **Shadow Controller**) was created on 2026-11-03 without linking a billing account. The project has Google sign-in enabled and a Firestore account/server-pairing implementation; live sign-in, pairing, client authorization and the F1 security gate remain unverified.
 
 Gli altri motori di generazione di immagini, video e audio (tra cui `audio.cpp`, ComfyUI e InvokeAI) saranno aggiunti alla tabella quando saranno confermati gli adapter e le modalità di installazione.
 
