@@ -38,7 +38,7 @@ Questo progetto estende le capacità generative di Codex tramite un server Tauri
 
 **Codex CLI e Gemini CLI:** avvia rispettivamente `codex` e `gemini` per verificare l'accesso. Gemini CLI usa l'account già collegato e la selezione automatica del modello; per richiederla esplicitamente usa `gemini --model auto`. Non configurare una chiave API o fissare un modello senza richiesta dell'utente. Gemini è un reviewer sperimentale, non ancora adottato: Codex sul server resta Coordinatore, possiede gli strumenti MCP e usa Gemini solo per ricevere giudizi strutturati sugli artefatti. Non assegnare strumenti MCP a Gemini. I controlli deterministici e l'approvazione Codex restano indipendenti dalla review Gemini.
 
-**Distribution:** Dedicated GitHub Actions workflows will publish the MCP library, build the Tauri server installers and deploy the Cloudflare relay, selected by the tag prefixes documented below. Release users do not need Rust, Wrangler or the Tauri SDK. The Tauri/React desktop shell now embeds the SQLite job-store core and provides a local queue view through Tauri commands; its frontend build passes. The queue does not dispatch model work yet. Native builds and Rust tests are delegated to GitHub Actions because Rust is not installed on this development machine. The independent persistent Coordinator process/scheduler, client library, Firebase sign-in/pairing, and authenticated relay remain to be completed. The Firebase project and desktop web app are registered; Google sign-in and authorization are not configured or verified yet.
+**Distribution:** Dedicated GitHub Actions workflows will publish the MCP library, build the Tauri server installers and deploy the Cloudflare relay, selected by the tag prefixes documented below. Release users do not need Rust, Wrangler or the Tauri SDK. The Tauri/React desktop shell embeds the SQLite job-store core and provides a local queue view. The store now supports atomic FIFO claims with one active job at a time, but no production executor consumes those claims yet. Native builds and Rust tests are delegated to GitHub Actions because Rust is not installed on this development machine. The independent persistent Coordinator process/scheduler, client library, Firebase sign-in/pairing, and authenticated relay remain to be completed. The Firebase project and desktop web app are registered; Google sign-in and authorization are not configured or verified yet.
 
 ### Release automation
 
@@ -102,7 +102,7 @@ flowchart LR
 
 **SQLite locale sul server** è il database autorevole per le richieste: conserva identificativi, stati, priorità, tentativi, errori e riferimenti agli asset. Non richiede un servizio database esterno.
 
-**OneDrive** è mostrato come spazio per i file temporanei, **non come database**: il trasferimento avviene tramite rclone e il provider può essere sostituito con qualsiasi altro supportato. Il Coordinatore non usa OneDrive per la gestione delle code. La coda persistente e le integrazioni illustrate sono ancora da implementare.
+**OneDrive** è mostrato come spazio per i file temporanei, **non come database**: il trasferimento avviene tramite rclone e il provider può essere sostituito con qualsiasi altro supportato. Il Coordinatore non usa OneDrive per la gestione delle code. Il core SQLite implementa già l'accettazione idempotente, gli stati persistenti e la presa atomica FIFO; gli adapter di esecuzione, il processo indipendente e le integrazioni illustrate restano da implementare.
 
 ### Scrittore
 

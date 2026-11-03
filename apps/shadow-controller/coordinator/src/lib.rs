@@ -7,8 +7,9 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 use uuid::Uuid;
 
-const SCHEMA_VERSION: i64 = 1;
+const SCHEMA_VERSION: i64 = 2;
 const INITIAL_SCHEMA: &str = include_str!("../migrations/0001_initial.sql");
+const SINGLE_ACTIVE_JOB_MIGRATION: &str = include_str!("../migrations/0002_single_active_job.sql");
 
 #[derive(Debug, Error)]
 pub enum StoreError {
@@ -154,7 +155,13 @@ impl JobStore {
         if version < 1 {
             let transaction = connection.unchecked_transaction()?;
             transaction.execute_batch(INITIAL_SCHEMA)?;
-            transaction.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+            transaction.pragma_update(None, "user_version", 1)?;
+            transaction.commit()?;
+        }
+        if version < 2 {
+            let transaction = connection.unchecked_transaction()?;
+            transaction.execute_batch(SINGLE_ACTIVE_JOB_MIGRATION)?;
+            transaction.pragma_update(None, "user_version", 2)?;
             transaction.commit()?;
         }
         Ok(Self {
@@ -299,6 +306,58 @@ impl JobStore {
             .map(|id| load_job(&connection, &id))
             .transpose()
             .map(Option::flatten)?)
+    }
+
+    /// Atomically claims the oldest queued job when no job is already active.
+    /// Callers must use this method instead of selecting and starting separately.
+    pub fn claim_next_queued(&self) -> Result<Option<JobRecord>, StoreError> {
+        let mut connection = self
+            .connection
+            .lock()
+            .map_err(|_| StoreError::LockPoisoned)?;
+        let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let active: bool = transaction.query_row(
+            "SELECT EXISTS(SELECT 1 FROM jobs WHERE state IN ('running', 'cancel_requested'))",
+            [],
+            |row| row.get(0),
+        )?;
+        if active {
+            return Ok(None);
+        }
+
+        let job_id: Option<String> = transaction
+            .query_row(
+                "SELECT job_id FROM jobs WHERE state = 'queued' ORDER BY fifo_sequence LIMIT 1",
+                [],
+                |row| row.get(0),
+            )
+            .optional()?;
+        let Some(job_id) = job_id else {
+            return Ok(None);
+        };
+
+        let current = load_job(&transaction, &job_id)?.ok_or(StoreError::JobNotFound)?;
+        let now = timestamp();
+        transaction.execute(
+            "UPDATE jobs SET state = 'running', started_at = COALESCE(started_at, ?2) WHERE job_id = ?1",
+            params![job_id, now],
+        )?;
+        transaction.execute(
+            "INSERT INTO job_attempts (job_id, attempt_number, cause, approved_by, started_at)
+             VALUES (?1, 1, 'initial_request', 'client_request', ?2)",
+            params![job_id, now],
+        )?;
+        append_event(
+            &transaction,
+            &job_id,
+            "job.state_changed",
+            Some(current.state),
+            Some(JobState::Running),
+            "Job claimed by the Coordinator",
+        )?;
+        let job = load_job(&transaction, &job_id)?.ok_or(StoreError::JobNotFound)?;
+        transaction.commit()?;
+        Ok(Some(job))
     }
 
     pub fn list(
@@ -556,6 +615,47 @@ mod tests {
             first.job.job_id
         );
         assert!(second.job.fifo_sequence > first.job.fifo_sequence);
+    }
+
+    #[test]
+    fn claiming_is_fifo_single_active_and_skips_cancelled_entries() {
+        let store = JobStore::open_in_memory().unwrap();
+        let cancelled = store.submit(request("request-1", 1)).unwrap();
+        let next = store.submit(request("request-2", 2)).unwrap();
+        store
+            .transition(
+                &cancelled.job.job_id,
+                JobState::Cancelled,
+                None,
+                "Cancelled before start",
+            )
+            .unwrap();
+
+        let claimed = store.claim_next_queued().unwrap().unwrap();
+        assert_eq!(claimed.job_id, next.job.job_id);
+        assert_eq!(claimed.state, JobState::Running);
+        assert!(store.claim_next_queued().unwrap().is_none());
+    }
+
+    #[test]
+    fn concurrent_claims_cannot_start_two_jobs() {
+        let store = std::sync::Arc::new(JobStore::open_in_memory().unwrap());
+        store.submit(request("request-1", 1)).unwrap();
+        store.submit(request("request-2", 2)).unwrap();
+        let callers = (0..2)
+            .map(|_| {
+                let store = std::sync::Arc::clone(&store);
+                std::thread::spawn(move || store.claim_next_queued().unwrap())
+            })
+            .collect::<Vec<_>>();
+
+        let claimed = callers
+            .into_iter()
+            .filter_map(|caller| caller.join().unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(claimed.len(), 1);
+        assert_eq!(claimed[0].state, JobState::Running);
+        assert!(store.claim_next_queued().unwrap().is_none());
     }
 
     #[test]
