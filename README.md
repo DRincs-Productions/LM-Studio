@@ -6,27 +6,35 @@ Il sistema non è stato progettato per lavorare soltanto in locale. I modelli on
 
 ## Installazione e configurazione (client e server)
 
-> **Stato:** procedura iniziale. Gli altri programmi e servizi necessari saranno documentati progressivamente, man mano che ne definiamo l'installazione. La nuova architettura client/server è ancora in progettazione: i comandi applicativi di configurazione descritti sotto non sono ancora implementati.
+> **Stato:** guida iniziale. La nuova architettura è in progettazione; i componenti applicativi non ancora disponibili saranno aggiunti quando implementati.
 
-### Client MCP (PC che usa Codex)
+### Client MCP (PC locale)
 
-1. Installa **rclone** dal [sito ufficiale](https://rclone.org/downloads/) e rendi disponibile il comando `rclone` nel terminale (`PATH`). Non è necessario installare `rclone-sdk`, Node.js globalmente per rclone, né avviare il server Remote Control (`rclone rcd`).
-2. Verifica l'installazione con `rclone version`.
-3. Esegui `rclone config`, scegli `n` per creare un remote, assegna un **nome stabile** (per esempio `imagecloud`) e seleziona **il provider di storage che preferisci**. OneDrive è soltanto un esempio: sono ammessi gli altri backend supportati da rclone. Completa il login/autorizzazione richiesto dal provider e salva la configurazione.
-4. Verifica il nome configurato con `rclone listremotes`. In seguito il client MCP userà il nome del remote scelto (per esempio `imagecloud:`) per i trasferimenti. **Non è previsto un controllo preventivo sull'identità dell'account**: se non ha accesso ai file/cartella condivisa, il trasferimento fallirà normalmente.
-5. Assicurati che l'account/provider scelto abbia accesso alla **cartella temporanea condivisa** con il server. Se client e server usano account diversi, configura i permessi di condivisione nel provider. Il percorso della cartella e la sua associazione al client MCP saranno definiti durante l'implementazione.
-6. **Da completare:** installazione della libreria MCP, impostazione del nome remote nella configurazione del client, accesso Firebase e collegamento al server.
+| Programma | Descrizione | Installazione |
+|---|---|---|
+| [rclone](https://rclone.org/) | Trasferimento degli asset tramite storage condiviso. | [Download ufficiale](https://rclone.org/downloads/) |
+| [Node.js](https://nodejs.org/) | Runtime previsto per il client MCP TypeScript. | [Download ufficiale](https://nodejs.org/en/download) |
+| [Codex CLI](https://github.com/openai/codex) | Client AI e punto d'ingresso MCP, se utilizzato. | `npm install -g @openai/codex` |
 
-### Server Tauri (PC Shadow o altro host)
+### Server Tauri (Shadow o altro host)
 
-1. Installa **rclone** dal [sito ufficiale](https://rclone.org/downloads/) e verifica `rclone version`. Il server potrà eseguire direttamente i comandi rclone come processi locali, senza `rclone-sdk` o Remote Control.
-2. Esegui `rclone config` e configura un remote verso il provider desiderato, completando l'eventuale autorizzazione. Il nome può essere `imagecloud` per continuità con la configurazione già documentata, ma non è obbligatorio; **il nome remote è una configurazione locale e non deve necessariamente coincidere con quello del client**.
-3. Verifica con `rclone listremotes`. Se esiste già una configurazione rclone, **non cancellarla o sovrascriverla**: controlla prima quale provider e percorso utilizza. Non copiare `rclone.conf` nel repository o nei log: può contenere token e credenziali.
-4. Predisponi sul provider una **cartella dedicata esclusivamente ai file temporanei dell'app**, accessibile ai client autorizzati. La pulizia automatica opererà solo all'interno di tale cartella, mai sull'intero account cloud.
-5. **Comportamento previsto del server (da implementare):** all'avvio rimuovere i file nella cartella temporanea più vecchi di 7 giorni; se lo spazio non basta per un nuovo upload, rimuovere i file temporanei più vecchi finché resta spazio per il nuovo file più **500 MiB**; se un file richiesto manca nel remote ma esiste ancora localmente, ricaricarlo su richiesta. I file remoti sono sacrificabili e non costituiscono un archivio permanente.
-6. **Da completare:** installazione Tauri/coordinatore, login Firebase, associazione dell'unico server all'utente, connessione Cloudflare e configurazione dei motori di generazione.
+| Programma o servizio | Descrizione | Installazione / accesso |
+|---|---|---|
+| [rclone](https://rclone.org/) | Pubblicazione temporanea degli asset per i client. | [Download ufficiale](https://rclone.org/downloads/) |
+| [LM Studio](https://lmstudio.ai/) | Esecuzione dei modelli linguistici locali. | [Download ufficiale](https://lmstudio.ai/download) |
+| [Rust](https://rustup.rs/) | Toolchain per coordinatore e applicazione Tauri. | [Installazione ufficiale](https://rustup.rs/) |
+| [Node.js](https://nodejs.org/) | Tooling per sviluppo e build dell'interfaccia Tauri. | [Download ufficiale](https://nodejs.org/en/download) |
+| [Cloudflare Workers](https://developers.cloudflare.com/workers/) | Relay remoto verso il server Shadow; deploy dal repository. | [Dashboard Cloudflare](https://dash.cloudflare.com/) |
 
-**Nota sui trasferimenti:** il client MCP richiederà i file per nome usando il proprio remote configurato. I due remote devono puntare a percorsi accessibili allo stesso contenuto (ad esempio tramite una cartella condivisa); l'app non verificherà in anticipo che gli account del provider coincidano. Il progetto e le copie definitive degli asset restano sul PC client.
+I motori di generazione immagini, video e audio (tra cui `sd-cli.exe`, `audio.cpp` e gli eventuali adapter ComfyUI/InvokeAI) saranno aggiunti alla tabella quando avremo definito per ciascuno installazione e configurazione. Firebase verrà configurato in una fase successiva.
+
+### Configurazioni particolari
+
+**rclone (su entrambe le macchine):** verifica `rclone version`, configura il provider con `rclone config` e controlla i remote con `rclone listremotes`. Puoi scegliere qualsiasi provider supportato; OneDrive è solo un esempio. I nomi dei remote possono differire tra client e server, purché entrambi abbiano accesso alla stessa cartella condivisa. Non servono `rclone-sdk` né `rclone rcd`; non sovrascrivere configurazioni esistenti e non pubblicare `rclone.conf`, che può contenere credenziali.
+
+**File temporanei:** il server userà una cartella cloud dedicata esclusivamente all'app. Il comportamento previsto (ancora da implementare) elimina all'avvio i file temporanei più vecchi di 7 giorni; prima di caricare nuovi file può eliminare i temporanei più vecchi per mantenere 500 MiB di spazio aggiuntivo. Non deve cancellare file esterni alla cartella dedicata. Se il file remoto manca ma esiste nella cache locale del server, sarà ripubblicato su richiesta. Il progetto e gli asset definitivi rimangono sul client.
+
+**Connessione e deploy:** il Worker Cloudflare `shadow-mcp-relay` è stato creato, ma il relay WebSocket/Durable Object e l'autenticazione non sono ancora operativi. Il codice e il workflow GitHub Actions + Wrangler saranno sviluppati in questo repository; Firebase e l'associazione client/server verranno affrontati successivamente.
 
 ---
 
