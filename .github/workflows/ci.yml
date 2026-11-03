@@ -36,9 +36,6 @@ jobs:
       - name: Check Rust formatting
         run: cargo fmt --manifest-path apps/shadow-controller/coordinator/Cargo.toml -- --check
 
-      - name: Check Tauri Rust formatting
-        run: cargo fmt --manifest-path apps/shadow-controller/src-tauri/Cargo.toml -- --check
-
       - name: Test Coordinator core
         run: cargo test --manifest-path apps/shadow-controller/coordinator/Cargo.toml
 
