@@ -49,25 +49,22 @@ Il progetto usa hardware di seconda mano e comprende Shadow PC nell’ambiente d
 
 ## Architettura generale
 
-L'utente interagisce **solo con Codex CLI** sul PC locale. Codex utilizza il **client MCP** per inviare richieste al **Coordinatore Rust** sul server remoto attraverso un collegamento **WebSocket** mediato dal relay Cloudflare. Il Coordinatore è il programma persistente che **gestisce le code dei job**: registra le richieste, ne controlla lo stato, pianifica l'esecuzione in base alle risorse disponibili, avvia gli strumenti locali e restituisce avanzamento e risultati a Codex. La GUI Tauri permette di osservare e configurare il server, ma non sostituisce Codex come interfaccia conversazionale.
+L'utente dialoga con Codex, che invia i lavori al Coordinatore attraverso il client MCP e la connessione WebSocket. Il Coordinatore gestisce le code e distribuisce le attività ai worker di produzione; i risultati ritornano a Codex.
 
 ```mermaid
 flowchart TD
-    U[Utente] <--> X[Codex CLI]
-    X <--> M[Client MCP]
-    M <-->|WebSocket via Cloudflare| C[Coordinatore Rust · coda job]
-    C <--> Q[(SQLite · stato e code)]
-    C <--> L[LM Studio · modelli locali]
-    C <--> A[CLI AI · Codex e Gemini]
-    C <--> G[Generatori di asset · immagini, audio, video]
-    C --> F[Asset temporanei · rclone]
-    F --> M
-    T[GUI Tauri · gestione server] <--> C
+    U <--> X[Codex · dialogo GPT e coordinamento]
+    X --> C[Coordinatore]
+    C --> PRODUZIONE
+    subgraph PRODUZIONE[Produzione]
+        W[Scrittore]
+        D[Disegnatore]
+        S[Progettista sonoro]
+    end
+    W --> C
+    D --> C
+    S --> C
 ```
-
-La comunicazione è bidirezionale: Codex invia job e può consultarne stato, annullamento e risultati; il Coordinatore gestisce retry e recupero dopo riavvii senza dipendere dalla permanenza della sessione Codex. La scelta dei programmi e dei modelli rimane configurabile. Il relay e la coda persistente sono ancora da implementare.
-
-Le sezioni seguenti documentano i worker e i flussi sperimentali precedenti: **non descrivono più l'architettura generale prevista** e saranno progressivamente aggiornate o archiviate.
 
 ### Regia
 
