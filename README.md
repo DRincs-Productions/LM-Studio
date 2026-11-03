@@ -132,15 +132,12 @@ Il confronto dei test Writer isolati è in [Confronto dei modelli di narrazione]
 flowchart TD
     C[Coordinatore]
     subgraph DISEGNATORE[Disegnatore]
-        I[Image Worker]
         M[Seleziona stile e contenuto]
         KREA[Krea2 Turbo]
         ANIME[Krea2 Anime]
         REDCRAFT[RedCraft]
         G[Genera un'immagine]
         R[Codex]
-        O[Pubblica con rclone]
-        I --> M
         M -->|standard non anime| KREA
         M -->|stile anime, normale o adulto| ANIME
         M -->|adulti non anime| REDCRAFT
@@ -148,18 +145,17 @@ flowchart TD
         ANIME --> G
         REDCRAFT --> G
         G -->|richiesta di revisione| R
-        R -->|non approvata · corregge il prompt e riprova| I
-        R -->|almeno 80 punti e nessun errore grave| O
+        R -->|non approvata · corregge il prompt e riprova| M
     end
-    C --> I
-    O --> C
+    C -->|richiesta con stile e contenuto| M
+    R -->|approvata| C
 ```
 
 Il Disegnatore prepara le immagini coerenti con personaggi, ambienti e momenti narrativi. Il generatore è **`sd-cli.exe`**. La selezione combina stile e contenuto: **Krea2 Turbo** è il profilo standard non anime; **RedCraft v3.0** è il profilo adulto non anime; se il Project File indica lo stile anime, **Krea2 Anime v2.0** prevale sul tipo di contenuto e viene usato sia per immagini normali sia per immagini adulte. Riferimenti: [Krea2 Anime v2.0](https://civitai.red/models/2908999/krea2-anime?modelVersionId=3357716) e [RedCraft v3.0](https://civitai.red/models/958009/redcraft-or-or-hybrid-h3-and-krea2t-and-qw21-fixed-w6a8?modelVersionId=3139241).
 
 Il LoKR SNOFS è stato rimosso e non rientra più nei profili né nei test pianificati. Le prove precedenti nel percorso `sd-cli` non applicavano i pesi (0/768 tensori) e il sampling falliva; questo esito storico non costituisce una valutazione della qualità visiva del modello.
 
-Codex definisce il prompt visivo, il Worker genera le immagini e Codex esamina i risultati. Un’immagine viene accettata se la valutazione visiva raggiunge la soglia prevista e non rileva errori visivi gravi; altrimenti il processo può correggere il prompt e riprovare entro il limite configurato. Il controller visivo separato non è attualmente installato: il Coordinatore prepara direttamente la richiesta visiva.
+Il Coordinatore riceve la richiesta con le indicazioni di stile e contenuto (standard, anime o adulto) e la inoltra direttamente alla selezione del modello. Il Worker genera l'immagine e Codex esamina i risultati. Un’immagine viene accettata se la valutazione visiva raggiunge la soglia prevista e non rileva errori visivi gravi; altrimenti il processo può correggere il prompt e riprovare entro il limite configurato. Il controller visivo separato non è attualmente installato: il Coordinatore prepara direttamente la richiesta visiva. Dopo l'approvazione il risultato torna al Coordinatore, senza una fase di pubblicazione rclone interna al Disegnatore. Valuteremo Gemini come possibile reviewer al posto di Codex, senza cambiare il reviewer operativo prima dei test. È inoltre prevista una valutazione separata di InvokeAI come possibile sostituto di sd-cli.exe e di un componente opzionale per ritocchi post-generazione, a partire dalla rimozione dello sfondo; vedere gli handoff 04 e 05.
 
 `generate_image` consente di specificare `steps`, `cfg_scale`, `style` e LoRA registrate facoltative; il server impedisce sovrascritture in staging e considera fallita una generazione se la CLI dichiara che non ha applicato alcun tensore richiesto. Gli adapter restano esclusi dai default e sono bloccati per la produzione finché il relativo stato nel catalogo non è `ready`. I default sono Krea2 Turbo 8 passi/CFG 1, RedCraft 12/CFG 1 e Krea2 Anime 12/CFG 1. Width, height, seed, percorso modello, encoder, VAE, adapter e parametri effettivi vengono registrati nel risultato. La nuova prova della LoRA `flaccid_erect_krea2_loraholic` ha applicato `512 / 512` tensori su RedCraft con i pesi +3 e -3. Il candidato +3 ha ottenuto 78/100 senza errore grave, sotto la soglia di accettazione; la valutazione del candidato -3 è stata rifiutata. La compatibilità tecnica è quindi confermata, ma la convalida visiva non è completa e l’adapter resta escluso dalla produzione. Dettagli nel [catalogo LoRA](docs/IMAGE-LORAS.md) e nel [manifest](production-tests/components/designer_lora_20261025093323_ee11c97f74/manifest.json). Il confronto modelli è in [Rapporto confronto modelli immagini](production-tests/DESIGNER-MODEL-COMPARISON-2026-10-24.md). Tutti i candidati di test restano in staging e non vengono pubblicati.
 
