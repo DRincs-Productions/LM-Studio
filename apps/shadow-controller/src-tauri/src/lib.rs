@@ -14,6 +14,22 @@ mod auth {
         Err("Google sign-in is not supported on this platform yet".to_owned())
     }
 
+    pub fn server_id() -> Result<String, String> {
+        Err("Server identity is not supported on this platform yet".to_owned())
+    }
+
+    pub fn pairing_status() -> Result<bool, String> {
+        Err("Server pairing is not supported on this platform yet".to_owned())
+    }
+
+    pub fn pair_server() -> Result<(), String> {
+        Err("Server pairing is not supported on this platform yet".to_owned())
+    }
+
+    pub fn unpair_server() -> Result<(), String> {
+        Err("Server unpairing is not supported on this platform yet".to_owned())
+    }
+
     pub fn identity() -> Result<Option<AuthIdentity>, String> {
         Ok(None)
     }
@@ -45,7 +61,11 @@ pub fn run() {
             begin_local_auth,
             get_local_auth_status,
             get_firebase_id_token,
-            sign_out_local_auth
+            sign_out_local_auth,
+            get_local_server_id,
+            get_local_pairing_status,
+            pair_local_server,
+            unpair_local_server
         ])
         .setup(|app| {
             let data_dir = app.path().app_data_dir().map_err(std::io::Error::other)?;
@@ -233,6 +253,26 @@ fn start_local_coordinator(app: tauri::AppHandle) -> Result<(), String> {
 #[tauri::command]
 fn begin_local_auth() -> Result<String, String> {
     auth::begin_login()
+}
+
+#[tauri::command]
+fn get_local_server_id() -> Result<String, String> {
+    auth::server_id()
+}
+
+#[tauri::command]
+fn get_local_pairing_status() -> Result<bool, String> {
+    auth::pairing_status()
+}
+
+#[tauri::command]
+fn pair_local_server() -> Result<(), String> {
+    auth::pair_server()
+}
+
+#[tauri::command]
+fn unpair_local_server() -> Result<(), String> {
+    auth::unpair_server()
 }
 
 #[tauri::command]

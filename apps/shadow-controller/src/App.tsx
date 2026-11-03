@@ -18,6 +18,10 @@ function App() {
   const [authIdentity, setAuthIdentity] = useState<AuthIdentity | null>(null);
   const [authPending, setAuthPending] = useState(false);
   const [authMessage, setAuthMessage] = useState("");
+  const [serverId, setServerId] = useState<string | null>(null);
+  const [pairingStatus, setPairingStatus] = useState<"unknown" | "paired" | "unpaired">("unknown");
+  const [pairingPending, setPairingPending] = useState(false);
+  const [pairingMessage, setPairingMessage] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -41,10 +45,29 @@ function App() {
   }, []);
 
   useEffect(() => {
+    void invoke<string>("get_local_server_id").then(setServerId).catch(() => setServerId(null));
+  }, []);
+
+  useEffect(() => {
     void invoke<AuthIdentity | null>("get_local_auth_status")
       .then(setAuthIdentity)
       .catch((error) => setAuthMessage(String(error)));
   }, []);
+
+  useEffect(() => {
+    if (!authIdentity) {
+      setPairingStatus("unpaired");
+      setPairingMessage("");
+      return;
+    }
+    if (!serverId) return;
+    void invoke<boolean>("get_local_pairing_status")
+      .then((paired) => setPairingStatus(paired ? "paired" : "unpaired"))
+      .catch((error) => {
+        setPairingStatus("unpaired");
+        setPairingMessage(String(error));
+      });
+  }, [authIdentity, serverId]);
 
   async function signIn() {
     setAuthPending(true);
@@ -73,9 +96,39 @@ function App() {
     try {
       await invoke("sign_out_local_auth");
       setAuthIdentity(null);
+      setPairingStatus("unpaired");
       setAuthMessage("Signed out.");
     } catch (error) {
       setAuthMessage(String(error));
+    }
+  }
+
+  async function pairServer() {
+    setPairingPending(true);
+    setPairingMessage("");
+    try {
+      await invoke("pair_local_server");
+      setPairingStatus("paired");
+      setPairingMessage("This server is now paired with your account.");
+    } catch (error) {
+      setPairingMessage(String(error));
+    } finally {
+      setPairingPending(false);
+    }
+  }
+
+  async function unpairServer() {
+    if (!window.confirm("Unpair this server? Clients will no longer be able to route work to it.")) return;
+    setPairingPending(true);
+    setPairingMessage("");
+    try {
+      await invoke("unpair_local_server");
+      setPairingStatus("unpaired");
+      setPairingMessage("Server pairing removed.");
+    } catch (error) {
+      setPairingMessage(String(error));
+    } finally {
+      setPairingPending(false);
     }
   }
 
@@ -161,7 +214,7 @@ function App() {
           </div>
 
           {section === "Overview"
-            ? <Overview authIdentity={authIdentity} authPending={authPending} authMessage={authMessage} onSignIn={() => void signIn()} />
+            ? <Overview authIdentity={authIdentity} authPending={authPending} authMessage={authMessage} serverId={serverId} pairingStatus={pairingStatus} pairingPending={pairingPending} pairingMessage={pairingMessage} onSignIn={() => void signIn()} onPair={() => void pairServer()} onUnpair={() => void unpairServer()} />
             : section === "Jobs" ? <Jobs /> : <SectionPlaceholder section={section} />}
         </div>
       </section>
@@ -264,11 +317,17 @@ function Jobs() {
   );
 }
 
-function Overview({ authIdentity, authPending, authMessage, onSignIn }: {
+function Overview({ authIdentity, authPending, authMessage, serverId, pairingStatus, pairingPending, pairingMessage, onSignIn, onPair, onUnpair }: {
   authIdentity: AuthIdentity | null;
   authPending: boolean;
   authMessage: string;
+  serverId: string | null;
+  pairingStatus: "unknown" | "paired" | "unpaired";
+  pairingPending: boolean;
+  pairingMessage: string;
   onSignIn: () => void;
+  onPair: () => void;
+  onUnpair: () => void;
 }) {
   return (
     <>
@@ -276,11 +335,14 @@ function Overview({ authIdentity, authPending, authMessage, onSignIn }: {
         <div className="welcome-copy">
           <div className="welcome-tag"><span /> INITIAL SETUP</div>
           <h2>Your workspace is ready<br />to be connected.</h2>
-          <p>{authIdentity ? `Signed in as ${authIdentity.email}. Pairing is the next setup step.` : "Sign in and pair a server to start coordinating your local generation tools."}</p>
-          <button className="button button-primary" type="button" disabled={authPending || Boolean(authIdentity)} onClick={onSignIn}>
-            <span aria-hidden="true">↗</span> {authPending ? "Waiting for browser…" : authIdentity ? "Account connected" : "Sign in with Google"}
-          </button>
+          <p>{authIdentity ? `Signed in as ${authIdentity.email}. ${pairingStatus === "paired" ? "This server is paired to your account." : "Pair this server to your account to continue setup."}` : "Sign in and pair a server to start coordinating your local generation tools."}</p>
+          {!authIdentity
+            ? <button className="button button-primary" type="button" disabled={authPending} onClick={onSignIn}><span aria-hidden="true">↗</span> {authPending ? "Waiting for browser…" : "Sign in with Google"}</button>
+            : pairingStatus === "paired"
+              ? <button className="button button-primary" type="button" disabled={pairingPending} onClick={onUnpair}>{pairingPending ? "Updating pairing…" : "Unpair this server"}</button>
+              : <button className="button button-primary" type="button" disabled={pairingPending || !serverId || pairingMessage.includes("paired with a different server")} onClick={onPair}><span aria-hidden="true">↗</span> {pairingPending ? "Pairing server…" : "Pair this server"}</button>}
           {authMessage && <p className="auth-message" role="status">{authMessage}</p>}
+          {pairingMessage && <p className="auth-message" role="status">{pairingMessage}</p>}
         </div>
         <div className="welcome-art" aria-hidden="true">
           <div className="orbit orbit-one" /><div className="orbit orbit-two" />
@@ -292,7 +354,7 @@ function Overview({ authIdentity, authPending, authMessage, onSignIn }: {
       <div className="section-title-row"><div><h2>System status</h2><p>Live status will appear after pairing.</p></div><span className="status-pill"><i /> NOT CONNECTED</span></div>
 
       <section className="status-grid" aria-label="System status">
-        <StatusCard icon="⌘" label="Coordinator" value="Not connected" detail="The server has not paired with this account." tone="amber" />
+        <StatusCard icon="⌘" label="Server" value={pairingStatus === "paired" ? "Paired" : "Not paired"} detail={serverId ? `ID ${serverId}` : "Server identity unavailable"} tone="amber" />
         <StatusCard icon="◉" label="Authentication" value={authIdentity ? "Signed in" : "Not signed in"} detail={authIdentity ? authIdentity.email : "Google sign-in is ready."} tone="blue" />
         <StatusCard icon="⇄" label="Relay" value="Not deployed" detail="Remote connections stay disabled until security gates pass." tone="violet" />
       </section>
@@ -306,7 +368,7 @@ function Overview({ authIdentity, authPending, authMessage, onSignIn }: {
           <div className="card-heading"><div><h2>Getting started</h2><p>Three steps to your workspace</p></div></div>
           <ol className="setup-list">
             <li className={authIdentity ? "complete" : "pending"}><span className="step-icon">1</span><div><strong>Sign in with Google</strong><span>Authenticate your account securely</span></div><span className="step-state">{authIdentity ? "DONE" : "PENDING"}</span></li>
-            <li className="pending"><span className="step-icon">2</span><div><strong>Pair your server</strong><span>Connect Shadow to this account</span></div><span className="step-state">PENDING</span></li>
+            <li className={pairingStatus === "paired" ? "complete" : "pending"}><span className="step-icon">2</span><div><strong>Pair your server</strong><span>{serverId ? `Server identity: ${serverId}` : "Connect this server to your account"}</span></div><span className="step-state">{pairingStatus === "paired" ? "DONE" : "PENDING"}</span></li>
             <li className="pending"><span className="step-icon">3</span><div><strong>Connect your client</strong><span>Authorize Codex to submit work</span></div><span className="step-state">PENDING</span></li>
           </ol>
         </div>

@@ -1,6 +1,7 @@
 use std::{
     io::Read,
     net::TcpListener,
+    sync::Mutex,
     thread,
     time::{Duration, Instant},
 };
@@ -8,13 +9,16 @@ use std::{
 use keyring::Entry;
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use tiny_http::{Header, Method, Request, Response, Server};
 use uuid::Uuid;
 
 const FIREBASE_API_KEY: &str = "AIzaSyCO-OtHIxbarCVRGh3qLDeNhUT2ArrngUY";
 const PROJECT_ID: &str = "shadow-controller-20261103";
+const FIRESTORE_DOCUMENTS_URL: &str = "https://firestore.googleapis.com/v1/projects/shadow-controller-20261103/databases/(default)/documents";
 const KEYRING_SERVICE: &str = "com.drincs.shadowcontroller";
 const KEYRING_ACCOUNT: &str = "firebase.refresh-token";
+const SERVER_ID_KEYRING_ACCOUNT: &str = "server.identity";
 const AUTH_PAGE: &str = include_str!("../auth-browser.html");
 const AUTH_SCRIPT: &str = include_str!("../auth-browser.js");
 
@@ -23,6 +27,29 @@ const AUTH_SCRIPT: &str = include_str!("../auth-browser.js");
 pub struct AuthIdentity {
     uid: String,
     email: String,
+}
+
+pub fn server_id() -> Result<String, String> {
+    static SERVER_ID_LOCK: Mutex<()> = Mutex::new(());
+    let _guard = SERVER_ID_LOCK
+        .lock()
+        .map_err(|_| "Server identity state is unavailable".to_owned())?;
+    let entry = Entry::new(KEYRING_SERVICE, SERVER_ID_KEYRING_ACCOUNT)
+        .map_err(|_| "Could not open the system credential store".to_owned())?;
+    match entry.get_password() {
+        Ok(value) => {
+            Uuid::parse_str(&value).map_err(|_| "Stored server identity is invalid".to_owned())?;
+            Ok(value)
+        }
+        Err(keyring::Error::NoEntry) => {
+            let value = Uuid::new_v4().to_string();
+            entry
+                .set_password(&value)
+                .map_err(|_| "Could not save the server identity in the system credential store".to_owned())?;
+            Ok(value)
+        }
+        Err(_) => Err("Could not read the server identity from the system credential store".to_owned()),
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -80,6 +107,17 @@ struct FirebaseErrorResponse {
 #[derive(Debug, Deserialize)]
 struct FirebaseErrorBody {
     message: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct FirestoreDocument {
+    fields: Option<HashMap<String, FirestoreValue>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct FirestoreValue {
+    string_value: Option<String>,
 }
 
 pub fn begin_login() -> Result<String, String> {
@@ -248,6 +286,95 @@ pub fn identity() -> Result<Option<AuthIdentity>, String> {
         uid: credential.uid,
         email: credential.email,
     }))
+}
+
+pub fn pairing_status() -> Result<bool, String> {
+    let credential = read_credential()?.ok_or_else(|| "Sign in before checking server pairing".to_owned())?;
+    let server_id = server_id()?;
+    let token = id_token()?;
+    let client = Client::builder()
+        .timeout(Duration::from_secs(15))
+        .build()
+        .map_err(|_| "Could not prepare Firebase pairing check".to_owned())?;
+    let response = client
+        .get(format!("{FIRESTORE_DOCUMENTS_URL}/accounts/{}", credential.uid))
+        .bearer_auth(token)
+        .send()
+        .map_err(|_| "Could not check Firebase server pairing".to_owned())?;
+    if response.status() == reqwest::StatusCode::NOT_FOUND {
+        return Ok(false);
+    }
+    let document = response
+        .error_for_status()
+        .map_err(|_| "Firebase could not check server pairing".to_owned())?
+        .json::<FirestoreDocument>()
+        .map_err(|_| "Firebase returned an invalid pairing record".to_owned())?;
+    let registered_server_id = document
+        .fields
+        .and_then(|fields| fields.get("serverId").and_then(|value| value.string_value.clone()));
+    match registered_server_id {
+        Some(registered_server_id) if registered_server_id == server_id => Ok(true),
+        Some(_) => Err("This account is paired with a different server. Remove that pairing before replacing it.".to_owned()),
+        None => Err("The Firebase pairing record is missing its server identity".to_owned()),
+    }
+}
+
+pub fn pair_server() -> Result<(), String> {
+    if pairing_status()? {
+        return Ok(());
+    }
+    let credential = read_credential()?.ok_or_else(|| "Sign in before pairing this server".to_owned())?;
+    let server_id = server_id()?;
+    let token = id_token()?;
+    let client = Client::builder()
+        .timeout(Duration::from_secs(15))
+        .build()
+        .map_err(|_| "Could not prepare Firebase server pairing".to_owned())?;
+    let response = client
+        .post(format!("{FIRESTORE_DOCUMENTS_URL}:commit"))
+        .bearer_auth(token)
+        .json(&serde_json::json!({
+            "writes": [{
+                "update": {
+                    "name": format!("{FIRESTORE_DOCUMENTS_URL}/accounts/{}", credential.uid),
+                    "fields": { "serverId": { "stringValue": server_id } }
+                },
+                "currentDocument": { "exists": false }
+            }]
+        }))
+        .send()
+        .map_err(|_| "Could not save the Firebase server pairing".to_owned())?;
+    if response.status().is_success() {
+        return Ok(());
+    }
+    match pairing_status() {
+        Ok(true) => return Ok(()),
+        Err(message) if message.contains("paired with a different server") => return Err(message),
+        _ => {}
+    }
+    Err("Firebase rejected the server pairing. Check the Firestore database and security rules.".to_owned())
+}
+
+pub fn unpair_server() -> Result<(), String> {
+    if !pairing_status()? {
+        return Ok(());
+    }
+    let credential = read_credential()?.ok_or_else(|| "Sign in before removing server pairing".to_owned())?;
+    let token = id_token()?;
+    let client = Client::builder()
+        .timeout(Duration::from_secs(15))
+        .build()
+        .map_err(|_| "Could not prepare Firebase server unpairing".to_owned())?;
+    let response = client
+        .delete(format!("{FIRESTORE_DOCUMENTS_URL}/accounts/{}", credential.uid))
+        .bearer_auth(token)
+        .send()
+        .map_err(|_| "Could not remove the Firebase server pairing".to_owned())?;
+    if response.status().is_success() || response.status() == reqwest::StatusCode::NOT_FOUND {
+        Ok(())
+    } else {
+        Err("Firebase rejected the server unpairing. Check the Firestore security rules.".to_owned())
+    }
 }
 
 pub fn id_token() -> Result<String, String> {
