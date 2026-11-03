@@ -1,0 +1,10 @@
+{
+  "auth": {
+    "providers": {
+      "googleSignIn": {
+        "oAuthBrandDisplayName": "Shadow Controller",
+        "supportEmail": "drincs.contact@gmail.com"
+      }
+    }
+  }
+}

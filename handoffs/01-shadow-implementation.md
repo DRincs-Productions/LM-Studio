@@ -43,6 +43,8 @@ Non inventare valori, non considerare un test superato senza evidenze e non aggi
 
 ## Fase 1 — Firebase: identità e associazione (prima di tutto)
 
+**Implementation status (2026-11-03):** Firebase project `shadow-controller-20261103` is active on the no-billing plan, with the `Shadow Controller Desktop` web app registered. Google Sign-In has been configured in the repository's `firebase.json` and deployed successfully through Firebase Auth. Desktop sign-in, secure token storage, account/server binding, authorized-client management and verification tests remain unimplemented. The relay remains closed.
+
 1. **Verificare** tramite documentazione ufficiale e strumenti disponibili i requisiti e i limiti attuali dei piani gratuiti di **Firebase Authentication (Google)**, eventuale **Firestore** per l'associazione account/server, e **Cloudflare Workers/DO**. Distinguere piano gratuito da servizio che richiede comunque billing; non presumere che Firestore, Google login, Durable Objects o quote siano disponibili senza verifica.
 2. Sul PC di sviluppo **usare il plugin Firebase per Codex se presente e collegato**. Se non è disponibile, chiedere all'utente di collegarlo oppure concordare il percorso alternativo; non dichiarare che il plugin è già attivo. Richiedere il progetto/account da usare e le autorizzazioni necessarie.
 3. Progettare e implementare **Google sign-in**, identificativo utente stabile, associazione transazionale **1 uid → 1 server**, più client autorizzati, sostituzione/revoca del server, autorizzazione per ogni comando e isolamento tra utenti. Non usare il nome del remote rclone come identità.
