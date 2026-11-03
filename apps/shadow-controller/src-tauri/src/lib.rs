@@ -1,7 +1,8 @@
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
-        .plugin(tauri_plugin_opener::init())
+    let builder = tauri::Builder::default().plugin(tauri_plugin_opener::init());
+
+    builder
         .manage(CoordinatorState::default())
         .invoke_handler(tauri::generate_handler![
             get_local_status,
@@ -9,11 +10,40 @@ pub fn run() {
             get_local_job,
             list_local_jobs,
             list_local_job_events,
-            cancel_local_job
+            cancel_local_job,
+            stop_local_coordinator,
+            start_local_coordinator
         ])
         .setup(|app| {
+            let data_dir = app.path().app_data_dir().map_err(std::io::Error::other)?;
+            let expected_data_dir = shadow_coordinator::runtime::default_data_dir()?;
+            if data_dir != expected_data_dir {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "Tauri and Coordinator data directories do not match",
+                )
+                .into());
+            }
             let state = app.state::<CoordinatorState>();
             store(&state, app.handle()).map_err(std::io::Error::other)?;
+
+            #[cfg(windows)]
+            {
+                use tauri_plugin_autostart::ManagerExt;
+                app.handle()
+                    .plugin(tauri_plugin_autostart::init(
+                        tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+                        Some(vec!["--coordinator"]),
+                    ))?;
+                if !cfg!(debug_assertions) {
+                    if let Err(error) = app.autolaunch().enable() {
+                        append_coordinator_log(&data_dir, &format!("Could not register autostart: {error}"));
+                    }
+                }
+                if let Err(error) = ensure_coordinator_started(&data_dir) {
+                    append_coordinator_log(&data_dir, &format!("Could not start Coordinator: {error}"));
+                }
+            }
             Ok(())
         })
         .run(tauri::generate_context!())
@@ -21,9 +51,12 @@ pub fn run() {
 }
 
 use std::{
-    fs,
-    path::PathBuf,
+    fs::{self, OpenOptions},
+    io::Write,
+    path::{Path, PathBuf},
+    process::{Command, Stdio},
     sync::{Arc, Mutex},
+    time::SystemTime,
 };
 
 use serde::{Deserialize, Serialize};
@@ -31,6 +64,51 @@ use shadow_coordinator::{
     AcceptedJob, JobEvent, JobRecord, JobState, JobStore, StoreError, SubmitRequest,
 };
 use tauri::Manager;
+
+pub fn run_coordinator_from_environment() -> Result<(), shadow_coordinator::runtime::RuntimeError> {
+    let data_dir = shadow_coordinator::runtime::default_data_dir()?;
+    append_coordinator_log(&data_dir, "Background Coordinator starting");
+    let result = shadow_coordinator::runtime::run_service(&data_dir);
+    match &result {
+        Ok(()) => append_coordinator_log(&data_dir, "Background Coordinator stopped"),
+        Err(error) => append_coordinator_log(&data_dir, &format!("Background Coordinator failed: {error}")),
+    }
+    result
+}
+
+fn append_coordinator_log(data_dir: &Path, message: &str) {
+    if fs::create_dir_all(data_dir).is_err() {
+        return;
+    }
+    let Ok(mut log) = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(data_dir.join("coordinator.log"))
+    else {
+        return;
+    };
+    let _ = writeln!(log, "{:?} {message}", SystemTime::now());
+}
+
+fn ensure_coordinator_started(data_dir: &Path) -> Result<(), String> {
+    if shadow_coordinator::runtime::is_running(data_dir).map_err(|error| error.to_string())? {
+        return Ok(());
+    }
+    let executable = std::env::current_exe().map_err(|error| error.to_string())?;
+    let mut command = Command::new(executable);
+    command
+        .arg("--coordinator")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x0800_0000);
+    }
+    command.spawn().map_err(|error| error.to_string())?;
+    Ok(())
+}
 
 #[derive(Default)]
 struct CoordinatorState {
@@ -67,9 +145,6 @@ fn store(state: &CoordinatorState, app: &tauri::AppHandle) -> Result<Arc<JobStor
     fs::create_dir_all(&data_dir).map_err(|error| error.to_string())?;
     let database_path = data_dir.join("coordinator.sqlite3");
     let job_store = Arc::new(JobStore::open(&database_path).map_err(display_store_error)?);
-    job_store
-        .mark_running_jobs_interrupted()
-        .map_err(display_store_error)?;
     *state
         .database_path
         .lock()
@@ -86,12 +161,40 @@ fn get_local_status(state: tauri::State<'_, CoordinatorState>) -> Result<LocalSt
         .map_err(|_| "Coordinator state unavailable".to_owned())?
         .as_ref()
         .map(|path| path.display().to_string());
+    let coordinator = match state
+        .database_path
+        .lock()
+        .map_err(|_| "Coordinator state unavailable".to_owned())?
+        .as_ref()
+    {
+        Some(path) => {
+            let data_dir = path.parent().ok_or("Coordinator data path is invalid")?;
+            if shadow_coordinator::runtime::is_running(data_dir).map_err(|error| error.to_string())? {
+                "running"
+            } else {
+                "stopped"
+            }
+        }
+        None => "stopped",
+    };
     Ok(LocalStatus {
         application_version: env!("CARGO_PKG_VERSION").to_owned(),
-        coordinator: "local_only",
+        coordinator,
         database: if database_path.is_some() { "ready" } else { "not_initialized" },
         database_path,
     })
+}
+
+#[tauri::command]
+fn stop_local_coordinator(app: tauri::AppHandle) -> Result<bool, String> {
+    let data_dir = app.path().app_data_dir().map_err(|error| error.to_string())?;
+    shadow_coordinator::runtime::request_stop(&data_dir).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn start_local_coordinator(app: tauri::AppHandle) -> Result<(), String> {
+    let data_dir = app.path().app_data_dir().map_err(|error| error.to_string())?;
+    ensure_coordinator_started(&data_dir)
 }
 
 #[tauri::command]

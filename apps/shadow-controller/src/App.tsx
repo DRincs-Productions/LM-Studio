@@ -1,15 +1,57 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import "./App.css";
 
 type Section = "Overview" | "Jobs" | "Engines" | "Storage" | "Security";
 type Job = { jobId: string; operation: string; state: string; createdAt: string; errorCode?: string | null };
 type JobEvent = { eventId: number; eventType: string; occurredAt: string; messageRedacted?: string | null };
+type LocalStatus = { coordinator: string; database: string; databasePath?: string | null };
 
 const sections: Section[] = ["Overview", "Jobs", "Engines", "Storage", "Security"];
 
 function App() {
   const [section, setSection] = useState<Section>("Overview");
+  const [coordinatorRunning, setCoordinatorRunning] = useState(false);
+  const [statusMessage, setStatusMessage] = useState("Checking local Coordinator");
+
+  useEffect(() => {
+    let active = true;
+    const refreshStatus = async () => {
+      try {
+        const status = await invoke<LocalStatus>("get_local_status");
+        if (active) {
+          setCoordinatorRunning(status.coordinator === "running");
+          setStatusMessage(status.coordinator === "running" ? "Independent process" : "Process is stopped");
+        }
+      } catch {
+        if (active) setStatusMessage("Desktop backend unavailable");
+      }
+    };
+    void refreshStatus();
+    const timer = window.setInterval(() => void refreshStatus(), 1500);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  async function stopCoordinator() {
+    try {
+      await invoke("stop_local_coordinator");
+      setStatusMessage("Stop requested");
+    } catch (error) {
+      setStatusMessage(String(error));
+    }
+  }
+
+  async function startCoordinator() {
+    try {
+      await invoke("start_local_coordinator");
+      setStatusMessage("Start requested");
+    } catch (error) {
+      setStatusMessage(String(error));
+    }
+  }
 
   return (
     <main className="app-shell">
@@ -39,8 +81,14 @@ function App() {
         </nav>
 
         <div className="sidebar-bottom">
-          <div className="connection-dot" />
-          <div><strong>Coordinator offline</strong><span>Waiting for server connection</span></div>
+          <div className={`connection-dot${coordinatorRunning ? " online" : ""}`} />
+          <div className="coordinator-indicator">
+            <strong>{coordinatorRunning ? "Coordinator running" : "Coordinator offline"}</strong>
+            <span>{statusMessage}</span>
+            {coordinatorRunning
+              ? <button className="text-button" type="button" onClick={() => void stopCoordinator()}>Stop process</button>
+              : <button className="text-button" type="button" onClick={() => void startCoordinator()}>Start process</button>}
+          </div>
         </div>
       </aside>
 
