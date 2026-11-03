@@ -659,6 +659,51 @@ mod tests {
     }
 
     #[test]
+    fn version_one_database_migration_marks_existing_active_jobs_interrupted() {
+        let connection = Connection::open_in_memory().unwrap();
+        connection.pragma_update(None, "foreign_keys", "ON").unwrap();
+        connection.execute_batch(INITIAL_SCHEMA).unwrap();
+        connection.pragma_update(None, "user_version", 1).unwrap();
+        connection.execute(
+            "INSERT INTO requests (
+                uid, client_id, request_id, operation, payload_version,
+                payload_hash, payload_json, created_at, job_id
+            ) VALUES ('user-1', 'client-1', 'legacy-1', 'narrative.generate', 1,
+                ?1, '{}', '2026-11-03T00:00:00Z', 'legacy-job-1')",
+            ["a".repeat(64)],
+        ).unwrap();
+        connection.execute(
+            "INSERT INTO jobs (
+                job_id, uid, client_id, request_id, state, fifo_sequence, created_at, started_at
+            ) VALUES ('legacy-job-1', 'user-1', 'client-1', 'legacy-1', 'running', 1,
+                '2026-11-03T00:00:00Z', '2026-11-03T00:00:01Z')",
+            [],
+        ).unwrap();
+        connection.execute(
+            "INSERT INTO job_attempts (job_id, attempt_number, cause, approved_by, started_at)
+             VALUES ('legacy-job-1', 1, 'initial_request', 'client_request', '2026-11-03T00:00:01Z')",
+            [],
+        ).unwrap();
+
+        let store = JobStore::from_connection(connection).unwrap();
+        let job = store.get("legacy-job-1").unwrap().unwrap();
+        assert_eq!(job.state, JobState::Interrupted);
+        assert_eq!(
+            job.error_code.as_deref(),
+            Some("interrupted_during_single_active_migration")
+        );
+        let connection = store.connection.lock().unwrap();
+        let events: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM job_events WHERE job_id = 'legacy-job-1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(events, 1);
+    }
+
+    #[test]
     fn state_changes_are_checked_and_restart_never_requeues_running_jobs() {
         let store = JobStore::open_in_memory().unwrap();
         let accepted = store.submit(request("request-1", 1)).unwrap();
