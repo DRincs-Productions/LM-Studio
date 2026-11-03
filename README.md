@@ -167,10 +167,7 @@ Nel confronto componenti senza LoRA del 25 ottobre 2026 (`node project-worker/mc
 ```mermaid
 flowchart TD
     C[Coordinatore]
-    FIND[Cerca asset audio del progetto]
-    REUSE[Riusa asset approvato]
     subgraph SONORO[Progettista sonoro]
-        AW[Audio Worker]
         M[Seleziona modello]
         MM[Stable Audio 3 Medium]
         MS[Stable Audio 3 Small SFX]
@@ -178,8 +175,6 @@ flowchart TD
         T[Controllo tecnico]
         P[Preview ripetuta]
         ASK[Richiesta di revisione]
-        O[Pubblica con rclone]
-        AW --> M
         M -->|musica| MM
         M -->|effetto sonoro| MS
         MM --> G
@@ -195,28 +190,26 @@ flowchart TD
         P --> ASK
         ASK --> LM
         R -->|meno di 80 o errore grave · corregge il prompt e riprova| G
-        R -->|almeno 80 e nessun errore grave| O
     end
-    C --> FIND
-    FIND -->|asset approvato idoneo| REUSE
-    REUSE --> C
-    FIND -->|serve un nuovo cue| AW
-    O --> C
+    C --> M
+    R -->|almeno 80 e nessun errore grave| C
 ```
 
 Il Progettista sonoro prepara musica ed effetti coerenti con ciò che accade nella storia. La generazione usa **audio.cpp v0.9.0 Vulkan** con **Stable Audio 3 Medium Q8** per la musica e **Stable Audio 3 Small SFX Q8** per gli effetti.
 
-Regia specifica nel Project File ogni cue: categoria (musica o effetto), comportamento loop, descrizione, trigger e condizione di stop. Prima di generare, il Coordinatore cerca asset audio già presenti nel progetto e li riusa quando sono adatti; altrimenti seleziona il generatore coerente con la categoria.
+La richiesta al Coordinatore specifica ogni cue: categoria (musica o effetto), comportamento loop, descrizione, trigger e condizione di stop. Il Coordinatore gestisce l'eventuale riutilizzo di asset già approvati prima di chiamare il Progettista sonoro; quando serve una nuova generazione, invia direttamente la richiesta a Seleziona modello.
 
 La revisione percettiva usa **Qwen2.5 Omni 7B Q4_K_M** con il projector audio incluso nel download LM Studio. Un profilo Bionic specifico del modello contiene il system prompt, che chiede osservazioni verificabili in JSON e non formula un’approvazione. Il runtime di prova è **llama.cpp v0.6.0-dev, build 11560, Vulkan**, nella cartella `C:\Users\Shadow\.lmstudio\audio\llama.cpp\b11560-vulkan`.
 
 Il test da terminale con un breve chime sintetico ha riconosciuto categoria ed elementi descritti, restituito JSON valido, nessun difetto e il flag `loop=false`. È un test di funzionamento dell’ingresso audio e del prompt, non una valutazione della qualità di suoni musicali reali. llama.cpp segnala che l’ingresso audio è sperimentale.
 
-Codex non riceve direttamente il WAV tramite il percorso CLI usato per la revisione delle immagini. L’Audio Worker avvia perciò Qwen2.5 Omni localmente e restituisce un rapporto percettivo in JSON; Codex confronta quel rapporto e i controlli tecnici con il cue, assegna il punteggio e decide se approvare o correggere il prompt. Un cue viene finalizzato soltanto con almeno 80 punti, nessun errore grave e un rapporto d’ascolto interpretabile. Il limite è di tre generazioni per cue. Per i loop viene ascoltata anche un’anteprima ripetuta senza crossfade artificiale; una singola passata non certifica la continuità del loop.
+Codex non riceve direttamente il WAV tramite il percorso CLI usato per la revisione delle immagini. Il componente di revisione avvia perciò Qwen2.5 Omni localmente e restituisce un rapporto percettivo in JSON; Codex confronta quel rapporto e i controlli tecnici con il cue, assegna il punteggio e decide se approvare o correggere il prompt. Un cue viene finalizzato soltanto con almeno 80 punti, nessun errore grave e un rapporto d’ascolto interpretabile. Il limite è di tre generazioni per cue. Per i loop viene ascoltata anche un’anteprima ripetuta senza crossfade artificiale; una singola passata non certifica la continuità del loop.
 
-Prima di generare, il Coordinatore cerca gli audio già finalizzati nello spazio del progetto e ne confronta manifest, categoria e comportamento loop con il cue. Se trova un asset adatto, lo riusa e ne verifica hash e manifest. I nuovi WAV approvati vengono finalizzati in `C:\AI\assets\<PROJECT_ID>\Audio\Music` o `C:\AI\assets\<PROJECT_ID>\Audio\SoundEffects`, poi pubblicati in percorsi distinti tramite rclone. Il manifest conserva hash, rapporto percettivo, decisione Codex e stato di pubblicazione.
+Prima di generare, il Coordinatore cerca gli audio già finalizzati nello spazio del progetto e ne confronta manifest, categoria e comportamento loop con il cue. Se trova un asset adatto, lo riusa e ne verifica hash e manifest. I nuovi WAV approvati vengono finalizzati in `C:\AI\assets\<PROJECT_ID>\Audio\Music` o `C:\AI\assets\<PROJECT_ID>\Audio\SoundEffects`, e successivamente trasferiti, quando necessario, dal Coordinatore tramite rclone. Il manifest conserva hash, rapporto percettivo e decisione Codex; lo stato di trasferimento è responsabilità del Coordinatore.
 
-Il confronto dei modelli è documentato in [Confronto dei modelli audio](docs/CONFRONTO-MODELLI-AUDIO.md) e [Confronto dei tre modelli Writer](docs/CONFRONTO-MODELLI-NARRAZIONE.md). La prova completa degli strumenti Audio Worker, dell’ascolto Qwen e della decisione Codex è riportata in [Test del flusso Audio Worker](RAPPORTO-TEST-AUDIO-WORKER.md). Il runner del Coordinatore è predisposto per la fase audio; l’handoff Bionic non è stato ripetuto mentre il Project File canonico aveva un handback narrativo pendente.
+È prevista una valutazione di **Gemini come possibile reviewer audio** al posto della combinazione Qwen2.5 Omni + Codex, senza modificare per ora la revisione operativa. Occorre verificare supporto audio effettivo nella modalità CLI/API scelta, qualità del giudizio su musica, SFX, loop, latenza, costi, limiti e rifiuti. Vedere l'handoff 06.
+
+Il confronto dei modelli è documentato in [Confronto dei modelli audio](docs/CONFRONTO-MODELLI-AUDIO.md) e [Confronto dei tre modelli Writer](docs/CONFRONTO-MODELLI-NARRAZIONE.md). La prova completa degli strumenti Audio Worker, dell’ascolto Qwen e della decisione Codex è riportata in [Test del flusso Audio Worker](RAPPORTO-TEST-AUDIO-WORKER.md). Il runner del Coordinatore è predisposto per la fase audio; le precedenti prove legate a Bionic restano materiale storico e non fanno parte del nuovo flusso.
 
 ### Programmatore
 
