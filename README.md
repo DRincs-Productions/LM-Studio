@@ -105,7 +105,7 @@ flowchart TD
         Q[Proposta parallela Gemini]
         M[Merge Codex · SceneContract]
         W[Hemmingway]
-        R[Gemini]
+        R[Qwen3 8B]
         X[Controllo finale Codex]
         P --> M
         Q --> M
