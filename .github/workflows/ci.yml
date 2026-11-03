@@ -19,7 +19,9 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: apps/shadow-controller/package-lock.json
+          cache-dependency-path: |
+            apps/shadow-controller/package-lock.json
+            apps/shadow-client/package-lock.json
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -31,6 +33,14 @@ jobs:
 
       - name: Build desktop frontend
         working-directory: apps/shadow-controller
+        run: npm run build
+
+      - name: Install MCP client dependencies
+        working-directory: apps/shadow-client
+        run: npm ci
+
+      - name: Build MCP client package
+        working-directory: apps/shadow-client
         run: npm run build
 
       - name: Check Rust formatting

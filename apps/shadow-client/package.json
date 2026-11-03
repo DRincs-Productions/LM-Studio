@@ -1,0 +1,30 @@
+{
+  "name": "shadow-controller-mcp-client",
+  "version": "0.1.0",
+  "description": "Shadow Controller desktop client authentication and MCP integration",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "shadow-client": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "assets",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "tsc --noEmit && tsup src/cli.ts --format esm --clean",
+    "start": "node dist/cli.js"
+  },
+  "dependencies": {
+    "@napi-rs/keyring": "^2.1.2"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.0",
+    "tsup": "^9.0.0",
+    "typescript": "~6.0.3"
+  }
+}
