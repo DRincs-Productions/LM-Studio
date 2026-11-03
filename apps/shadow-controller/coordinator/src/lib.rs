@@ -80,6 +80,8 @@ impl JobState {
                 | (Self::Running, Self::Failed)
                 | (Self::Running, Self::CancelRequested)
                 | (Self::Running, Self::Interrupted)
+                | (Self::CancelRequested, Self::Succeeded)
+                | (Self::CancelRequested, Self::Failed)
                 | (Self::CancelRequested, Self::Cancelled)
                 | (Self::CancelRequested, Self::Interrupted)
         )
@@ -139,6 +141,20 @@ pub struct JobEvent {
 pub struct AcceptedJob {
     pub job: JobRecord,
     pub duplicate: bool,
+}
+
+pub enum JobExecutionOutcome {
+    Succeeded {
+        result_manifest: Option<serde_json::Value>,
+    },
+    Failed {
+        error_code: String,
+        message_redacted: String,
+        result_manifest: Option<serde_json::Value>,
+    },
+    Cancelled {
+        message_redacted: String,
+    },
 }
 
 pub struct JobStore {
@@ -434,6 +450,18 @@ impl JobStore {
         error_code: Option<&str>,
         message_redacted: &str,
     ) -> Result<JobRecord, StoreError> {
+        self.transition_with_manifest(job_id, next, error_code, None, message_redacted)
+    }
+
+    pub fn transition_with_manifest(
+        &self,
+        job_id: &str,
+        next: JobState,
+        error_code: Option<&str>,
+        result_manifest: Option<&serde_json::Value>,
+        message_redacted: &str,
+    ) -> Result<JobRecord, StoreError> {
+        let manifest_json = result_manifest.map(serde_json::to_string).transpose()?;
         let mut connection = self
             .connection
             .lock()
@@ -453,9 +481,17 @@ impl JobStore {
             "UPDATE jobs SET state = ?2,
                 started_at = COALESCE(started_at, ?3),
                 finished_at = COALESCE(?4, finished_at),
-                error_code = ?5
+                error_code = ?5,
+                result_manifest = COALESCE(?6, result_manifest)
              WHERE job_id = ?1",
-            params![job_id, next.as_str(), started_at, finished_at, error_code],
+            params![
+                job_id,
+                next.as_str(),
+                started_at,
+                finished_at,
+                error_code,
+                manifest_json
+            ],
         )?;
         if next == JobState::Running {
             transaction.execute(
@@ -480,6 +516,60 @@ impl JobStore {
         let job = load_job(&transaction, job_id)?.ok_or(StoreError::JobNotFound)?;
         transaction.commit()?;
         Ok(job)
+    }
+
+    /// Claims one FIFO job, calls the host-provided executor once, and persists its outcome.
+    /// This method never retries a job and does not provide an executor itself.
+    pub fn run_next(
+        &self,
+        executor: impl FnOnce(&JobRecord, &JobStore) -> JobExecutionOutcome,
+    ) -> Result<Option<JobRecord>, StoreError> {
+        let Some(job) = self.claim_next_queued()? else {
+            return Ok(None);
+        };
+        let outcome = executor(&job, self);
+        let current_state = self
+            .get(&job.job_id)?
+            .ok_or(StoreError::JobNotFound)?
+            .state;
+        let completed = match outcome {
+            JobExecutionOutcome::Succeeded { result_manifest } => self
+                .transition_with_manifest(
+                    &job.job_id,
+                    JobState::Succeeded,
+                    None,
+                    result_manifest.as_ref(),
+                    "Executor completed the job",
+                )?,
+            JobExecutionOutcome::Failed {
+                error_code,
+                message_redacted,
+                result_manifest,
+            } => self.transition_with_manifest(
+                &job.job_id,
+                JobState::Failed,
+                Some(&error_code),
+                result_manifest.as_ref(),
+                &message_redacted,
+            )?,
+            JobExecutionOutcome::Cancelled { message_redacted }
+                if current_state == JobState::CancelRequested =>
+            {
+                self.transition(
+                    &job.job_id,
+                    JobState::Cancelled,
+                    None,
+                    &message_redacted,
+                )?
+            }
+            JobExecutionOutcome::Cancelled { .. } => self.transition(
+                &job.job_id,
+                JobState::Failed,
+                Some("executor_cancelled_without_request"),
+                "Executor stopped without a recorded cancellation request",
+            )?,
+        };
+        Ok(Some(completed))
     }
 
     pub fn mark_running_jobs_interrupted(&self) -> Result<usize, StoreError> {
@@ -728,6 +818,66 @@ mod tests {
         assert_eq!(claimed.len(), 1);
         assert_eq!(claimed[0].state, JobState::Running);
         assert!(store.claim_next_queued().unwrap().is_none());
+    }
+
+    #[test]
+    fn run_next_persists_executor_outcomes_without_automatic_retries() {
+        let store = JobStore::open_in_memory().unwrap();
+        let first = store.submit(request("request-1", 1)).unwrap();
+        store.submit(request("request-2", 2)).unwrap();
+
+        let succeeded = store
+            .run_next(|job, _store| {
+                assert_eq!(job.job_id, first.job.job_id);
+                JobExecutionOutcome::Succeeded {
+                    result_manifest: Some(serde_json::json!({ "artifactCount": 1 })),
+                }
+            })
+            .unwrap()
+            .unwrap();
+        assert_eq!(succeeded.state, JobState::Succeeded);
+        assert_eq!(
+            succeeded.result_manifest,
+            Some(serde_json::json!({ "artifactCount": 1 }))
+        );
+
+        let failed = store
+            .run_next(|_, _store| JobExecutionOutcome::Failed {
+                error_code: "engine_unavailable".into(),
+                message_redacted: "Configured executor is unavailable".into(),
+                result_manifest: None,
+            })
+            .unwrap()
+            .unwrap();
+        assert_eq!(failed.state, JobState::Failed);
+        assert_eq!(failed.error_code.as_deref(), Some("engine_unavailable"));
+        assert!(store
+            .run_next(|_, _| panic!("there must be no automatic retry"))
+            .unwrap()
+            .is_none());
+    }
+
+    #[test]
+    fn run_next_marks_cancelled_only_after_a_cancel_request() {
+        let store = JobStore::open_in_memory().unwrap();
+        store.submit(request("request-1", 1)).unwrap();
+        let result = store
+            .run_next(|job, store| {
+                store
+                    .transition(
+                        &job.job_id,
+                        JobState::CancelRequested,
+                        None,
+                        "Cancellation requested",
+                    )
+                    .unwrap();
+                JobExecutionOutcome::Cancelled {
+                    message_redacted: "Executor confirmed cancellation".into(),
+                }
+            })
+            .unwrap()
+            .unwrap();
+        assert_eq!(result.state, JobState::Cancelled);
     }
 
     #[test]

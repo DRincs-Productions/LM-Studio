@@ -66,7 +66,7 @@ Non inventare valori, non considerare un test superato senza evidenze e non aggi
 
 ## Fase 3 — SQLite, contratto dei job e scheduler FIFO
 
-**Implementation status (2026-11-03):** The SQLite schema, idempotent acceptance, state transitions, restart interruption handling and atomic FIFO claim (maximum one active job) are implemented in `apps/shadow-controller/coordinator`. GitHub Actions passes the core unit tests and Windows Tauri `cargo check`. The claim API is not yet connected to an independent scheduler or production executor; timeout, resource gating, cancellation confirmation from a running process, artifact manifests and explicit retry remain open.
+**Implementation status (2026-11-03):** The SQLite schema, idempotent acceptance, state transitions, restart interruption handling and atomic FIFO claim (maximum one active job) are implemented in `apps/shadow-controller/coordinator`. A one-shot `run_next` hook accepts a host-provided executor and records success/failure/cancellation and result manifests; tests use controlled in-memory executors only. GitHub Actions passes the core unit tests and Windows Tauri `cargo check`. An independent process/runtime and production executors are not connected; timeout, resource gating, cancellation from a real process, artifact persistence and explicit retry remain open.
 
 Implementare uno **schema migrabile** (versioni di schema e migrazioni testate) con almeno:
 
