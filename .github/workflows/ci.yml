@@ -41,3 +41,14 @@ jobs:
 
       - name: Check Tauri desktop
         run: cargo check --manifest-path apps/shadow-controller/src-tauri/Cargo.toml
+
+      - name: Build Windows desktop validation executable
+        run: cargo build --manifest-path apps/shadow-controller/src-tauri/Cargo.toml
+
+      - name: Upload Windows desktop validation executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: shadow-controller-windows-debug
+          path: apps/shadow-controller/src-tauri/target/debug/shadow-controller.exe
+          if-no-files-found: error
+          retention-days: 7
