@@ -3,7 +3,6 @@
   "version": "0.1.0",
   "description": "Shadow Controller desktop client authentication and MCP integration",
   "type": "module",
-  "license": "MIT",
   "bin": {
     "shadow-client": "dist/cli.js",
     "shadow-controller-mcp": "dist/server.js"

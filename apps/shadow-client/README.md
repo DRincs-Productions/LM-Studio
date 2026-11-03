@@ -7,9 +7,9 @@ The remote relay transport and job tools are not implemented yet. The current MC
 ## Commands
 
 ```powershell
-npx shadow-controller-mcp-client login
-npx shadow-controller-mcp-client status
-npx shadow-controller-mcp-client logout
+npx --yes --package shadow-controller-mcp-client shadow-client login
+npx --yes --package shadow-controller-mcp-client shadow-client status
+npx --yes --package shadow-controller-mcp-client shadow-client logout
 ```
 
 During repository development, run the same commands from this directory with `npm run start -- <command>` after building.
