@@ -29,6 +29,13 @@ pub struct AuthIdentity {
     email: String,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuthorizedClient {
+    id: String,
+    display_name: String,
+}
+
 pub fn server_id() -> Result<String, String> {
     static SERVER_ID_LOCK: Mutex<()> = Mutex::new(());
     let _guard = SERVER_ID_LOCK
@@ -111,7 +118,14 @@ struct FirebaseErrorBody {
 
 #[derive(Debug, Deserialize)]
 struct FirestoreDocument {
+    name: String,
     fields: Option<HashMap<String, FirestoreValue>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct FirestoreDocumentList {
+    documents: Option<Vec<FirestoreDocument>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -374,6 +388,65 @@ pub fn unpair_server() -> Result<(), String> {
         Ok(())
     } else {
         Err("Firebase rejected the server unpairing. Check the Firestore security rules.".to_owned())
+    }
+}
+
+pub fn list_authorized_clients() -> Result<Vec<AuthorizedClient>, String> {
+    if !pairing_status()? {
+        return Err("Pair this server before managing authorized clients".to_owned());
+    }
+    let credential = read_credential()?.ok_or_else(|| "Sign in before managing authorized clients".to_owned())?;
+    let token = id_token()?;
+    let client = Client::builder()
+        .timeout(Duration::from_secs(15))
+        .build()
+        .map_err(|_| "Could not prepare the authorized-client list".to_owned())?;
+    let response = client
+        .get(format!("{FIRESTORE_DOCUMENTS_URL}/accounts/{}/authorizedClients?pageSize=100", credential.uid))
+        .bearer_auth(token)
+        .send()
+        .map_err(|_| "Could not read authorized clients from Firebase".to_owned())?
+        .error_for_status()
+        .map_err(|_| "Firebase rejected the authorized-client request".to_owned())?
+        .json::<FirestoreDocumentList>()
+        .map_err(|_| "Firebase returned an invalid authorized-client list".to_owned())?;
+
+    Ok(response
+        .documents
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|document| {
+            let id = document.name.rsplit('/').next()?.to_owned();
+            let display_name = document
+                .fields?
+                .get("displayName")?
+                .string_value
+                .clone()?;
+            Some(AuthorizedClient { id, display_name })
+        })
+        .collect())
+}
+
+pub fn revoke_authorized_client(client_id: &str) -> Result<(), String> {
+    Uuid::parse_str(client_id).map_err(|_| "Authorized client ID is invalid".to_owned())?;
+    if !pairing_status()? {
+        return Err("Pair this server before managing authorized clients".to_owned());
+    }
+    let credential = read_credential()?.ok_or_else(|| "Sign in before managing authorized clients".to_owned())?;
+    let token = id_token()?;
+    let client = Client::builder()
+        .timeout(Duration::from_secs(15))
+        .build()
+        .map_err(|_| "Could not prepare client revocation".to_owned())?;
+    let response = client
+        .delete(format!("{FIRESTORE_DOCUMENTS_URL}/accounts/{}/authorizedClients/{client_id}", credential.uid))
+        .bearer_auth(token)
+        .send()
+        .map_err(|_| "Could not revoke the Firebase client".to_owned())?;
+    if response.status().is_success() || response.status() == reqwest::StatusCode::NOT_FOUND {
+        Ok(())
+    } else {
+        Err("Firebase rejected the client revocation".to_owned())
     }
 }
 

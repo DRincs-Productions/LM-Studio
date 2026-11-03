@@ -30,6 +30,21 @@ mod auth {
         Err("Server unpairing is not supported on this platform yet".to_owned())
     }
 
+    pub fn list_authorized_clients() -> Result<Vec<AuthorizedClient>, String> {
+        Err("Authorized clients are not supported on this platform yet".to_owned())
+    }
+
+    pub fn revoke_authorized_client(_client_id: &str) -> Result<(), String> {
+        Err("Authorized clients are not supported on this platform yet".to_owned())
+    }
+
+    #[derive(Debug, Clone, serde::Serialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct AuthorizedClient {
+        id: String,
+        display_name: String,
+    }
+
     pub fn identity() -> Result<Option<AuthIdentity>, String> {
         Ok(None)
     }
@@ -65,7 +80,9 @@ pub fn run() {
             get_local_server_id,
             get_local_pairing_status,
             pair_local_server,
-            unpair_local_server
+            unpair_local_server,
+            list_local_authorized_clients,
+            revoke_local_authorized_client
         ])
         .setup(|app| {
             let data_dir = app.path().app_data_dir().map_err(std::io::Error::other)?;
@@ -273,6 +290,16 @@ fn pair_local_server() -> Result<(), String> {
 #[tauri::command]
 fn unpair_local_server() -> Result<(), String> {
     auth::unpair_server()
+}
+
+#[tauri::command]
+fn list_local_authorized_clients() -> Result<Vec<auth::AuthorizedClient>, String> {
+    auth::list_authorized_clients()
+}
+
+#[tauri::command]
+fn revoke_local_authorized_client(client_id: String) -> Result<(), String> {
+    auth::revoke_authorized_client(&client_id)
 }
 
 #[tauri::command]

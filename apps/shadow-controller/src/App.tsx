@@ -8,6 +8,7 @@ type Job = { jobId: string; operation: string; state: string; createdAt: string;
 type JobEvent = { eventId: number; eventType: string; occurredAt: string; messageRedacted?: string | null };
 type LocalStatus = { coordinator: string; database: string; databasePath?: string | null };
 type AuthIdentity = { uid: string; email: string };
+type AuthorizedClient = { id: string; displayName: string };
 
 const sections: Section[] = ["Overview", "Jobs", "Engines", "Storage", "Security"];
 
@@ -215,7 +216,9 @@ function App() {
 
           {section === "Overview"
             ? <Overview authIdentity={authIdentity} authPending={authPending} authMessage={authMessage} serverId={serverId} pairingStatus={pairingStatus} pairingPending={pairingPending} pairingMessage={pairingMessage} onSignIn={() => void signIn()} onPair={() => void pairServer()} onUnpair={() => void unpairServer()} />
-            : section === "Jobs" ? <Jobs /> : <SectionPlaceholder section={section} />}
+            : section === "Jobs" ? <Jobs />
+              : section === "Security" ? <Security identity={authIdentity} pairingStatus={pairingStatus} />
+                : <SectionPlaceholder section={section} />}
         </div>
       </section>
     </main>
@@ -313,6 +316,58 @@ function Jobs() {
           </div>)}</div>}
         </article>)}</div>
       )}
+    </section>
+  );
+}
+
+function Security({ identity, pairingStatus }: { identity: AuthIdentity | null; pairingStatus: "unknown" | "paired" | "unpaired" }) {
+  const [clients, setClients] = useState<AuthorizedClient[]>([]);
+  const [message, setMessage] = useState("Sign in and pair this server to manage authorized clients.");
+  const [busyClient, setBusyClient] = useState<string | null>(null);
+
+  async function refreshClients() {
+    try {
+      const rows = await invoke<AuthorizedClient[]>("list_local_authorized_clients");
+      setClients(rows);
+      setMessage(rows.length === 0 ? "No clients are authorized." : `${rows.length} authorized client${rows.length === 1 ? "" : "s"}.`);
+    } catch (error) {
+      setClients([]);
+      setMessage(String(error));
+    }
+  }
+
+  useEffect(() => {
+    if (identity && pairingStatus === "paired") void refreshClients();
+    else {
+      setClients([]);
+      setMessage(identity ? "Pair this server before managing authorized clients." : "Sign in with Google to manage authorized clients.");
+    }
+  }, [identity, pairingStatus]);
+
+  async function revoke(client: AuthorizedClient) {
+    if (!window.confirm(`Revoke access for “${client.displayName}”?`)) return;
+    setBusyClient(client.id);
+    try {
+      await invoke("revoke_local_authorized_client", { clientId: client.id });
+      await refreshClients();
+    } catch (error) {
+      setMessage(String(error));
+    } finally {
+      setBusyClient(null);
+    }
+  }
+
+  return (
+    <section className="section-placeholder">
+      <div className="placeholder-glyph">◇</div>
+      <h2>Security</h2>
+      <p>{message}</p>
+      {identity && <p>Signed in as {identity.email}</p>}
+      {clients.length > 0 && <ul className="setup-list">{clients.map((client) => <li key={client.id}>
+        <span className="step-icon">⌘</span><div><strong>{client.displayName}</strong><span>{client.id}</span></div>
+        <button className="text-button" type="button" disabled={busyClient === client.id} onClick={() => void revoke(client)}>{busyClient === client.id ? "Revoking…" : "Revoke"}</button>
+      </li>)}</ul>}
+      <p>Client enrollment will be available when the MCP client is implemented.</p>
     </section>
   );
 }
