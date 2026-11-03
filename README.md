@@ -214,75 +214,36 @@ Il confronto dei modelli è documentato in [Confronto dei modelli audio](docs/CO
 
 ## PC locale, PC cloud e condivisione dei file
 
-Il **PC locale** conserva il progetto di gioco: sorgenti, documentazione, Project File, stato e asset integrati. Il **PC cloud** ospita i modelli locali e i worker che li eseguono, così la generazione usa le risorse di quella macchina. Il Coordinatore online assegna il lavoro e governa l’uso della VRAM del PC cloud.
+Il sistema separa il **PC locale**, dove l'utente lavora con **Codex CLI** e conserva i propri progetti, dal **server Tauri** sul PC Shadow (o altro host), che esegue il **Coordinatore Rust**, i modelli locali e i worker di produzione. Il client MCP comunica con il server attraverso una connessione **WebSocket** e il relay Cloudflare previsto; il Coordinatore gestisce le richieste e le code persistenti in **SQLite**, distribuisce i job e restituisce stati e risultati a Codex.
 
-Questa è la suddivisione architetturale desiderata. Le verifiche disponibili sono state svolte su un solo host Windows con RTX A4500; non provano ancora un’esecuzione distribuita né un servizio che invii job al PC cloud. La condivisione file già presente usa rclone e non costituisce, da sola, una coda o un sistema di dispatch.
-
-```mermaid
-flowchart LR
-    subgraph LOCAL[PC locale · progetto di gioco]
-        GAME[Sorgenti e documentazione]
-        PF[Project File e stato]
-        AS[Asset integrati]
-    end
-    subgraph CLOUD[PC cloud · modelli locali]
-        B[Bionic e Regia]
-        C[Codex Coordinatore]
-        M[Modelli e Worker]
-        B --> C
-        C --> M
-    end
-    RCLONE[(Remote rclone · imagecloud:)]
-    M -->|pubblica file finali| RCLONE
-    RCLONE -->|recupera asset| AS
-    GAME -. accesso al progetto da collegare .- M
-    PF -. handoff del progetto da collegare .- C
-```
+Questa è l'**architettura obiettivo**, non un'integrazione remota già completata. I test storici sono stati eseguiti su un singolo host Windows con GPU NVIDIA RTX A4500. Il relay Cloudflare esistente è ancora un bootstrap non operativo: autenticazione, WebSocket, Durable Object e dispatch remoto devono essere implementati.
 
 ### Cosa gira su ciascuna macchina
 
-| Sistema | Stato e responsabilità attuali |
+| Sistema | Responsabilità |
 |---|---|
-| **PC locale** | Destinazione canonica del progetto di gioco: sorgenti, documentazione, Project File, stato e asset integrati. Il flusso deve poter continuare anche quando il PC cloud è spento, fermando o accodando in modo esplicito la produzione che dipende dai modelli. |
-| **PC cloud** | Destinazione dei modelli locali e dei worker di generazione, con GPU e VRAM per scrittura, immagini e audio. Il dispatch remoto, il controllo di disponibilità e l’installazione completa dei worker non sono ancora stati verificati tra due macchine. |
-| **Host di test verificato** | I test documentati sono stati eseguiti su un solo host Windows con NVIDIA RTX A4500. Questo dato descrive l’ambiente di prova e non cambia la destinazione architetturale del progetto e dei modelli. |
+| **PC locale (client MCP)** | Codex CLI, Node.js, client MCP e rclone. Il progetto dell'utente e gli asset integrati restano qui; Codex invia richieste e riceve risultati dal Coordinatore. |
+| **PC Shadow / server Tauri** | Applicazione Tauri, Coordinatore Rust, **SQLite** per richieste e stato, LM Studio, `sd-cli.exe`, runtime audio e altri worker/CLI AI necessari. Il Coordinatore pianifica le code, gestisce GPU/VRAM, ripartenze e trasferimenti. |
+| **Cloudflare** | Relay WebSocket previsto per collegare client e server senza richiedere una connessione in ingresso diretta al PC Shadow. Il servizio non è ancora attivo per il traffico applicativo. |
+| **OneDrive (tramite rclone)** | Cartella cloud temporanea condivisa per scambiare file e asset. Non è il database delle richieste e non sostituisce SQLite. Il provider è configurabile tramite rclone. |
 
-La GPU, i modelli e i percorsi del PC cloud devono essere verificati sulla macchina effettivamente configurata. rclone trasferisce i file previsti, ma non installa modelli e non avvia da solo la generazione.
+### Dove risiedono modelli, richieste e asset
 
-### Dove risiedono modelli, progetti e asset
-
-| Dati o programmi | Destinazione architetturale | Note |
-|---|---|---|
-| Modelli linguistici LM Studio | `C:\Users\Shadow\.lmstudio\models` | Regia Qwen 3.5 9B; Writer Hemmingway 1 Abliterated Extreme; Narrative Reviewer Qwen3 8B. Sono modelli locali di LM Studio. |
-| Checkpoint immagini | `C:\AI\image-worker\models` | `krea2_turbo_fp8_scaled.safetensors` (standard), `redcraftREDMIXHybridA2A_30Krea2.safetensors` (adulto non anime) e `krea2Anime_v20_fp8.safetensors` (anime, qualunque rating). Il LoKR SNOFS è stato rimosso e non è più installato né previsto nel flusso immagini. |
-| Encoder e VAE immagini | `C:\Users\Shadow\AppData\Local\Comfy-Desktop\ComfyUI-Shared\models` | `text_encoders\qwen3vl_4b_fp8_scaled.safetensors` e `vae\qwen_image_vae.safetensors`, usati da `sd-cli`; questo percorso contiene solo i componenti condivisi e non implica l’uso di ComfyUI come runtime. Se la cartella condivisa viene rimossa, questi due file dovranno essere ricollocati e aggiornati nella configurazione del Worker. |
-| Eseguibile Image Worker | `C:\Users\Shadow\.lmstudio\image-worker\bin\sd-cli.exe` | Il server MCP risiede in `C:\Users\Shadow\.lmstudio\image-worker\mcp`. |
-| Modelli audio | `C:\AI\audio-worker\models\audio.cpp` | Stable Audio 3 Medium Q8 e Stable Audio 3 Small SFX Q8. |
-| Runtime audio.cpp | `C:\Users\Shadow\.lmstudio\audio\audio.cpp\v0.9.0-vulkan` | Il server MCP è in `C:\Users\Shadow\.lmstudio\audio\mcp`. |
-| Modello per l’ascolto audio | `C:\Users\Shadow\.lmstudio\models\ggml-org\Qwen2.5-Omni-7B-GGUF` | Qwen2.5 Omni 7B Q4_K_M più projector F16; profilo Bionic nella cartella interna `user-concrete-model-default-config`. |
-| Runtime per il test audio multimodale | `C:\Users\Shadow\.lmstudio\audio\llama.cpp\b11560-vulkan` | Build 11560; il CLI multimodale è usato per il test da terminale. |
-| Project File e stato operativo | Workspace del progetto Bionic corrente: `C:\Users\Shadow\.lmstudio\apps\bionic\projects\<BIONIC_PROJECT_ID>\workspace` | Project Worker scrive e legge qui; lo stato di handoff è in `.orchestration`. |
-| Asset finali locali | `C:\AI\assets\<PROJECT_ID>` | Organizzati per progetto; audio separato in `Audio\SoundEffects` e `Audio\Music`. |
-
-I percorsi sopra sono quelli rilevati durante i test sull’host Windows verificato. Nell’architettura a due macchine i modelli appartengono al PC cloud; il trasferimento dei soli asset via rclone non replica il catalogo dei modelli.
-
-Project File e stato di orchestrazione sono collocati nella workspace del progetto Bionic attivo. Il Project Worker riceve questa radice tramite `BIONIC_PROJECTS_DIR`; quando si passa a un diverso progetto Bionic, la radice va associata al relativo workspace prima di usare i tool. Dopo ogni scrittura Regia rilegge il documento e ne verifica hash e revisione prima di chiedere approvazione o fare handoff.
+- **Modelli e runtime:** risiedono sul server Shadow. LM Studio esegue i modelli linguistici locali; `sd-cli.exe` resta il generatore di immagini attuale e `audio.cpp` quello audio. I percorsi rilevati nei test precedenti sono indicativi dell'host di prova e non costituiscono un requisito per nuove installazioni.
+- **Richieste e code:** il database **SQLite** locale al Coordinatore conserva identificativi delle richieste e dei job, stati, priorità, tentativi, errori e riferimenti agli asset. È il registro autorevole; non si usa OneDrive come coda.
+- **Progetti:** i sorgenti e i file dell'utente restano sul PC locale. Non è più previsto un Project File vincolato alla workspace Bionic o un passaggio attraverso Regia.
+- **Asset generati:** vengono conservati inizialmente sul server; il Coordinatore decide quando renderli disponibili al client e può mantenere una cache locale per ripubblicarli. I worker non pubblicano autonomamente tramite rclone.
 
 ### Trasferimento file con rclone
 
-Il trasferimento dei file è gestito da **rclone**. Il remote già configurato si chiama `imagecloud:`. Il file di configurazione locale di rclone è sotto `%APPDATA%\rclone\rclone.conf`; contiene credenziali e non va copiato nel repository, nei Project File o nei log. Ogni macchina che trasferisce file deve avere rclone configurato localmente.
+**rclone** è installato e configurato separatamente sul client e sul server. Entrambi accedono alla stessa cartella temporanea dell'app su **OneDrive**, oppure su un altro provider supportato. Il nome del remote può essere diverso sulle due macchine; `rclone.conf` contiene credenziali e non deve essere inserito nel repository o nei log.
 
-Il trasferimento avviene quando il worker chiama rclone: non è una sincronizzazione continua delle cartelle e non costituisce una coda di job remoti.
+Il **Coordinatore** gestisce gli upload e i riferimenti agli asset; il **client MCP** scarica i file necessari. Il trasferimento avviene solo quando richiesto, non come sincronizzazione continua. La coda e il dispatch restano indipendenti da rclone.
 
-| Contenuto | Percorso remoto rclone | Direzione e responsabile |
-|---|---|---|
-| Immagini finali | `imagecloud:ImageWorker/final/` | Image Worker pubblica; Asset Worker scarica la copia finale in `C:\AI\assets\<PROJECT_ID>`. |
-| Effetti sonori finali | `imagecloud:AudioWorker/SoundEffects/final/<PROJECT_ID>/` | Destinazione configurata per WAV e manifest; pubblicazione di un prodotto finale non ancora verificata. |
-| Musiche finali | `imagecloud:AudioWorker/Music/final/<PROJECT_ID>/` | Destinazione configurata per WAV e manifest; pubblicazione di un prodotto finale non ancora verificata. |
+La gestione prevista dei file temporanei comprende pulizia dei file dell'app più vecchi di **7 giorni** all'avvio del server, recupero dello spazio necessario per nuovi upload con un margine di **500 MiB**, e possibilità di ripubblicare asset dalla cache locale. Le cancellazioni devono rimanere strettamente nella cartella temporanea dell'app, senza toccare altri file del provider.
 
-Il codice usa copie esplicite tramite rclone e controlli sul risultato; non viene eseguita una sincronizzazione indiscriminata del remote. La pubblicazione delle immagini verifica la presenza remota; il trasferimento locale usato nella produzione confronta anche l’hash del file. La pubblicazione audio verifica le dimensioni di WAV e manifest. La rimozione di un file remoto non è automatica nel flusso normale.
+Il trasferimento remoto, la pulizia automatica e il recupero dei job dopo i riavvii sono **funzionalità da implementare e verificare**: non sono garantite dall'attuale configurazione di rclone.
 
-Quando il PC cloud sarà collegato, potrà scaricare tramite rclone gli input autorizzati e pubblicare i risultati nei percorsi finali previsti. La richiesta del job, l’assegnazione al PC cloud, il controllo che sia online e la gestione dei tentativi sono parti separate da implementare: rclone da solo non le fornisce.
 
 ## MCP: strumenti e installazione
 
