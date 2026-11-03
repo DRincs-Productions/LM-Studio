@@ -47,7 +47,10 @@ impl CoordinatorLease {
 
         let token = Uuid::new_v4().to_string();
         let _ = fs::remove_file(data_dir.join(STOP_FILE));
-        fs::write(data_dir.join(PID_FILE), format!("{}\n{}\n", std::process::id(), token))?;
+        fs::write(
+            data_dir.join(PID_FILE),
+            format!("{}\n{}\n", std::process::id(), token),
+        )?;
         Ok(Some(Self {
             lock,
             data_dir: data_dir.to_path_buf(),
@@ -73,9 +76,7 @@ impl Drop for CoordinatorLease {
             let _ = fs::remove_file(pid_path);
         }
         let stop_path = self.data_dir.join(STOP_FILE);
-        if fs::read_to_string(&stop_path)
-            .is_ok_and(|contents| contents.trim() == self.token)
-        {
+        if fs::read_to_string(&stop_path).is_ok_and(|contents| contents.trim() == self.token) {
             let _ = fs::remove_file(stop_path);
         }
         let _ = FileExt::unlock(&self.lock);
