@@ -41,7 +41,7 @@ impl CoordinatorLease {
             .open(data_dir.join(LOCK_FILE))?;
         match lock.try_lock_exclusive() {
             Ok(()) => {}
-            Err(error) if error.kind() == io::ErrorKind::WouldBlock => return Ok(None),
+            Err(error) if is_lock_contention(&error) => return Ok(None),
             Err(error) => return Err(error.into()),
         }
 
@@ -96,9 +96,13 @@ pub fn is_running(data_dir: &Path) -> Result<bool, RuntimeError> {
             FileExt::unlock(&lock)?;
             Ok(false)
         }
-        Err(error) if error.kind() == io::ErrorKind::WouldBlock => Ok(true),
+        Err(error) if is_lock_contention(&error) => Ok(true),
         Err(error) => Err(error.into()),
     }
+}
+
+fn is_lock_contention(error: &io::Error) -> bool {
+    error.kind() == io::ErrorKind::WouldBlock || error.raw_os_error() == Some(33)
 }
 
 pub fn request_stop(data_dir: &Path) -> Result<bool, RuntimeError> {
