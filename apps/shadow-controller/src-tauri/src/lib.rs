@@ -8,6 +8,7 @@ pub fn run() {
             submit_local_job,
             get_local_job,
             list_local_jobs,
+            list_local_job_events,
             cancel_local_job
         ])
         .setup(|app| {
@@ -26,7 +27,9 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
-use shadow_coordinator::{AcceptedJob, JobRecord, JobState, JobStore, StoreError, SubmitRequest};
+use shadow_coordinator::{
+    AcceptedJob, JobEvent, JobRecord, JobState, JobStore, StoreError, SubmitRequest,
+};
 use tauri::Manager;
 
 #[derive(Default)]
@@ -130,6 +133,19 @@ fn list_local_jobs(
 ) -> Result<Vec<JobRecord>, String> {
     store(&state, &app)?
         .list("local-user", &client_id, limit)
+        .map_err(display_store_error)
+}
+
+#[tauri::command]
+fn list_local_job_events(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, CoordinatorState>,
+    client_id: String,
+    job_id: String,
+    limit: u32,
+) -> Result<Vec<JobEvent>, String> {
+    store(&state, &app)?
+        .list_events("local-user", &client_id, &job_id, limit)
         .map_err(display_store_error)
 }
 

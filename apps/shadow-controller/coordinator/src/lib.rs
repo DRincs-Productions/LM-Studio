@@ -124,6 +124,18 @@ pub struct JobRecord {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct JobEvent {
+    pub event_id: i64,
+    pub job_id: String,
+    pub occurred_at: String,
+    pub event_type: String,
+    pub previous_state: Option<JobState>,
+    pub new_state: Option<JobState>,
+    pub message_redacted: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AcceptedJob {
     pub job: JobRecord,
     pub duplicate: bool,
@@ -386,6 +398,35 @@ impl JobStore {
             .map_err(StoreError::from)
     }
 
+    pub fn list_events(
+        &self,
+        uid: &str,
+        client_id: &str,
+        job_id: &str,
+        limit: u32,
+    ) -> Result<Vec<JobEvent>, StoreError> {
+        if !(1..=200).contains(&limit) {
+            return Err(StoreError::InvalidRequest(
+                "event limit must be between 1 and 200",
+            ));
+        }
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| StoreError::LockPoisoned)?;
+        let mut statement = connection.prepare(
+            "SELECT e.event_id, e.job_id, e.occurred_at, e.event_type,
+                    e.previous_state, e.new_state, e.message_redacted
+             FROM job_events e
+             INNER JOIN jobs j ON j.job_id = e.job_id
+             WHERE j.uid = ?1 AND j.client_id = ?2 AND e.job_id = ?3
+             ORDER BY e.event_id DESC LIMIT ?4",
+        )?;
+        let rows = statement.query_map(params![uid, client_id, job_id, limit], row_to_event)?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(StoreError::from)
+    }
+
     pub fn transition(
         &self,
         job_id: &str,
@@ -570,6 +611,22 @@ fn row_to_job(row: &rusqlite::Row<'_>) -> Result<JobRecord, rusqlite::Error> {
     })
 }
 
+fn row_to_event(row: &rusqlite::Row<'_>) -> Result<JobEvent, rusqlite::Error> {
+    let previous_state: Option<String> = row.get(4)?;
+    let new_state: Option<String> = row.get(5)?;
+    Ok(JobEvent {
+        event_id: row.get(0)?,
+        job_id: row.get(1)?,
+        occurred_at: row.get(2)?,
+        event_type: row.get(3)?,
+        previous_state: previous_state
+            .map(|value| JobState::parse(&value))
+            .transpose()?,
+        new_state: new_state.map(|value| JobState::parse(&value)).transpose()?,
+        message_redacted: row.get(6)?,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -615,6 +672,21 @@ mod tests {
             first.job.job_id
         );
         assert!(second.job.fifo_sequence > first.job.fifo_sequence);
+    }
+
+    #[test]
+    fn event_history_is_scoped_to_the_job_owner() {
+        let store = JobStore::open_in_memory().unwrap();
+        let accepted = store.submit(request("request-1", 1)).unwrap();
+        let events = store
+            .list_events("user-1", "client-1", &accepted.job.job_id, 10)
+            .unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_type, "job.accepted");
+        assert!(store
+            .list_events("another-user", "client-1", &accepted.job.job_id, 10)
+            .unwrap()
+            .is_empty());
     }
 
     #[test]

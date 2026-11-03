@@ -4,6 +4,7 @@ import "./App.css";
 
 type Section = "Overview" | "Jobs" | "Engines" | "Storage" | "Security";
 type Job = { jobId: string; operation: string; state: string; createdAt: string; errorCode?: string | null };
+type JobEvent = { eventId: number; eventType: string; occurredAt: string; messageRedacted?: string | null };
 
 const sections: Section[] = ["Overview", "Jobs", "Engines", "Storage", "Security"];
 
@@ -70,6 +71,8 @@ function App() {
 
 function Jobs() {
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [events, setEvents] = useState<JobEvent[]>([]);
+  const [selectedJob, setSelectedJob] = useState<string | null>(null);
   const [message, setMessage] = useState("Jobs are stored locally on this device. No remote server is connected.");
   const [busy, setBusy] = useState(false);
 
@@ -117,6 +120,23 @@ function Jobs() {
     }
   }
 
+  async function toggleEvents(jobId: string) {
+    if (selectedJob === jobId) {
+      setSelectedJob(null);
+      setEvents([]);
+      return;
+    }
+    setSelectedJob(jobId);
+    try {
+      const history = await invoke<JobEvent[]>("list_local_job_events", {
+        clientId: "desktop-ui", jobId, limit: 50,
+      });
+      setEvents(history);
+    } catch (error) {
+      setMessage(String(error));
+    }
+  }
+
   return (
     <section className="panel-card jobs-panel">
       <div className="card-heading">
@@ -131,7 +151,13 @@ function Jobs() {
           <div><strong>{job.operation}</strong><span>{job.jobId}</span></div>
           <time>{new Date(job.createdAt).toLocaleString()}</time>
           <span className={`job-state ${job.state}`}>{job.state.replace(/_/g, " ")}</span>
-          {job.state === "queued" && <button className="text-button" disabled={busy} onClick={() => void cancel(job.jobId)}>Cancel</button>}
+          <div className="job-row-actions">
+            <button className="text-button" onClick={() => void toggleEvents(job.jobId)}>{selectedJob === job.jobId ? "Hide" : "Events"}</button>
+            {job.state === "queued" && <button className="text-button" disabled={busy} onClick={() => void cancel(job.jobId)}>Cancel</button>}
+          </div>
+          {selectedJob === job.jobId && <div className="job-events">{events.map((event) => <div key={event.eventId}>
+            <time>{new Date(event.occurredAt).toLocaleString()}</time><strong>{event.eventType.replace(/\./g, " · ")}</strong><span>{event.messageRedacted}</span>
+          </div>)}</div>}
         </article>)}</div>
       )}
     </section>
