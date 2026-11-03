@@ -16,6 +16,10 @@ Il sistema non è stato progettato per lavorare soltanto in locale. I modelli on
 | Node.js | Esegue il client MCP TypeScript. | [Download](https://nodejs.org/en/download) |
 | Codex CLI *(opzionale)* | Client AI che può utilizzare gli strumenti MCP. | `npm install -g @openai/codex` |
 
+**Configurazioni particolari**
+
+**rclone:** esegui `rclone version`, `rclone config` e `rclone listremotes`. Configura un provider supportato con accesso alla cartella condivisa. Il nome del remote può essere diverso da quello del server. Non servono `rclone-sdk` o `rclone rcd`; non sovrascrivere la configurazione esistente né pubblicare `rclone.conf`.
+
 ### Server Tauri (Shadow o altro host)
 
 | Programma | Descrizione | Installazione |
@@ -26,15 +30,15 @@ Il sistema non è stato progettato per lavorare soltanto in locale. I modelli on
 | Node.js | Compila l'interfaccia Tauri. | [Download](https://nodejs.org/en/download) |
 | Cloudflare Workers *(servizio)* | Relay remoto, distribuito dal repository. | [Dashboard](https://dash.cloudflare.com/) |
 
+**Configurazioni particolari**
+
+**rclone:** configura il provider con `rclone config` e verifica con `rclone listremotes`; il remote deve accedere alla stessa cartella condivisa del client, anche se ha un nome diverso.
+
+**Asset temporanei (funzionalità prevista):** usa solo la cartella cloud dedicata all'app; elimina all'avvio i file più vecchi di 7 giorni e, se necessario, libera spazio per il nuovo upload più 500 MiB. Ripubblica dalla cache locale quando disponibile. Gli asset definitivi restano sul client.
+
+**Cloudflare:** il Worker `shadow-mcp-relay` esiste, ma WebSocket, Durable Object e autenticazione non sono ancora operativi. Codice e deploy GitHub Actions + Wrangler saranno gestiti in questo repository; Firebase e pairing verranno configurati in seguito.
+
 I motori immagini, video e audio (ad esempio `sd-cli.exe`, `audio.cpp`, ComfyUI e InvokeAI) saranno aggiunti dopo la scelta degli adapter e delle rispettive istruzioni. Firebase verrà configurato successivamente.
-
-### Configurazioni particolari
-
-**rclone (client e server):** esegui `rclone version`, `rclone config` e `rclone listremotes`. Scegli un provider supportato e una cartella condivisa accessibile a entrambe le macchine; i nomi dei remote possono essere diversi. Non servono `rclone-sdk` o `rclone rcd`. Conserva la configurazione esistente e non pubblicare `rclone.conf`.
-
-**Asset temporanei (funzionalità prevista):** solo nella cartella cloud dedicata all'app; pulizia all'avvio dei file più vecchi di 7 giorni, eventuale liberazione dello spazio per il nuovo upload più 500 MiB e ripubblicazione dalla cache locale se necessario. Gli asset definitivi restano sul client.
-
-**Cloudflare:** il Worker `shadow-mcp-relay` esiste, ma relay WebSocket, Durable Object e autenticazione non sono ancora operativi. Codice e deploy GitHub Actions + Wrangler saranno gestiti in questa repository; Firebase e pairing saranno affrontati in seguito.
 
 ---
 
