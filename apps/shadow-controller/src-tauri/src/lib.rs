@@ -1,3 +1,32 @@
+#[cfg(any(windows, target_os = "macos", target_os = "linux"))]
+mod auth;
+
+#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
+mod auth {
+    #[derive(Debug, Clone, serde::Serialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct AuthIdentity {
+        uid: String,
+        email: String,
+    }
+
+    pub fn begin_login() -> Result<String, String> {
+        Err("Google sign-in is not supported on this platform yet".to_owned())
+    }
+
+    pub fn identity() -> Result<Option<AuthIdentity>, String> {
+        Ok(None)
+    }
+
+    pub fn id_token() -> Result<String, String> {
+        Err("Google sign-in is not supported on this platform yet".to_owned())
+    }
+
+    pub fn sign_out() -> Result<(), String> {
+        Ok(())
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default().plugin(tauri_plugin_opener::init());
@@ -12,7 +41,11 @@ pub fn run() {
             list_local_job_events,
             cancel_local_job,
             stop_local_coordinator,
-            start_local_coordinator
+            start_local_coordinator,
+            begin_local_auth,
+            get_local_auth_status,
+            get_firebase_id_token,
+            sign_out_local_auth
         ])
         .setup(|app| {
             let data_dir = app.path().app_data_dir().map_err(std::io::Error::other)?;
@@ -195,6 +228,26 @@ fn stop_local_coordinator(app: tauri::AppHandle) -> Result<bool, String> {
 fn start_local_coordinator(app: tauri::AppHandle) -> Result<(), String> {
     let data_dir = app.path().app_data_dir().map_err(|error| error.to_string())?;
     ensure_coordinator_started(&data_dir)
+}
+
+#[tauri::command]
+fn begin_local_auth() -> Result<String, String> {
+    auth::begin_login()
+}
+
+#[tauri::command]
+fn get_local_auth_status() -> Result<Option<auth::AuthIdentity>, String> {
+    auth::identity()
+}
+
+#[tauri::command]
+fn get_firebase_id_token() -> Result<String, String> {
+    auth::id_token()
+}
+
+#[tauri::command]
+fn sign_out_local_auth() -> Result<(), String> {
+    auth::sign_out()
 }
 
 #[tauri::command]

@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import "./App.css";
 
 type Section = "Overview" | "Jobs" | "Engines" | "Storage" | "Security";
 type Job = { jobId: string; operation: string; state: string; createdAt: string; errorCode?: string | null };
 type JobEvent = { eventId: number; eventType: string; occurredAt: string; messageRedacted?: string | null };
 type LocalStatus = { coordinator: string; database: string; databasePath?: string | null };
+type AuthIdentity = { uid: string; email: string };
 
 const sections: Section[] = ["Overview", "Jobs", "Engines", "Storage", "Security"];
 
@@ -13,6 +15,9 @@ function App() {
   const [section, setSection] = useState<Section>("Overview");
   const [coordinatorRunning, setCoordinatorRunning] = useState(false);
   const [statusMessage, setStatusMessage] = useState("Checking local Coordinator");
+  const [authIdentity, setAuthIdentity] = useState<AuthIdentity | null>(null);
+  const [authPending, setAuthPending] = useState(false);
+  const [authMessage, setAuthMessage] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -34,6 +39,45 @@ function App() {
       window.clearInterval(timer);
     };
   }, []);
+
+  useEffect(() => {
+    void invoke<AuthIdentity | null>("get_local_auth_status")
+      .then(setAuthIdentity)
+      .catch((error) => setAuthMessage(String(error)));
+  }, []);
+
+  async function signIn() {
+    setAuthPending(true);
+    setAuthMessage("Complete Google sign-in in your browser.");
+    try {
+      const url = await invoke<string>("begin_local_auth");
+      await openUrl(url);
+      for (let attempt = 0; attempt < 300; attempt += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 1000));
+        const identity = await invoke<AuthIdentity | null>("get_local_auth_status");
+        if (identity) {
+          setAuthIdentity(identity);
+          setAuthMessage("Google sign-in complete.");
+          return;
+        }
+      }
+      setAuthMessage("Sign-in timed out. Start again when you are ready.");
+    } catch (error) {
+      setAuthMessage(String(error));
+    } finally {
+      setAuthPending(false);
+    }
+  }
+
+  async function signOut() {
+    try {
+      await invoke("sign_out_local_auth");
+      setAuthIdentity(null);
+      setAuthMessage("Signed out.");
+    } catch (error) {
+      setAuthMessage(String(error));
+    }
+  }
 
   async function stopCoordinator() {
     try {
@@ -95,7 +139,13 @@ function App() {
       <section className="main-panel">
         <header className="topbar">
           <div className="breadcrumb">Shadow Controller <span>/</span> {section}</div>
-          <div className="account-chip"><span className="avatar">S</span><span>Account not signed in</span><span className="chevron">⌄</span></div>
+          <div className="account-chip">
+            <span className="avatar">{authIdentity?.email.slice(0, 1).toUpperCase() ?? "S"}</span>
+            <span>{authIdentity?.email ?? "Account not signed in"}</span>
+            {authIdentity
+              ? <button className="text-button" type="button" onClick={() => void signOut()}>Sign out</button>
+              : <button className="text-button" type="button" disabled={authPending} onClick={() => void signIn()}>{authPending ? "Waiting…" : "Sign in"}</button>}
+          </div>
         </header>
 
         <div className="content">
@@ -110,7 +160,9 @@ function App() {
             </button>
           </div>
 
-          {section === "Overview" ? <Overview /> : section === "Jobs" ? <Jobs /> : <SectionPlaceholder section={section} />}
+          {section === "Overview"
+            ? <Overview authIdentity={authIdentity} authPending={authPending} authMessage={authMessage} onSignIn={() => void signIn()} />
+            : section === "Jobs" ? <Jobs /> : <SectionPlaceholder section={section} />}
         </div>
       </section>
     </main>
@@ -212,17 +264,23 @@ function Jobs() {
   );
 }
 
-function Overview() {
+function Overview({ authIdentity, authPending, authMessage, onSignIn }: {
+  authIdentity: AuthIdentity | null;
+  authPending: boolean;
+  authMessage: string;
+  onSignIn: () => void;
+}) {
   return (
     <>
       <section className="welcome-card">
         <div className="welcome-copy">
           <div className="welcome-tag"><span /> INITIAL SETUP</div>
           <h2>Your workspace is ready<br />to be connected.</h2>
-          <p>Sign in and pair a server to start coordinating your local generation tools.</p>
-          <button className="button button-primary" type="button" disabled title="Google sign-in and pairing are not configured yet">
-            <span aria-hidden="true">↗</span> Connect an account
+          <p>{authIdentity ? `Signed in as ${authIdentity.email}. Pairing is the next setup step.` : "Sign in and pair a server to start coordinating your local generation tools."}</p>
+          <button className="button button-primary" type="button" disabled={authPending || Boolean(authIdentity)} onClick={onSignIn}>
+            <span aria-hidden="true">↗</span> {authPending ? "Waiting for browser…" : authIdentity ? "Account connected" : "Sign in with Google"}
           </button>
+          {authMessage && <p className="auth-message" role="status">{authMessage}</p>}
         </div>
         <div className="welcome-art" aria-hidden="true">
           <div className="orbit orbit-one" /><div className="orbit orbit-two" />
@@ -235,7 +293,7 @@ function Overview() {
 
       <section className="status-grid" aria-label="System status">
         <StatusCard icon="⌘" label="Coordinator" value="Not connected" detail="The server has not paired with this account." tone="amber" />
-        <StatusCard icon="◉" label="Authentication" value="Setup pending" detail="Google sign-in and authorization are not active yet." tone="blue" />
+        <StatusCard icon="◉" label="Authentication" value={authIdentity ? "Signed in" : "Not signed in"} detail={authIdentity ? authIdentity.email : "Google sign-in is ready."} tone="blue" />
         <StatusCard icon="⇄" label="Relay" value="Not deployed" detail="Remote connections stay disabled until security gates pass." tone="violet" />
       </section>
 
@@ -247,7 +305,7 @@ function Overview() {
         <div className="panel-card setup-card">
           <div className="card-heading"><div><h2>Getting started</h2><p>Three steps to your workspace</p></div></div>
           <ol className="setup-list">
-            <li className="pending"><span className="step-icon">1</span><div><strong>Sign in with Google</strong><span>Authenticate your account securely</span></div><span className="step-state">PENDING</span></li>
+            <li className={authIdentity ? "complete" : "pending"}><span className="step-icon">1</span><div><strong>Sign in with Google</strong><span>Authenticate your account securely</span></div><span className="step-state">{authIdentity ? "DONE" : "PENDING"}</span></li>
             <li className="pending"><span className="step-icon">2</span><div><strong>Pair your server</strong><span>Connect Shadow to this account</span></div><span className="step-state">PENDING</span></li>
             <li className="pending"><span className="step-icon">3</span><div><strong>Connect your client</strong><span>Authorize Codex to submit work</span></div><span className="step-state">PENDING</span></li>
           </ol>
