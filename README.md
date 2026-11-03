@@ -72,28 +72,28 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-    R[Regia]
+    R[Codex]
     subgraph COORD[Coordinatore]
-        C[Codex]
+        C[Gestore delle code]
     end
+    DB[(SQLite · richieste e stato)]
+    OD[(OneDrive · asset temporanei via rclone)]
     subgraph PRODUZIONE[Produzione]
         W[Scrittore]
         D[Disegnatore]
         S[Progettista sonoro]
     end
-    R --> COORD
-    COORD --> PRODUZIONE
-    PRODUZIONE --> COORD
-    COORD --> R
+    R <-->|WebSocket| C
+    C <--> DB
+    C <--> OD
+    C <--> PRODUZIONE
 ```
 
-Il Coordinatore è Codex, configurato per questo flusso con **Codex 6 Luna Light**, un modello online. Il suo compito è organizzare attività e attese, leggere il Project File, attivare i worker necessari e raccogliere i risultati. Il coordinamento e l’attesa dei processi locali sono attività adatte a questo modello leggero; essendo online, il Coordinatore non occupa la VRAM locale.
+**Codex** è l'interfaccia conversazionale dell'utente e comunica tramite il client MCP e il relay WebSocket con il **Gestore delle code**, eseguito dal Coordinatore Rust sul server. Il gestore registra ogni richiesta, pianifica i job, controlla le risorse disponibili, gestisce annullamenti, tentativi e recupero dopo i riavvii e restituisce a Codex stato e risultati.
 
-Codex governa l’uso della VRAM: fa lavorare un modello locale per volta e ne libera la memoria prima di avviare il successivo. Gestisce gli imprevisti senza cambiare le decisioni creative approvate; se serve una decisione creativa, restituisce il controllo alla conversazione d’origine, in Bionic o in Codex.
+**SQLite locale sul server** è il database autorevole per le richieste: conserva identificativi, stati, priorità, tentativi, errori e riferimenti agli asset. Non richiede un servizio database esterno.
 
-Per avviare le funzioni produttive il Coordinatore usa strumenti MCP. I singoli MCP e le loro responsabilità saranno descritti in una sezione dedicata.
-
-A fine produzione, il Coordinatore restituisce un handback persistente con risultati e problemi. Nel percorso Bionic la Regia riprende nella chat originaria; nel percorso Codex il risultato torna alla conversazione Codex e può essere inoltrato alla Regia locale quando il tramite è attivo. Dopo la chiusura del ciclo creativo, il Programmatore è avviabile come attività separata con le approvazioni previste.
+**OneDrive** è mostrato come spazio per i file temporanei, **non come database**: il trasferimento avviene tramite rclone e il provider può essere sostituito con qualsiasi altro supportato. Il Coordinatore non usa OneDrive per la gestione delle code. La coda persistente e le integrazioni illustrate sono ancora da implementare.
 
 ### Scrittore
 
