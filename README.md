@@ -75,9 +75,9 @@ flowchart LR
     R[Codex]
     subgraph COORD[Coordinatore]
         C[Gestore delle code]
+        DB[(SQLite · richieste e stato)]
+        OD[(OneDrive · asset temporanei via rclone)]
     end
-    DB[(SQLite · richieste e stato)]
-    OD[(OneDrive · asset temporanei via rclone)]
     subgraph PRODUZIONE[Produzione]
         W[Scrittore]
         D[Disegnatore]
