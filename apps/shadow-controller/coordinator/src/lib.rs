@@ -1,7 +1,7 @@
 use std::{path::Path, sync::Mutex};
 
 use chrono::{SecondsFormat, Utc};
-use rusqlite::{params, Connection, OptionalExtension, Transaction, TransactionBehavior};
+use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, params};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -85,7 +85,10 @@ impl JobState {
     }
 
     fn is_terminal(self) -> bool {
-        matches!(self, Self::Succeeded | Self::Failed | Self::Cancelled | Self::Interrupted)
+        matches!(
+            self,
+            Self::Succeeded | Self::Failed | Self::Cancelled | Self::Interrupted
+        )
     }
 }
 
@@ -144,7 +147,9 @@ impl JobStore {
         connection.pragma_update(None, "journal_mode", "WAL")?;
         let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
         if version > SCHEMA_VERSION {
-            return Err(StoreError::InvalidRequest("database schema is newer than this binary"));
+            return Err(StoreError::InvalidRequest(
+                "database schema is newer than this binary",
+            ));
         }
         if version < 1 {
             let transaction = connection.unchecked_transaction()?;
@@ -152,7 +157,9 @@ impl JobStore {
             transaction.pragma_update(None, "user_version", SCHEMA_VERSION)?;
             transaction.commit()?;
         }
-        Ok(Self { connection: Mutex::new(connection) })
+        Ok(Self {
+            connection: Mutex::new(connection),
+        })
     }
 
     pub fn submit(&self, request: SubmitRequest) -> Result<AcceptedJob, StoreError> {
@@ -236,7 +243,10 @@ impl JobStore {
                 |row| row.get(0),
             )
             .optional()?;
-        job_id.map(|id| load_job(&connection, &id)).transpose().map(Option::flatten)
+        job_id
+            .map(|id| load_job(&connection, &id))
+            .transpose()
+            .map(Option::flatten)
     }
 
     pub fn next_queued(&self) -> Result<Option<JobRecord>, StoreError> {
@@ -248,7 +258,10 @@ impl JobStore {
                 |row| row.get(0),
             )
             .optional()?;
-        job_id.map(|id| load_job(&connection, &id)).transpose().map(Option::flatten)
+        job_id
+            .map(|id| load_job(&connection, &id))
+            .transpose()
+            .map(Option::flatten)
     }
 
     pub fn list(&self, uid: &str, client_id: &str, limit: u32) -> Result<Vec<JobRecord>, StoreError> {
@@ -318,8 +331,10 @@ impl JobStore {
     pub fn mark_running_jobs_interrupted(&self) -> Result<usize, StoreError> {
         let mut connection = self.connection.lock().map_err(|_| StoreError::LockPoisoned)?;
         let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-        let mut statement = transaction.prepare("SELECT job_id FROM jobs WHERE state IN ('running', 'cancel_requested')")?;
-        let job_ids = statement.query_map([], |row| row.get::<_, String>(0))?
+        let mut statement = transaction
+            .prepare("SELECT job_id FROM jobs WHERE state IN ('running', 'cancel_requested')")?;
+        let job_ids = statement
+            .query_map([], |row| row.get::<_, String>(0))?
             .collect::<Result<Vec<_>, _>>()?;
         drop(statement);
         let now = timestamp();
@@ -348,12 +363,24 @@ impl JobStore {
 }
 
 fn validate_request(request: &SubmitRequest) -> Result<(), StoreError> {
-    if request.uid.trim().is_empty() { return Err(StoreError::InvalidRequest("uid is required")); }
-    if request.client_id.trim().is_empty() { return Err(StoreError::InvalidRequest("clientId is required")); }
-    if request.request_id.trim().is_empty() { return Err(StoreError::InvalidRequest("requestId is required")); }
-    if request.operation.trim().is_empty() { return Err(StoreError::InvalidRequest("operation is required")); }
-    if request.operation.len() > 100 { return Err(StoreError::InvalidRequest("operation is too long")); }
-    if request.payload_version != 1 { return Err(StoreError::InvalidRequest("unsupported payload version")); }
+    if request.uid.trim().is_empty() {
+        return Err(StoreError::InvalidRequest("uid is required"));
+    }
+    if request.client_id.trim().is_empty() {
+        return Err(StoreError::InvalidRequest("clientId is required"));
+    }
+    if request.request_id.trim().is_empty() {
+        return Err(StoreError::InvalidRequest("requestId is required"));
+    }
+    if request.operation.trim().is_empty() {
+        return Err(StoreError::InvalidRequest("operation is required"));
+    }
+    if request.operation.len() > 100 {
+        return Err(StoreError::InvalidRequest("operation is too long"));
+    }
+    if request.payload_version != 1 {
+        return Err(StoreError::InvalidRequest("unsupported payload version"));
+    }
     Ok(())
 }
 
@@ -372,28 +399,43 @@ fn append_event(
     transaction.execute(
         "INSERT INTO job_events (job_id, occurred_at, event_type, previous_state, new_state, message_redacted)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-        params![job_id, timestamp(), event_type, previous_state.map(JobState::as_str), new_state.map(JobState::as_str), message_redacted],
+        params![
+            job_id,
+            timestamp(),
+            event_type,
+            previous_state.map(JobState::as_str),
+            new_state.map(JobState::as_str),
+            message_redacted
+        ],
     )?;
     Ok(())
 }
 
 fn load_job(connection: &Connection, job_id: &str) -> Result<Option<JobRecord>, rusqlite::Error> {
-    connection.query_row(
-        "SELECT job_id, uid, client_id, request_id, state, fifo_sequence, engine,
+    connection
+        .query_row(
+            "SELECT job_id, uid, client_id, request_id, state, fifo_sequence, engine,
                 created_at, started_at, finished_at, timeout_at, error_code, result_manifest
          FROM jobs WHERE job_id = ?1",
-        [job_id],
-        row_to_job,
-    ).optional()
+            [job_id],
+            row_to_job,
+        )
+        .optional()
 }
 
 fn row_to_job(row: &rusqlite::Row<'_>) -> Result<JobRecord, rusqlite::Error> {
     let state: String = row.get(4)?;
     let result_manifest: Option<String> = row.get(12)?;
     let result_manifest = result_manifest
-        .map(|value| serde_json::from_str(&value).map_err(|error| {
-            rusqlite::Error::FromSqlConversionFailure(12, rusqlite::types::Type::Text, error.into())
-        }))
+        .map(|value| {
+            serde_json::from_str(&value).map_err(|error| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    12,
+                    rusqlite::types::Type::Text,
+                    error.into(),
+                )
+            })
+        })
         .transpose()?;
     Ok(JobRecord {
         job_id: row.get(0)?,
@@ -435,7 +477,10 @@ mod tests {
         assert_eq!(first.job.job_id, duplicate.job.job_id);
         assert!(!first.duplicate);
         assert!(duplicate.duplicate);
-        assert!(matches!(store.submit(request("request-1", 2)), Err(StoreError::IdempotencyConflict)));
+        assert!(matches!(
+            store.submit(request("request-1", 2)),
+            Err(StoreError::IdempotencyConflict)
+        ));
     }
 
     #[test]
@@ -443,7 +488,10 @@ mod tests {
         let store = JobStore::open_in_memory().unwrap();
         let first = store.submit(request("request-1", 1)).unwrap();
         let second = store.submit(request("request-2", 2)).unwrap();
-        assert_eq!(store.next_queued().unwrap().unwrap().job_id, first.job.job_id);
+        assert_eq!(
+            store.next_queued().unwrap().unwrap().job_id,
+            first.job.job_id
+        );
         assert!(second.job.fifo_sequence > first.job.fifo_sequence);
     }
 
@@ -451,7 +499,9 @@ mod tests {
     fn state_changes_are_checked_and_restart_never_requeues_running_jobs() {
         let store = JobStore::open_in_memory().unwrap();
         let accepted = store.submit(request("request-1", 1)).unwrap();
-        store.transition(&accepted.job.job_id, JobState::Running, None, "Job started").unwrap();
+        store
+            .transition(&accepted.job.job_id, JobState::Running, None, "Job started")
+            .unwrap();
         let interrupted = store.mark_running_jobs_interrupted().unwrap();
         assert_eq!(interrupted, 1);
         assert_eq!(store.get(&accepted.job.job_id).unwrap().unwrap().state, JobState::Interrupted);
@@ -466,13 +516,33 @@ mod tests {
         let store = JobStore::open_in_memory().unwrap();
         let queued = store.submit(request("request-1", 1)).unwrap();
         assert_eq!(
-            store.transition(&queued.job.job_id, JobState::Cancelled, None, "Cancelled before start").unwrap().state,
+            store
+                .transition(
+                    &queued.job.job_id,
+                    JobState::Cancelled,
+                    None,
+                    "Cancelled before start",
+                )
+                .unwrap()
+                .state,
             JobState::Cancelled
         );
         let active = store.submit(request("request-2", 2)).unwrap();
-        store.transition(&active.job.job_id, JobState::Running, None, "Job started").unwrap();
-        store.transition(&active.job.job_id, JobState::CancelRequested, None, "Cancellation requested").unwrap();
-        assert_eq!(store.get(&active.job.job_id).unwrap().unwrap().state, JobState::CancelRequested);
+        store
+            .transition(&active.job.job_id, JobState::Running, None, "Job started")
+            .unwrap();
+        store
+            .transition(
+                &active.job.job_id,
+                JobState::CancelRequested,
+                None,
+                "Cancellation requested",
+            )
+            .unwrap();
+        assert_eq!(
+            store.get(&active.job.job_id).unwrap().unwrap().state,
+            JobState::CancelRequested
+        );
         assert!(store.next_queued().unwrap().is_none());
     }
 }
