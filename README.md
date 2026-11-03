@@ -13,6 +13,7 @@ Questo progetto estende le capacità generative di Codex tramite un server Tauri
 | rclone | Scarica gli asset dalla cartella cloud condivisa. | [Download](https://rclone.org/downloads/) |
 | Node.js | Esegue il client MCP TypeScript e le CLI AI. | [Download](https://nodejs.org/en/download) |
 | Codex CLI | Client AI che controlla i programmi tramite MCP. | `npm install -g @openai/codex` |
+| Shadow PC *(opzionale)* | Accesso al PC cloud che ospita il server, se si utilizza Shadow. | [Download ufficiale](https://shadow.tech/) |
 
 **Configurazioni particolari**
 
