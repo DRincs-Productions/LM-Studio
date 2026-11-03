@@ -18,7 +18,7 @@ pub enum StoreError {
     IdempotencyConflict,
     #[error("job_not_found")]
     JobNotFound,
-    #[error("invalid job state transition from {from} to {to}")]
+    #[error("invalid job state transition from {from:?} to {to:?}")]
     InvalidTransition { from: JobState, to: JobState },
     #[error("database lock poisoned")]
     LockPoisoned,
@@ -165,8 +165,16 @@ impl JobStore {
     pub fn submit(&self, request: SubmitRequest) -> Result<AcceptedJob, StoreError> {
         validate_request(&request)?;
         let payload_json = serde_json::to_string(&request.payload)?;
-        let payload_hash = format!("{:x}", Sha256::digest(payload_json.as_bytes()));
-        let mut connection = self.connection.lock().map_err(|_| StoreError::LockPoisoned)?;
+        let idempotency_material = serde_json::to_vec(&(
+            &request.operation,
+            request.payload_version,
+            &request.payload,
+        ))?;
+        let payload_hash = format!("{:x}", Sha256::digest(idempotency_material));
+        let mut connection = self
+            .connection
+            .lock()
+            .map_err(|_| StoreError::LockPoisoned)?;
         let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
 
         let existing: Option<(String, String)> = transaction
@@ -184,7 +192,10 @@ impl JobStore {
             }
             let job = load_job(&transaction, &job_id)?.ok_or(StoreError::JobNotFound)?;
             transaction.commit()?;
-            return Ok(AcceptedJob { job, duplicate: true });
+            return Ok(AcceptedJob {
+                job,
+                duplicate: true,
+            });
         }
 
         let now = timestamp();
@@ -216,16 +227,36 @@ impl JobStore {
             "INSERT INTO jobs (
                 job_id, uid, client_id, request_id, state, fifo_sequence, created_at
              ) VALUES (?1, ?2, ?3, ?4, 'queued', ?5, ?6)",
-            params![job_id, request.uid, request.client_id, request.request_id, fifo_sequence, now],
+            params![
+                job_id,
+                request.uid,
+                request.client_id,
+                request.request_id,
+                fifo_sequence,
+                now
+            ],
         )?;
-        append_event(&transaction, &job_id, "job.accepted", None, Some(JobState::Queued), "Request accepted")?;
+        append_event(
+            &transaction,
+            &job_id,
+            "job.accepted",
+            None,
+            Some(JobState::Queued),
+            "Request accepted",
+        )?;
         let job = load_job(&transaction, &job_id)?.ok_or(StoreError::JobNotFound)?;
         transaction.commit()?;
-        Ok(AcceptedJob { job, duplicate: false })
+        Ok(AcceptedJob {
+            job,
+            duplicate: false,
+        })
     }
 
     pub fn get(&self, job_id: &str) -> Result<Option<JobRecord>, StoreError> {
-        let connection = self.connection.lock().map_err(|_| StoreError::LockPoisoned)?;
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| StoreError::LockPoisoned)?;
         Ok(load_job(&connection, job_id)?)
     }
 
@@ -235,7 +266,10 @@ impl JobStore {
         client_id: &str,
         request_id: &str,
     ) -> Result<Option<JobRecord>, StoreError> {
-        let connection = self.connection.lock().map_err(|_| StoreError::LockPoisoned)?;
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| StoreError::LockPoisoned)?;
         let job_id: Option<String> = connection
             .query_row(
                 "SELECT job_id FROM requests WHERE uid = ?1 AND client_id = ?2 AND request_id = ?3",
@@ -243,14 +277,17 @@ impl JobStore {
                 |row| row.get(0),
             )
             .optional()?;
-        job_id
+        Ok(job_id
             .map(|id| load_job(&connection, &id))
             .transpose()
-            .map(Option::flatten)
+            .map(Option::flatten)?)
     }
 
     pub fn next_queued(&self) -> Result<Option<JobRecord>, StoreError> {
-        let connection = self.connection.lock().map_err(|_| StoreError::LockPoisoned)?;
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| StoreError::LockPoisoned)?;
         let job_id: Option<String> = connection
             .query_row(
                 "SELECT job_id FROM jobs WHERE state = 'queued' ORDER BY fifo_sequence LIMIT 1",
@@ -258,17 +295,27 @@ impl JobStore {
                 |row| row.get(0),
             )
             .optional()?;
-        job_id
+        Ok(job_id
             .map(|id| load_job(&connection, &id))
             .transpose()
-            .map(Option::flatten)
+            .map(Option::flatten)?)
     }
 
-    pub fn list(&self, uid: &str, client_id: &str, limit: u32) -> Result<Vec<JobRecord>, StoreError> {
+    pub fn list(
+        &self,
+        uid: &str,
+        client_id: &str,
+        limit: u32,
+    ) -> Result<Vec<JobRecord>, StoreError> {
         if !(1..=100).contains(&limit) {
-            return Err(StoreError::InvalidRequest("list limit must be between 1 and 100"));
+            return Err(StoreError::InvalidRequest(
+                "list limit must be between 1 and 100",
+            ));
         }
-        let connection = self.connection.lock().map_err(|_| StoreError::LockPoisoned)?;
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| StoreError::LockPoisoned)?;
         let mut statement = connection.prepare(
             "SELECT job_id, uid, client_id, request_id, state, fifo_sequence, engine,
                     created_at, started_at, finished_at, timeout_at, error_code, result_manifest
@@ -276,7 +323,8 @@ impl JobStore {
              ORDER BY fifo_sequence DESC LIMIT ?3",
         )?;
         let rows = statement.query_map(params![uid, client_id, limit], row_to_job)?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(StoreError::from)
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(StoreError::from)
     }
 
     pub fn transition(
@@ -286,11 +334,17 @@ impl JobStore {
         error_code: Option<&str>,
         message_redacted: &str,
     ) -> Result<JobRecord, StoreError> {
-        let mut connection = self.connection.lock().map_err(|_| StoreError::LockPoisoned)?;
+        let mut connection = self
+            .connection
+            .lock()
+            .map_err(|_| StoreError::LockPoisoned)?;
         let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
         let current = load_job(&transaction, job_id)?.ok_or(StoreError::JobNotFound)?;
         if !current.state.allows(next) {
-            return Err(StoreError::InvalidTransition { from: current.state, to: next });
+            return Err(StoreError::InvalidTransition {
+                from: current.state,
+                to: next,
+            });
         }
         let now = timestamp();
         let started_at = (next == JobState::Running).then_some(now.as_str());
@@ -329,7 +383,10 @@ impl JobStore {
     }
 
     pub fn mark_running_jobs_interrupted(&self) -> Result<usize, StoreError> {
-        let mut connection = self.connection.lock().map_err(|_| StoreError::LockPoisoned)?;
+        let mut connection = self
+            .connection
+            .lock()
+            .map_err(|_| StoreError::LockPoisoned)?;
         let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
         let mut statement = transaction
             .prepare("SELECT job_id FROM jobs WHERE state IN ('running', 'cancel_requested')")?;
@@ -481,6 +538,12 @@ mod tests {
             store.submit(request("request-1", 2)),
             Err(StoreError::IdempotencyConflict)
         ));
+        let mut changed_operation = request("request-1", 1);
+        changed_operation.operation = "image.generate".into();
+        assert!(matches!(
+            store.submit(changed_operation),
+            Err(StoreError::IdempotencyConflict)
+        ));
     }
 
     #[test]
@@ -504,9 +567,17 @@ mod tests {
             .unwrap();
         let interrupted = store.mark_running_jobs_interrupted().unwrap();
         assert_eq!(interrupted, 1);
-        assert_eq!(store.get(&accepted.job.job_id).unwrap().unwrap().state, JobState::Interrupted);
+        assert_eq!(
+            store.get(&accepted.job.job_id).unwrap().unwrap().state,
+            JobState::Interrupted
+        );
         assert!(matches!(
-            store.transition(&accepted.job.job_id, JobState::Succeeded, None, "late result"),
+            store.transition(
+                &accepted.job.job_id,
+                JobState::Succeeded,
+                None,
+                "late result"
+            ),
             Err(StoreError::InvalidTransition { .. })
         ));
     }
