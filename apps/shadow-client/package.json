@@ -5,7 +5,8 @@
   "type": "module",
   "license": "MIT",
   "bin": {
-    "shadow-client": "dist/cli.js"
+    "shadow-client": "dist/cli.js",
+    "shadow-controller-mcp": "dist/server.js"
   },
   "files": [
     "dist",
@@ -16,11 +17,13 @@
     "node": ">=24"
   },
   "scripts": {
-    "build": "tsc --noEmit && tsup src/cli.ts --format esm --clean",
+    "build": "tsc --noEmit && tsup src/cli.ts src/server.ts --format esm --clean",
     "start": "node dist/cli.js"
   },
   "dependencies": {
-    "@napi-rs/keyring": "^2.1.2"
+    "@modelcontextprotocol/server": "^2.4.0",
+    "@napi-rs/keyring": "^2.1.2",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^24.10.0",

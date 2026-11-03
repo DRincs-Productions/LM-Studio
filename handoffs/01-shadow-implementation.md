@@ -128,7 +128,7 @@ Il **client MCP** espone a Codex operazioni di submit, status, list, cancel, ric
 
 ## Fase 5 — Client MCP e integrazione Codex
 
-**Implementation status (2026-11-03):** `apps/shadow-client` contains a Node.js client-authentication foundation with Google sign-in, secure local credentials and Firestore client enrollment/revocation. The MCP stdio server, remote relay transport, job tools, package publication and live authentication checks are not implemented or verified.
+**Implementation status (2026-11-03):** `apps/shadow-client` contains a Node.js client with Google sign-in, secure local credentials, Firestore client enrollment/revocation and local account-management tools over MCP stdio. Remote relay transport, job tools, package publication and live authentication checks are not implemented or verified.
 
 - Node.js/TypeScript, MCP SDK ufficiale, **stdio** verso Codex, build con **tsup** e export npm verificati. Registrazione da sorgente sul PC Shadow durante lo sviluppo; il PC fisico potrà usare il pacchetto pubblicato solo dopo test e approvazione.
 - Login Google/associazione client coerenti con F1; endpoint e remote rclone configurabili senza segreti nel codice. Tool per submit/status/list/cancel/manual retry/asset; errori diagnostici comprensibili a Codex.
