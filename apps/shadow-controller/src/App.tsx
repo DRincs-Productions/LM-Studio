@@ -1,7 +1,9 @@
 import { useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import "./App.css";
 
 type Section = "Overview" | "Jobs" | "Engines" | "Storage" | "Security";
+type Job = { jobId: string; operation: string; state: string; createdAt: string; errorCode?: string | null };
 
 const sections: Section[] = ["Overview", "Jobs", "Engines", "Storage", "Security"];
 
@@ -59,10 +61,80 @@ function App() {
             </button>
           </div>
 
-          {section === "Overview" ? <Overview /> : <SectionPlaceholder section={section} />}
+          {section === "Overview" ? <Overview /> : section === "Jobs" ? <Jobs /> : <SectionPlaceholder section={section} />}
         </div>
       </section>
     </main>
+  );
+}
+
+function Jobs() {
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [message, setMessage] = useState("Jobs are stored locally on this device. No remote server is connected.");
+  const [busy, setBusy] = useState(false);
+
+  async function refresh() {
+    setBusy(true);
+    try {
+      const rows = await invoke<Job[]>("list_local_jobs", { clientId: "desktop-ui", limit: 50 });
+      setJobs(rows);
+      setMessage(`${rows.length} local job${rows.length === 1 ? "" : "s"}. The execution worker is not connected yet.`);
+    } catch (error) {
+      setMessage(String(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function addQueueEntry() {
+    setBusy(true);
+    try {
+      await invoke("submit_local_job", {
+        job: {
+          clientId: "desktop-ui",
+          requestId: crypto.randomUUID(),
+          operation: "narrative.generate",
+          payloadVersion: 1,
+          payload: { source: "desktop-queue-placeholder" },
+        },
+      });
+      await refresh();
+      setMessage("A local queue entry was saved. It will remain queued until an execution worker is implemented.");
+    } catch (error) {
+      setMessage(String(error));
+      setBusy(false);
+    }
+  }
+
+  async function cancel(jobId: string) {
+    setBusy(true);
+    try {
+      await invoke("cancel_local_job", { jobId });
+      await refresh();
+    } catch (error) {
+      setMessage(String(error));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="panel-card jobs-panel">
+      <div className="card-heading">
+        <div><h2>Local queue</h2><p>{message}</p></div>
+        <div className="jobs-actions">
+          <button type="button" className="button button-muted" disabled={busy} onClick={() => void refresh()}>Refresh</button>
+          <button type="button" className="button button-primary" disabled={busy} onClick={() => void addQueueEntry()}>＋ Add queue entry</button>
+        </div>
+      </div>
+      {jobs.length === 0 ? <div className="empty-state"><div className="empty-icon">≡</div><strong>No local jobs</strong><span>Entries created here stay on this device and do not invoke a model.</span></div> : (
+        <div className="job-list">{jobs.map((job) => <article className="job-row" key={job.jobId}>
+          <div><strong>{job.operation}</strong><span>{job.jobId}</span></div>
+          <time>{new Date(job.createdAt).toLocaleString()}</time>
+          <span className={`job-state ${job.state}`}>{job.state.replace(/_/g, " ")}</span>
+          {job.state === "queued" && <button className="text-button" disabled={busy} onClick={() => void cancel(job.jobId)}>Cancel</button>}
+        </article>)}</div>
+      )}
+    </section>
   );
 }
 
