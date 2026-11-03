@@ -1,44 +1,44 @@
-# Architettura locale e cloud per la creazione di visual novel
+# Estensione delle capacità generative di Codex
 
-Il progetto offre due punti d’ingresso: Codex e LM Studio con Bionic. In Codex l’utente dialoga normalmente con GPT; quando chiede esplicitamente di parlare con la Regia, Codex inoltra i messaggi al modello locale e ne presenta le risposte attribuite. In Bionic l’utente conversa direttamente con la Regia. Entrambi i percorsi usano il Project File canonico e gli stessi worker. L’obiettivo generale resta generare la prima bozza di una visual novel; la modifica di visual novel esistenti è un obiettivo futuro.
-
-Il sistema non è stato progettato per lavorare soltanto in locale. I modelli online possono offrire capacità di ragionamento e coordinamento nettamente superiori; possono dirigere i passaggi tra i worker e stabilire quale processo locale utilizzi la VRAM in un dato momento. Quando un modello locale non raggiunge la qualità o le capacità richieste, il coordinamento può ricorrere al cloud. I modelli locali restano utili per ridurre il consumo dei crediti Codex, la dipendenza dai servizi online e i limiti sui contenuti imposti da singoli modelli cloud, secondo le regole applicabili.
+Questo progetto estende le capacità generative di Codex tramite un server Tauri con coordinatore persistente, modelli AI locali e strumenti esterni per produrre e validare contenuti e asset, riducendo quando possibile il consumo dei crediti dei servizi online. Il client MCP gira sul PC locale; il server e i motori di generazione possono girare su Shadow o su un altro host. Il progetto non è limitato a uno specifico tipo di contenuto.
 
 ## Installazione e configurazione (client e server)
 
-> **Stato:** architettura in sviluppo. Installa solo i programmi necessari al ruolo della macchina; gli adapter opzionali saranno documentati quando definiti.
+> **Stato:** architettura in sviluppo. Gli eseguibili dell'app saranno compilati dalla CI GitHub: non è necessario installare Rust, Wrangler o gli strumenti di build Tauri per usare le release.
 
 ### Client MCP (PC locale)
 
 | Programma | Descrizione | Installazione |
 |---|---|---|
-| rclone | Trasferisce gli asset tramite una cartella cloud condivisa. | [Download](https://rclone.org/downloads/) |
-| Node.js | Esegue il client MCP TypeScript. | [Download](https://nodejs.org/en/download) |
-| Codex CLI *(opzionale)* | Client AI che può utilizzare gli strumenti MCP. | `npm install -g @openai/codex` |
+| rclone | Scarica gli asset dalla cartella cloud condivisa. | [Download](https://rclone.org/downloads/) |
+| Node.js | Esegue il client MCP TypeScript e le CLI AI. | [Download](https://nodejs.org/en/download) |
+| Codex CLI | Client AI che controlla i programmi tramite MCP. | `npm install -g @openai/codex` |
 
 **Configurazioni particolari**
 
-**rclone:** esegui `rclone version`, `rclone config` e `rclone listremotes`. Configura un provider supportato con accesso alla cartella condivisa. Il nome del remote può essere diverso da quello del server. Non servono `rclone-sdk` o `rclone rcd`; non sovrascrivere la configurazione esistente né pubblicare `rclone.conf`.
+**rclone:** esegui `rclone version`, `rclone config` e `rclone listremotes`. Configura l'accesso alla cartella condivisa; il remote può avere un nome diverso da quello del server. Non usare `rclone-sdk` o `rclone rcd` e non pubblicare `rclone.conf`.
+
+**Codex CLI:** avvia `codex` ed effettua l'accesso; l'associazione al server MCP sarà documentata quando implementata.
 
 ### Server Tauri (Shadow o altro host)
 
 | Programma | Descrizione | Installazione |
 |---|---|---|
 | rclone | Pubblica temporaneamente gli asset per i client. | [Download](https://rclone.org/downloads/) |
-| LM Studio | Esegue i modelli linguistici locali. | [Download](https://lmstudio.ai/download) |
-| Rust | Compila il coordinatore e l'app Tauri. | [Installazione](https://rustup.rs/) |
-| Node.js | Compila l'interfaccia Tauri. | [Download](https://nodejs.org/en/download) |
-| Cloudflare Workers *(servizio)* | Relay remoto, distribuito dal repository. | [Dashboard](https://dash.cloudflare.com/) |
+| Node.js | Esegue le CLI AI e gli eventuali adapter JavaScript/TypeScript. | [Download](https://nodejs.org/en/download) |
+| LM Studio | Esegue i modelli AI locali. | [Download](https://lmstudio.ai/download) |
+| Codex CLI | Coordina e controlla i programmi tramite terminale. | `npm install -g @openai/codex` |
+| Gemini CLI | Revisiona richieste, risultati e asset prima della consegna. | `npm install -g @google/gemini-cli` |
 
 **Configurazioni particolari**
 
-**rclone:** configura il provider con `rclone config` e verifica con `rclone listremotes`; il remote deve accedere alla stessa cartella condivisa del client, anche se ha un nome diverso.
+**rclone:** esegui `rclone config` e `rclone listremotes`; configura l'accesso alla stessa cartella condivisa del client. I file temporanei sono limitati alla cartella dell'app: pulizia prevista dopo 7 giorni, recupero di 500 MiB di spazio aggiuntivo prima degli upload e ripubblicazione dalla cache locale.
 
-**Asset temporanei (funzionalità prevista):** usa solo la cartella cloud dedicata all'app; elimina all'avvio i file più vecchi di 7 giorni e, se necessario, libera spazio per il nuovo upload più 500 MiB. Ripubblica dalla cache locale quando disponibile. Gli asset definitivi restano sul client.
+**Codex CLI e Gemini CLI:** avvia rispettivamente `codex` e `gemini` per configurare l'accesso. L'uso online dipende dai limiti e dalle condizioni dei provider; il server dovrà poter disabilitare la revisione online.
 
-**Cloudflare:** il Worker `shadow-mcp-relay` esiste, ma WebSocket, Durable Object e autenticazione non sono ancora operativi. Codice e deploy GitHub Actions + Wrangler saranno gestiti in questo repository; Firebase e pairing verranno configurati in seguito.
+**Distribuzione:** GitHub Actions compilerà gli installer client/server e distribuirà il codice Cloudflare con Wrangler; sul PC Shadow non servono Rust o la dashboard Cloudflare per compilare o installare la release. Il Worker `shadow-mcp-relay` esiste, ma WebSocket, Durable Object e autenticazione sono ancora da implementare. Firebase sarà configurato successivamente.
 
-I motori immagini, video e audio (ad esempio `sd-cli.exe`, `audio.cpp`, ComfyUI e InvokeAI) saranno aggiunti dopo la scelta degli adapter e delle rispettive istruzioni. Firebase verrà configurato successivamente.
+I motori di generazione di immagini, video e audio (tra cui `sd-cli.exe`, `audio.cpp`, ComfyUI e InvokeAI) saranno aggiunti alla tabella quando saranno confermati gli adapter e le modalità di installazione.
 
 ---
 
@@ -415,7 +415,7 @@ Se un test completo termina con handback `error`, conserva il manifest e gli out
 npm run test:complete:resume -- --root="C:\Users\Shadow\.lmstudio\production-tests\complete\<cartella-del-test-fallito>"
 ```
 
-Per preparare un nuovo progetto completo, eseguire `npm create pixi-vn@latest` nella cartella `game` del test e scegliere **Visual Novel**, **Ink + TypeScript**, **Web page** e i valori predefiniti per il resto. Ogni nuovo test parte da una cartella mai usata prima. La ripresa è disponibile solo per un test fallito e conserva i job e gli artefatti precedenti. Il manifest registra input, modello, handoff, output, verifiche e fallimenti; il test non modifica database Bionic né installazione Bionic. `AGENTS.md` contiene i dettagli operativi e i percorsi delle configurazioni.
+Per preparare un nuovo progetto completo, eseguire `npm create pixi-vn@latest` nella cartella `game` del test e scegliere **contenuti generativi**, **Ink + TypeScript**, **Web page** e i valori predefiniti per il resto. Ogni nuovo test parte da una cartella mai usata prima. La ripresa è disponibile solo per un test fallito e conserva i job e gli artefatti precedenti. Il manifest registra input, modello, handoff, output, verifiche e fallimenti; il test non modifica database Bionic né installazione Bionic. `AGENTS.md` contiene i dettagli operativi e i percorsi delle configurazioni.
 
 Il test audio completo del componente si avvia con `node project-worker/mcp/orchestration/audio-component-test.mjs` dalla radice `.lmstudio`. Il runner genera premise, seed, Project File e cue fixture nuovi; Codex coordina Project Worker e Audio Worker e non interpreta il ruolo del Sound Designer né inventa il cue. Stable Audio genera il candidato, Qwen lo ascolta e Codex, come Coordinatore, valuta le evidenze. Solo un candidato con punteggio almeno 80 e senza errori gravi viene finalizzato in `C:\AI\assets\<RUN_ID>\Audio\<Music|SoundEffects>` e pubblicato sotto `imagecloud:AudioWorker/<Music|SoundEffects>/final/<RUN_ID>/`; la pubblicazione verifica dimensioni di WAV e manifest. Un run conserva output, log MCP e prove anche se fallisce. Il test non avvia il Programmatore. Il test completo del 24 ottobre 2026 ha pubblicato il WAV `20261024192544995_8d9dc7555236cb1a`: 100/100, nessun errore grave, hash verificato e dimensioni remote controllate. Dettagli in [Rapporto test componente audio completo](production-tests/SOUND-DESIGNER-AUDIO-FULL-COMPONENT-2026-10-24.md).
 
