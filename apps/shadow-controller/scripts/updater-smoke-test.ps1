@@ -66,6 +66,21 @@ function Wait-ForLog($test, $pattern, $timeoutSeconds = 240) {
   throw "Timed out waiting for update log pattern '$pattern' for $($test.Exe)"
 }
 
+function Stop-TestCoordinator($test, $requestStop = $false) {
+  if (-not $test) { return }
+  $stopFile = Join-Path $test.Data 'coordinator.stop'
+  $lockFile = Join-Path $test.Data 'coordinator.lock'
+  $pidFile = Join-Path $test.Data 'coordinator.pid'
+  if ($requestStop -and (Test-Path $pidFile)) {
+    $token = (Get-Content $pidFile | Select-Object -Skip 1 -First 1)
+    if ($token) { Set-Content -LiteralPath $stopFile -Value $token -NoNewline }
+  }
+  $deadline = (Get-Date).AddSeconds(30)
+  while ((Get-Date) -lt $deadline -and (Test-Path $lockFile)) { Start-Sleep -Milliseconds 250 }
+  if (Test-Path $lockFile) { throw "Coordinator did not release its isolated lease: $lockFile" }
+  if (Test-Path $stopFile) { Remove-Item -LiteralPath $stopFile -Force }
+}
+
 function Clear-UpdateLog($test) {
   if (-not $test) { return }
   $log = Join-Path $test.Data 'update.log'
@@ -81,6 +96,7 @@ try {
   Write-Host "Started $($current.tag_name) smoke app as PID $($currentProcess.Id)"
   $currentLog = Wait-ForLog $currentTest 'No newer release available'
   Write-Host "PASS: $($current.tag_name) starts with no update and logs $currentLog"
+  Stop-TestCoordinator $currentTest $true
   Remove-TestInstall $currentTest
   $currentTest = $null
 
@@ -93,6 +109,7 @@ try {
     $upgradeLog = Wait-ForLog $previousTest $upgradePattern 360
     $stableLog = Wait-ForLog $previousTest 'No newer release available' 360
     Write-Host "PASS: $($previous.tag_name) automatically updated to $($current.tag_name); update log $upgradeLog; post-update log $stableLog"
+    Stop-TestCoordinator $previousTest $true
   } else {
     Write-Host 'No previous stable server release exists; upgrade test will run on the next stable release.'
   }

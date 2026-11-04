@@ -223,6 +223,7 @@ fn show_main_window(app: &tauri::AppHandle) {
 }
 
 async fn check_for_updates(app: tauri::AppHandle) {
+    append_update_log(&app, "Checking for signed updates");
     let update = match app.updater() {
         Ok(updater) => match updater.check().await {
             Ok(Some(update)) => {
