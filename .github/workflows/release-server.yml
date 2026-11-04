@@ -130,6 +130,8 @@ jobs:
     if: ${{ needs.validate.outputs.prerelease != 'true' }}
     runs-on: windows-latest
     steps:
+      - uses: actions/checkout@v4
+
       - name: Install latest release and verify no-update startup
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
