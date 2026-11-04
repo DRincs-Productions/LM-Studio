@@ -182,12 +182,18 @@ async fn connect_and_serve(
                         }
                         let mut serialized = serde_json::to_string(&reply).map_err(|_| "could not encode relay response".to_owned())?;
                         if serialized.len() > MAX_MESSAGE_BYTES {
-                            let compact = error_reply(
+                            let mut compact = error_reply(
                                 reply.get("replyTo").and_then(Value::as_str).map(str::to_owned),
                                 "resource_unavailable",
                                 "Response exceeds the relay message limit.",
                                 false,
                             );
+                            if let Some(object) = compact.as_object_mut() {
+                                object.insert("uid".to_owned(), Value::String(uid.to_owned()));
+                                if let Some(client_id) = message.get("clientId").and_then(Value::as_str) {
+                                    object.insert("clientId".to_owned(), Value::String(client_id.to_owned()));
+                                }
+                            }
                             serialized = serde_json::to_string(&compact).map_err(|_| "could not encode relay error".to_owned())?;
                         }
                         socket.send(Message::Text(serialized.into())).await.map_err(|_| "relay response failed".to_owned())?;
