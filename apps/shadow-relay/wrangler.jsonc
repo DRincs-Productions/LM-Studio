@@ -1,0 +1,16 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "shadow-mcp-relay",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-03",
+  "compatibility_flags": ["nodejs_compat"],
+  "durable_objects": {
+    "bindings": [{ "name": "ACCOUNT_RELAY", "class_name": "AccountRelay" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["AccountRelay"] }],
+  "vars": {
+    "FIREBASE_PROJECT_ID": "shadow-controller-20261103",
+    "FIREBASE_API_KEY": "AIzaSyCO-OtHIxbarCVRGh3qLDeNhUT2ArrngUY",
+    "RELAY_STATE": "setup"
+  }
+}

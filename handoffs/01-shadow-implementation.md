@@ -92,6 +92,8 @@ Implementare uno **schema migrabile** (versioni di schema e migrazioni testate) 
 
 ## Fase 4 — Cloudflare Worker + Durable Object WSS
 
+**Implementation status (2026-11-04):** `apps/shadow-relay` contains a fail-closed Worker and SQLite-backed Durable Object. The Worker verifies Firebase Google identities and checks the account/server or authorized-client Firestore record before routing by UID. Client sockets prove possession of their enrolled Ed25519 key. The Durable Object uses the WebSocket Hibernation API, caps frame size and pending requests, allows only the documented message types, rejects offline servers immediately and does not queue work. `npm run build` and `wrangler deploy --dry-run` pass locally. The relay is not deployed, the server has no outbound WebSocket transport, and live authentication, isolation and security checks remain unverified. Keep `RELAY_STATE=setup`; do not deploy until F1/F4 gates pass.
+
 - Usare il Worker **`shadow-mcp-relay`** già creato come target; il bootstrap esistente espone solo `GET /health` in stato setup e risponde 503 altrove. **Non è un relay operativo**. Non toccare gli altri Worker dell'account.
 - Versionare in repository Worker, Durable Object, configurazione Wrangler, migrazioni e test. Il server Shadow apre **WSS in uscita**, si autentica, mantiene heartbeat e si riconnette con backoff. Il client si autentica separatamente; il relay inoltra solo al server associato e online.
 - **Nessuna coda offline nel Durable Object**: se il server non è online/autorizzato, `server_offline` immediato. Se cade durante l'esecuzione, non ripetere automaticamente il job; client consulta lo stato tramite `requestId` alla riconnessione.
@@ -128,7 +130,7 @@ Il **client MCP** espone a Codex operazioni di submit, status, list, cancel, ric
 
 ## Fase 5 — Client MCP e integrazione Codex
 
-**Implementation status (2026-11-03):** `apps/shadow-client` contains a Node.js client with Google sign-in, secure local credentials, Firestore client enrollment/revocation and local account-management tools over MCP stdio. Remote relay transport, job tools, package publication and live authentication checks are not implemented or verified.
+**Implementation status (2026-11-04):** `apps/shadow-client` contains a Node.js MCP stdio server with Google sign-in, secure local credentials, Firestore client enrollment/revocation, an authenticated WebSocket relay client and tools for submit/status/list/cancel/manual retry/asset metadata. The client and relay compile and package locally. The Coordinator has no outbound WebSocket adapter or application message handler yet, and no relay deployment, live authentication check or package publication has been verified.
 
 - Node.js/TypeScript, MCP SDK ufficiale, **stdio** verso Codex, build con **tsup** e export npm verificati. Registrazione da sorgente sul PC Shadow durante lo sviluppo; il PC fisico potrà usare il pacchetto pubblicato solo dopo test e approvazione.
 - Login Google/associazione client coerenti con F1; endpoint e remote rclone configurabili senza segreti nel codice. Tool per submit/status/list/cancel/manual retry/asset; errori diagnostici comprensibili a Codex.

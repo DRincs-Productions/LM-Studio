@@ -256,6 +256,7 @@ async function openSystemBrowser(url) {
 }
 
 export {
+  readCredential,
   login,
   enrollClient,
   logout,

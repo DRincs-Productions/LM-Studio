@@ -38,7 +38,7 @@ Questo progetto estende le capacità generative di Codex tramite un server Tauri
 
 **Codex CLI e Gemini CLI:** avvia rispettivamente `codex` e `gemini` per verificare l'accesso. Gemini CLI usa l'account già collegato e la selezione automatica del modello; per richiederla esplicitamente usa `gemini --model auto`. Non configurare una chiave API o fissare un modello senza richiesta dell'utente. Gemini è un reviewer sperimentale, non ancora adottato: Codex sul server resta Coordinatore, possiede gli strumenti MCP e usa Gemini solo per ricevere giudizi strutturati sugli artefatti. Non assegnare strumenti MCP a Gemini. I controlli deterministici e l'approvazione Codex restano indipendenti dalla review Gemini.
 
-**Distribution:** Dedicated GitHub Actions workflows will publish the MCP library, build the Tauri server installers and deploy the Cloudflare relay, selected by the tag prefixes documented below. Release users do not need Rust, Wrangler or the Tauri SDK. Branch CI also retains a Windows debug executable for seven days to support interactive validation; it does not enable release autostart or publish a release. The Tauri/React desktop shell manages a local persistent queue and displays job history. A separate Windows Coordinator process now has a single-instance lock, controlled stop request and login autostart wiring; it does not dispatch production work yet. The desktop includes a system-browser Google sign-in flow, stores Firebase refresh credentials and a stable server identity in the OS credential store, and can create or remove a one-server-per-account Firestore pairing. The Security screen lists and revokes authorized clients. A Node client package now supports system-browser sign-in, Firestore enrollment, OS credential storage and local account-management tools over MCP stdio. Remote relay transport and job tools are not implemented. Interactive sign-in and pairing still need verification on Windows. The Firebase project has an empty Standard Firestore database in `europe-west3` with restrictive rules; no pairing or client data has been written. Production workers, authenticated relay and release workflows remain to be completed. Native builds and Rust tests run in GitHub Actions. The Firebase project and desktop web app are registered, and the Google Sign-In provider is enabled.
+**Distribution:** Dedicated GitHub Actions workflows will publish the MCP library, build the Tauri server installers and deploy the Cloudflare relay, selected by the tag prefixes documented below. Release users do not need Rust, Wrangler or the Tauri SDK. Branch CI also retains a Windows debug executable for seven days to support interactive validation; it does not enable release autostart or publish a release. The Tauri/React desktop shell manages a local persistent queue and displays job history. A separate Windows Coordinator process now has a single-instance lock, controlled stop request and login autostart wiring; it does not dispatch production work yet. The desktop includes a system-browser Google sign-in flow, stores Firebase refresh credentials and a stable server identity in the OS credential store, and can create or remove a one-server-per-account Firestore pairing. The Security screen lists and revokes authorized clients. A Node client package supports system-browser sign-in, Firestore enrollment, OS credential storage, local MCP account tools, and authenticated relay tools for job and asset metadata. A fail-closed Cloudflare Worker and Durable Object relay implementation is in the repository; live deployment and the server's outbound connection to it remain incomplete. Interactive sign-in and pairing still need verification on Windows. The Firebase project has an empty Standard Firestore database in `europe-west3` with restrictive rules; no pairing or client data has been written. Production workers, authenticated relay deployment and release workflows remain to be completed. Native builds and Rust tests run in GitHub Actions. The Firebase project and desktop web app are registered, and the Google Sign-In provider is enabled.
 
 ### Release automation
 
@@ -87,18 +87,22 @@ flowchart LR
         DB[(SQLite)]
         OD[(OneDrive)]
     end
+    CLIENT[Client MCP]
+    CF[Relay Cloudflare]
     subgraph PRODUZIONE[Produzione]
         W[Scrittore]
         D[Disegnatore]
         S[Progettista sonoro]
     end
-    R <-->|WebSocket| C
+    R <-->|MCP stdio| CLIENT
+    CLIENT <-->|WebSocket| CF
+    CF <-->|WebSocket| C
     C <--> DB
     C <--> OD
     C <--> PRODUZIONE
 ```
 
-**Codex** è l'interfaccia conversazionale dell'utente e comunica tramite il client MCP e il relay WebSocket con il **Gestore delle code**, eseguito dal Coordinatore Rust sul server. Il gestore registra ogni richiesta, pianifica i job, controlla le risorse disponibili, gestisce annullamenti, tentativi e recupero dopo i riavvii e restituisce a Codex stato e risultati.
+**Codex** is the user's conversational interface. It communicates through the local **MCP client** and **Cloudflare relay** with the **queue manager** running in the server's Rust Coordinator. The relay connects authenticated clients and servers; it does not store or schedule jobs. The queue manager records requests, schedules jobs, monitors resources, handles cancellation and recovery, and returns status and results to Codex.
 
 **SQLite locale sul server** è il database autorevole per le richieste: conserva identificativi, stati, priorità, tentativi, errori e riferimenti agli asset. Non richiede un servizio database esterno.
 
@@ -224,7 +228,7 @@ Il confronto dei modelli è documentato in [Confronto dei modelli audio](docs/CO
 
 Il sistema separa il **PC locale**, dove l'utente lavora con **Codex CLI** e conserva i propri progetti, dal **server Tauri** sul PC Shadow (o altro host), che esegue il **Coordinatore Rust**, i modelli locali e i worker di produzione. Il client MCP comunica con il server attraverso una connessione **WebSocket** e il relay Cloudflare previsto; il Coordinatore gestisce le richieste e le code persistenti in **SQLite**, distribuisce i job e restituisce stati e risultati a Codex.
 
-Questa è l'**architettura obiettivo**, non un'integrazione remota già completata. I test storici sono stati eseguiti su un singolo host Windows con GPU NVIDIA RTX A4500. Il relay Cloudflare esistente è ancora un bootstrap non operativo: autenticazione, WebSocket, Durable Object e dispatch remoto devono essere implementati.
+This is the **target architecture**, not a completed remote integration. Historical tests ran on one Windows host with an NVIDIA RTX A4500 GPU. The repository now contains a fail-closed Cloudflare relay implementation; it is not deployed and has not passed live verification. The server's outbound WebSocket connection and remote dispatch still need to be connected.
 
 ### Cosa gira su ciascuna macchina
 
@@ -232,7 +236,7 @@ Questa è l'**architettura obiettivo**, non un'integrazione remota già completa
 |---|---|
 | **PC locale (client MCP)** | Codex CLI, Node.js, client MCP e rclone. Il progetto dell'utente e gli asset integrati restano qui; Codex invia richieste e riceve risultati dal Coordinatore. |
 | **PC Shadow / server Tauri** | Applicazione Tauri, Coordinatore Rust, **SQLite** per richieste e stato, LM Studio, `sd-cli.exe`, runtime audio e altri worker/CLI AI necessari. Il Coordinatore pianifica le code, gestisce GPU/VRAM, ripartenze e trasferimenti. |
-| **Cloudflare** | Relay WebSocket previsto per collegare client e server senza richiedere una connessione in ingresso diretta al PC Shadow. Il servizio non è ancora attivo per il traffico applicativo. |
+| **Cloudflare** | WebSocket relay that connects client and server without requiring an inbound connection to the Shadow PC. The Worker and Durable Object are in the repository in fail-closed mode; application traffic is not active yet. |
 | **OneDrive (tramite rclone)** | Cartella cloud temporanea condivisa per scambiare file e asset. Non è il database delle richieste e non sostituisce SQLite. Il provider è configurabile tramite rclone. |
 
 ### Dove risiedono modelli, richieste e asset

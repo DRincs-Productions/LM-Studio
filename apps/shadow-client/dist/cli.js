@@ -4,7 +4,7 @@ import {
   enrollClient,
   login,
   logout
-} from "./chunk-UABE6COZ.js";
+} from "./chunk-EKQY6ICT.js";
 
 // src/cli.ts
 async function main() {
