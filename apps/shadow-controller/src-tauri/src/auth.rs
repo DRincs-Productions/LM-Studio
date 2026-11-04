@@ -399,12 +399,17 @@ pub fn pair_server() -> Result<(), String> {
     if response.status().is_success() {
         return Ok(());
     }
+    let status = response.status();
+    let firebase_message = response
+        .json::<FirebaseErrorResponse>()
+        .map(|body| body.error.message)
+        .unwrap_or_else(|_| "Firebase returned no error details".to_owned());
     match pairing_status() {
         Ok(true) => return Ok(()),
         Err(message) if message.contains("paired with a different server") => return Err(message),
         _ => {}
     }
-    Err("Firebase rejected the server pairing. Check the Firestore database and security rules.".to_owned())
+    Err(format!("Firebase rejected the server pairing (HTTP {status}): {firebase_message}"))
 }
 
 pub fn unpair_server() -> Result<(), String> {
