@@ -94,6 +94,9 @@ async function authenticateRequest(request: Request, url: URL, env: Env): Promis
 
   const clientId = url.searchParams.get("clientId");
   if (!clientId || !UUID_PATTERN.test(clientId)) return null;
+  const account = await readFirestoreDocument(match[1], `accounts/${encodeURIComponent(user.localId)}`, env);
+  const serverId = account?.fields?.serverId?.stringValue;
+  if (!serverId || !UUID_PATTERN.test(serverId)) return null;
   const document = await readFirestoreDocument(
     match[1],
     `accounts/${encodeURIComponent(user.localId)}/authorizedClients/${encodeURIComponent(clientId)}`,
@@ -101,7 +104,7 @@ async function authenticateRequest(request: Request, url: URL, env: Env): Promis
   );
   const publicKey = document?.fields?.publicKey?.stringValue;
   if (!publicKey || publicKey.length > 512) return null;
-  return { uid: user.localId, role, clientId, publicKey };
+  return { uid: user.localId, role, serverId, clientId, publicKey };
 }
 
 async function readFirestoreDocument(idToken: string, path: string, env: Env): Promise<FirestoreDocument | null> {

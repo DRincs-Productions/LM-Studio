@@ -177,7 +177,10 @@ export class AccountRelay extends DurableObject<Env> {
     }
     const serverSocket = this.ctx.getWebSockets("server").find((candidate) => {
       const server = candidate.deserializeAttachment() as SocketAttachment | null;
-      return candidate.readyState === WebSocket.OPEN && server?.role === "server" && server.authenticated;
+      return candidate.readyState === WebSocket.OPEN
+        && server?.role === "server"
+        && server.authenticated
+        && server.serverId === attachment.serverId;
     });
     if (!serverSocket) return this.sendError(socket, message.messageId, "server_offline", "The paired server is offline.");
     if (attachment.pendingMessageIds.length >= 64) {
