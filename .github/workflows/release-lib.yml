@@ -1,0 +1,64 @@
+name: Publish Shadow MCP client
+
+on:
+  push:
+    tags:
+      - "lib-v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-lib-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/shadow-client
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          cache: npm
+          cache-dependency-path: apps/shadow-client/package-lock.json
+
+      - name: Validate tag and package version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          node --input-type=module -e 'import fs from "node:fs"; const expected = process.env.RELEASE_TAG.slice("lib-v".length); const actual = JSON.parse(fs.readFileSync("package.json", "utf8")).version; if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(expected) || expected !== actual) { console.error(`Tag version ${expected} does not match package version ${actual}`); process.exit(1); }'
+          if [ -z "${NPM_TOKEN:-}" ]; then echo "Repository secret NPM_TOKEN is required for npm publishing." >&2; exit 1; fi
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Publish package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          if [[ "$RELEASE_TAG" == *-* ]]; then DIST_TAG=next; else DIST_TAG=latest; fi
+          PACKAGE_NAME="$(node -p 'require("./package.json").name')"
+          PACKAGE_VERSION="$(node -p 'require("./package.json").version')"
+          if npm view "${PACKAGE_NAME}@${PACKAGE_VERSION}" version >/dev/null 2>&1; then
+            echo "${PACKAGE_NAME}@${PACKAGE_VERSION} already exists; leaving the immutable registry version untouched."
+          else
+            npm publish --access public --tag "$DIST_TAG" --ignore-scripts
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}

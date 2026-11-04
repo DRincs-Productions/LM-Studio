@@ -1,0 +1,48 @@
+name: Release Shadow relay
+
+on:
+  push:
+    tags:
+      - "relay-v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-relay-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/shadow-relay
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: apps/shadow-relay/package-lock.json
+
+      - name: Validate tag, release gate and deployment credentials
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELAY_RELEASE_ENABLED: ${{ vars.RELAY_RELEASE_ENABLED }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          node --input-type=module -e 'import fs from "node:fs"; const expected = process.env.RELEASE_TAG.slice("relay-v".length); const actual = JSON.parse(fs.readFileSync("package.json", "utf8")).version; if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(expected) || expected !== actual) { console.error(`Tag version ${expected} does not match relay version ${actual}`); process.exit(1); }'
+          if [ "${RELAY_RELEASE_ENABLED:-}" != "true" ]; then echo "Relay deploy blocked: set repository variable RELAY_RELEASE_ENABLED=true only after F1/F4 authentication and security gates pass." >&2; exit 1; fi
+          if [ -z "${CLOUDFLARE_API_TOKEN:-}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then echo "CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID secrets are required." >&2; exit 1; fi
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Deploy active relay
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deploy --var RELAY_STATE:active --strict

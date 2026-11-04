@@ -1,0 +1,100 @@
+name: Release Shadow Controller server
+
+on:
+  push:
+    tags:
+      - "server-v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-server-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate tag against all server manifests
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          node --input-type=module -e '
+            import fs from "node:fs";
+            const expected = process.env.RELEASE_TAG.slice("server-v".length);
+            const tauri = JSON.parse(fs.readFileSync("apps/shadow-controller/src-tauri/tauri.conf.json", "utf8")).version;
+            const packageVersion = JSON.parse(fs.readFileSync("apps/shadow-controller/package.json", "utf8")).version;
+            const cargo = fs.readFileSync("apps/shadow-controller/src-tauri/Cargo.toml", "utf8");
+            const cargoVersion = cargo.match(/^version\s*=\s*"([^"]+)"/m)?.[1];
+            if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(expected) || [tauri, packageVersion, cargoVersion].some((version) => version !== expected)) {
+              console.error(`Tag ${expected} must match Tauri (${tauri}), frontend (${packageVersion}) and Cargo (${cargoVersion}) versions.`);
+              process.exit(1);
+            }
+          '
+
+  build:
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: windows
+          - os: ubuntu-24.04
+            name: linux
+          - os: macos-latest
+            name: macos
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - if: runner.os == 'Linux'
+        name: Install Linux desktop dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential curl wget file libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev patchelf libwebkit2gtk-4.1-dev
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: apps/shadow-controller/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install desktop dependencies
+        working-directory: apps/shadow-controller
+        run: npm ci
+
+      - name: Build Tauri installers
+        working-directory: apps/shadow-controller
+        run: npm run tauri build
+
+      - name: Upload installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: shadow-controller-${{ matrix.name }}
+          path: apps/shadow-controller/src-tauri/target/release/bundle/**
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: [validate, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: shadow-controller-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          files: release-assets/**/*
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
