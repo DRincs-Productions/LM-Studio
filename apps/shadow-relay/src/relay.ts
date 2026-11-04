@@ -209,6 +209,7 @@ export class AccountRelay extends DurableObject<Env> {
       for (const clientSocket of this.ctx.getWebSockets("client")) {
         const attachment = clientSocket.deserializeAttachment() as SocketAttachment | null;
         if (!attachment?.authenticated || !attachment.pendingMessageIds.includes(message.replyTo)) continue;
+        if (message.uid !== attachment.uid || message.clientId !== attachment.clientId) return;
         sendJson(clientSocket, message);
         if (message.type !== "job.progress") {
           attachment.pendingMessageIds = attachment.pendingMessageIds.filter((id) => id !== message.replyTo);
@@ -216,6 +217,7 @@ export class AccountRelay extends DurableObject<Env> {
         }
         return;
       }
+      return;
     }
     if (message.clientId && isUuid(message.clientId)) {
       for (const clientSocket of this.ctx.getWebSockets("client")) {

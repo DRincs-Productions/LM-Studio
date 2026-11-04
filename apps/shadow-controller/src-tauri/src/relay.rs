@@ -173,7 +173,13 @@ async fn connect_and_serve(
                     Message::Text(text) => {
                         if text.len() > MAX_MESSAGE_BYTES { return Err("relay message exceeds size limit".to_owned()); }
                         let message: Value = serde_json::from_str(&text).map_err(|_| "relay sent invalid JSON".to_owned())?;
-                        let reply = handle_request(store, uid, &message);
+                        let mut reply = handle_request(store, uid, &message);
+                        if let Some(object) = reply.as_object_mut() {
+                            object.insert("uid".to_owned(), Value::String(uid.to_owned()));
+                            if let Some(client_id) = message.get("clientId").and_then(Value::as_str) {
+                                object.insert("clientId".to_owned(), Value::String(client_id.to_owned()));
+                            }
+                        }
                         let mut serialized = serde_json::to_string(&reply).map_err(|_| "could not encode relay response".to_owned())?;
                         if serialized.len() > MAX_MESSAGE_BYTES {
                             let compact = error_reply(
@@ -272,6 +278,9 @@ fn job_status(store: &JobStore, uid: &str, client_id: &str, message_id: &str, me
             Err(_) => return error_reply(Some(message_id.to_owned()), "internal_error", "Could not read job status.", false),
         }
     } else if let Some(request_id) = message.get("requestId").and_then(Value::as_str) {
+        if Uuid::parse_str(request_id).is_err() {
+            return error_reply(Some(message_id.to_owned()), "invalid_payload", "requestId must be a UUID.", false);
+        }
         match store.get_by_request(uid, client_id, request_id) {
             Ok(job) => job,
             Err(_) => return error_reply(Some(message_id.to_owned()), "internal_error", "Could not read job status.", false),
@@ -289,7 +298,7 @@ fn list_jobs(store: &JobStore, uid: &str, client_id: &str, message_id: &str, mes
     }
     match store.list(uid, client_id, limit as u32) {
         Ok(jobs) => json!({ "version": 1, "type": "job.list", "messageId": Uuid::new_v4().to_string(), "replyTo": message_id, "jobs": jobs }),
-        Err(_) => error_reply(Some(message_id.to_owned()), "invalid_payload", "Job limit must be between 1 and 100.", false),
+        Err(_) => error_reply(Some(message_id.to_owned()), "internal_error", "Could not list jobs.", false),
     }
 }
 
