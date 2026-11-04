@@ -5,7 +5,6 @@ import { pathToFileURL } from "node:url";
 const platformPatterns = [
   ["windows-x86_64", /\.nsis\.zip$/i],
   ["linux-x86_64", /\.appimage\.tar\.gz$/i],
-  ["darwin-aarch64", /\.app\.tar\.gz$/i],
 ];
 
 export function createUpdaterManifest({ assetsDir, tag, repository, pubDate = new Date().toISOString() }) {

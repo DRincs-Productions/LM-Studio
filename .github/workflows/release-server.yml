@@ -46,9 +46,6 @@ jobs:
           - os: ubuntu-24.04
             name: linux-x86_64
             bundles: appimage
-          - os: macos-latest
-            name: darwin-aarch64
-            bundles: dmg
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -110,3 +107,14 @@ jobs:
           files: release-assets/**/*
           generate_release_notes: true
           prerelease: ${{ contains(github.ref_name, '-') }}
+
+  updater-smoke-test:
+    needs: publish
+    if: ${{ !contains(github.ref_name, '-') }}
+    runs-on: windows-latest
+    steps:
+      - name: Install latest release and verify no-update startup
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          CURRENT_TAG: ${{ github.ref_name }}
+        run: pwsh -NoProfile -File scripts/updater-smoke-test.ps1
