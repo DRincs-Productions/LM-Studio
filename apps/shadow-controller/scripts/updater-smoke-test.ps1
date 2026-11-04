@@ -114,8 +114,13 @@ try {
     Write-Host "Started $($previous.tag_name) upgrade app as PID $($previousProcess.Id)"
     $upgradePattern = "Found signed update $($current.tag_name.Substring('server-v'.Length))"
     $upgradeLog = Wait-ForLog $previousTest $upgradePattern 360 $previousProcess
-    $stableLog = Wait-ForLog $previousTest 'No newer release available' 360 $previousProcess
-    Write-Host "PASS: $($previous.tag_name) automatically updated to $($current.tag_name); update log $upgradeLog; post-update log $stableLog"
+    $installedLog = Wait-ForLog $previousTest 'Update installed; restarting application' 120 $previousProcess
+    $stableLog = Wait-ForLog $previousTest 'No newer release available' 120
+    $installedVersion = (Get-Item $previousTest.Exe).VersionInfo.ProductVersion
+    if ($installedVersion -notmatch [regex]::Escape($current.tag_name.Substring('server-v'.Length))) {
+      throw "Updater restart logged, but installed executable reports version '$installedVersion' instead of $($current.tag_name)"
+    }
+    Write-Host "PASS: $($previous.tag_name) automatically updated to $($current.tag_name); update log $upgradeLog; install log $installedLog; post-update log $stableLog; executable version $installedVersion"
     Stop-TestCoordinator $previousTest $true
   } else {
     Write-Host 'No previous stable server release exists; upgrade test will run on the next stable release.'
