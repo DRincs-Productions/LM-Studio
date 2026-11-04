@@ -75,7 +75,6 @@ pub fn run() {
             start_local_coordinator,
             begin_local_auth,
             get_local_auth_status,
-            get_firebase_id_token,
             sign_out_local_auth,
             get_local_server_id,
             get_local_pairing_status,
@@ -305,11 +304,6 @@ fn revoke_local_authorized_client(client_id: String) -> Result<(), String> {
 #[tauri::command]
 fn get_local_auth_status() -> Result<Option<auth::AuthIdentity>, String> {
     auth::identity()
-}
-
-#[tauri::command]
-fn get_firebase_id_token() -> Result<String, String> {
-    auth::id_token()
 }
 
 #[tauri::command]
