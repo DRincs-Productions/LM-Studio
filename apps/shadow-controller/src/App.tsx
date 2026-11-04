@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import "./App.css";
@@ -19,6 +19,7 @@ function App() {
   const [authIdentity, setAuthIdentity] = useState<AuthIdentity | null>(null);
   const [authPending, setAuthPending] = useState(false);
   const [authMessage, setAuthMessage] = useState("");
+  const authCancelRef = useRef<(() => void) | null>(null);
   const [serverId, setServerId] = useState<string | null>(null);
   const [pairingStatus, setPairingStatus] = useState<"unknown" | "paired" | "unpaired">("unknown");
   const [pairingPending, setPairingPending] = useState(false);
@@ -73,10 +74,17 @@ function App() {
   async function signIn() {
     setAuthPending(true);
     setAuthMessage("Complete Google sign-in in your browser.");
+    let cancelled = false;
+    authCancelRef.current = () => { cancelled = true; };
     try {
       const url = await invoke<string>("begin_local_auth");
+      if (cancelled) {
+        await invoke("cancel_local_auth");
+        setAuthMessage("Sign-in cancelled. You can try again.");
+        return;
+      }
       await openUrl(url);
-      for (let attempt = 0; attempt < 300; attempt += 1) {
+      for (let attempt = 0; attempt < 300 && !cancelled; attempt += 1) {
         await new Promise((resolve) => window.setTimeout(resolve, 1000));
         const identity = await invoke<AuthIdentity | null>("get_local_auth_status");
         if (identity) {
@@ -85,12 +93,18 @@ function App() {
           return;
         }
       }
-      setAuthMessage("Sign-in timed out. Start again when you are ready.");
+      setAuthMessage(cancelled ? "Sign-in cancelled. You can try again." : "Sign-in timed out. Start again when you are ready.");
     } catch (error) {
       setAuthMessage(String(error));
     } finally {
+      authCancelRef.current = null;
       setAuthPending(false);
     }
+  }
+
+  function cancelSignIn() {
+    authCancelRef.current?.();
+    void invoke("cancel_local_auth").catch((error) => setAuthMessage(String(error)));
   }
 
   async function signOut() {
@@ -215,7 +229,7 @@ function App() {
           </div>
 
           {section === "Overview"
-            ? <Overview authIdentity={authIdentity} authPending={authPending} authMessage={authMessage} serverId={serverId} pairingStatus={pairingStatus} pairingPending={pairingPending} pairingMessage={pairingMessage} onSignIn={() => void signIn()} onPair={() => void pairServer()} onUnpair={() => void unpairServer()} />
+            ? <Overview authIdentity={authIdentity} authPending={authPending} authMessage={authMessage} serverId={serverId} pairingStatus={pairingStatus} pairingPending={pairingPending} pairingMessage={pairingMessage} onSignIn={() => void signIn()} onCancelSignIn={cancelSignIn} onPair={() => void pairServer()} onUnpair={() => void unpairServer()} />
             : section === "Jobs" ? <Jobs />
               : section === "Security" ? <Security identity={authIdentity} pairingStatus={pairingStatus} />
                 : <SectionPlaceholder section={section} />}
@@ -372,7 +386,7 @@ function Security({ identity, pairingStatus }: { identity: AuthIdentity | null; 
   );
 }
 
-function Overview({ authIdentity, authPending, authMessage, serverId, pairingStatus, pairingPending, pairingMessage, onSignIn, onPair, onUnpair }: {
+function Overview({ authIdentity, authPending, authMessage, serverId, pairingStatus, pairingPending, pairingMessage, onSignIn, onCancelSignIn, onPair, onUnpair }: {
   authIdentity: AuthIdentity | null;
   authPending: boolean;
   authMessage: string;
@@ -381,6 +395,7 @@ function Overview({ authIdentity, authPending, authMessage, serverId, pairingSta
   pairingPending: boolean;
   pairingMessage: string;
   onSignIn: () => void;
+  onCancelSignIn: () => void;
   onPair: () => void;
   onUnpair: () => void;
 }) {
@@ -392,7 +407,9 @@ function Overview({ authIdentity, authPending, authMessage, serverId, pairingSta
           <h2>Your workspace is ready<br />to be connected.</h2>
           <p>{authIdentity ? `Signed in as ${authIdentity.email}. ${pairingStatus === "paired" ? "This server is paired to your account." : "Pair this server to your account to continue setup."}` : "Sign in and pair a server to start coordinating your local generation tools."}</p>
           {!authIdentity
-            ? <button className="button button-primary" type="button" disabled={authPending} onClick={onSignIn}><span aria-hidden="true">↗</span> {authPending ? "Waiting for browser…" : "Sign in with Google"}</button>
+            ? authPending
+              ? <button className="button button-muted" type="button" onClick={onCancelSignIn}>Cancel sign-in</button>
+              : <button className="button button-primary" type="button" onClick={onSignIn}><span aria-hidden="true">↗</span> Sign in with Google</button>
             : pairingStatus === "paired"
               ? <button className="button button-primary" type="button" disabled={pairingPending} onClick={onUnpair}>{pairingPending ? "Updating pairing…" : "Unpair this server"}</button>
               : <button className="button button-primary" type="button" disabled={pairingPending || !serverId || pairingMessage.includes("paired with a different server")} onClick={onPair}><span aria-hidden="true">↗</span> {pairingPending ? "Pairing server…" : "Pair this server"}</button>}

@@ -26,6 +26,10 @@ mod auth {
         Err("Google sign-in is not supported on this platform yet".to_owned())
     }
 
+    pub fn cancel_login() -> Result<(), String> {
+        Ok(())
+    }
+
     pub fn server_id() -> Result<String, String> {
         Err("Server identity is not supported on this platform yet".to_owned())
     }
@@ -100,6 +104,7 @@ pub fn run() {
             stop_local_coordinator,
             start_local_coordinator,
             begin_local_auth,
+            cancel_local_auth,
             get_local_auth_status,
             sign_out_local_auth,
             get_local_server_id,
@@ -303,6 +308,11 @@ fn start_local_coordinator(app: tauri::AppHandle) -> Result<(), String> {
 #[tauri::command]
 fn begin_local_auth() -> Result<String, String> {
     auth::begin_login()
+}
+
+#[tauri::command]
+fn cancel_local_auth() -> Result<(), String> {
+    auth::cancel_login()
 }
 
 #[tauri::command]

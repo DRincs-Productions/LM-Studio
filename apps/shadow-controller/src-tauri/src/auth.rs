@@ -1,7 +1,7 @@
 use std::{
     io::Read,
     net::TcpListener,
-    sync::Mutex,
+    sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}},
     thread,
     time::{Duration, Instant},
 };
@@ -21,6 +21,7 @@ const KEYRING_ACCOUNT: &str = "firebase.refresh-token";
 const SERVER_ID_KEYRING_ACCOUNT: &str = "server.identity";
 const AUTH_PAGE: &str = include_str!("../auth-browser.html");
 const AUTH_SCRIPT: &str = include_str!("../auth-browser.js");
+static ACTIVE_LOGIN: Mutex<Option<Arc<AtomicBool>>> = Mutex::new(None);
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -152,22 +153,49 @@ pub fn begin_login() -> Result<String, String> {
     let state = Uuid::new_v4().to_string();
     let origin = format!("http://localhost:{port}");
     let browser_url = format!("{origin}/auth?state={state}");
+    let cancelled = Arc::new(AtomicBool::new(false));
+    {
+        let mut active = ACTIVE_LOGIN.lock().map_err(|_| "Sign-in state is unavailable".to_owned())?;
+        if let Some(previous) = active.replace(Arc::clone(&cancelled)) {
+            previous.store(true, Ordering::Release);
+        }
+    }
 
-    thread::Builder::new()
+    let worker_cancelled = Arc::clone(&cancelled);
+    let spawn_result = thread::Builder::new()
         .name("shadow-firebase-login".to_owned())
-        .spawn(move || serve_login(server, state, origin))
-        .map_err(|_| "Could not start the local sign-in listener".to_owned())?;
+        .spawn(move || serve_login(server, state, origin, worker_cancelled));
+    if spawn_result.is_err() {
+        clear_active_login(&cancelled);
+        return Err("Could not start the local sign-in listener".to_owned());
+    }
 
     Ok(browser_url)
 }
 
-fn serve_login(server: Server, state: String, origin: String) {
+pub fn cancel_login() -> Result<(), String> {
+    let mut active = ACTIVE_LOGIN.lock().map_err(|_| "Sign-in state is unavailable".to_owned())?;
+    if let Some(cancelled) = active.take() {
+        cancelled.store(true, Ordering::Release);
+    }
+    Ok(())
+}
+
+fn clear_active_login(cancelled: &Arc<AtomicBool>) {
+    if let Ok(mut active) = ACTIVE_LOGIN.lock() {
+        if active.as_ref().is_some_and(|current| Arc::ptr_eq(current, cancelled)) {
+            active.take();
+        }
+    }
+}
+
+fn serve_login(server: Server, state: String, origin: String, cancelled: Arc<AtomicBool>) {
     let deadline = Instant::now() + Duration::from_secs(300);
-    while Instant::now() < deadline {
+    while Instant::now() < deadline && !cancelled.load(Ordering::Acquire) {
         let request = match server.recv_timeout(Duration::from_secs(1)) {
             Ok(Some(request)) => request,
             Ok(None) => continue,
-            Err(_) => return,
+            Err(_) => break,
         };
 
         if request.method() == &Method::Get && request.url() == format!("/auth?state={state}") {
@@ -189,7 +217,7 @@ fn serve_login(server: Server, state: String, origin: String) {
                 continue;
             }
             match accept_login(request, &state) {
-                Ok(()) => return,
+                Ok(()) => break,
                 Err(message) => {
                     let _ = message;
                 }
@@ -199,6 +227,7 @@ fn serve_login(server: Server, state: String, origin: String) {
 
         let _ = request.respond(html_response("Not found.", 404));
     }
+    clear_active_login(&cancelled);
 }
 
 fn firebase_config() -> serde_json::Value {
