@@ -16,6 +16,7 @@ use uuid::Uuid;
 const FIREBASE_API_KEY: &str = "AIzaSyCO-OtHIxbarCVRGh3qLDeNhUT2ArrngUY";
 const PROJECT_ID: &str = "shadow-controller-20261103";
 const FIRESTORE_DOCUMENTS_URL: &str = "https://firestore.googleapis.com/v1/projects/shadow-controller-20261103/databases/(default)/documents";
+const FIRESTORE_DOCUMENTS_RESOURCE: &str = "projects/shadow-controller-20261103/databases/(default)/documents";
 const KEYRING_SERVICE: &str = "com.drincs.shadowcontroller";
 const KEYRING_ACCOUNT: &str = "firebase.refresh-token";
 const SERVER_ID_KEYRING_ACCOUNT: &str = "server.identity";
@@ -388,7 +389,7 @@ pub fn pair_server() -> Result<(), String> {
         .json(&serde_json::json!({
             "writes": [{
                 "update": {
-                    "name": format!("{FIRESTORE_DOCUMENTS_URL}/accounts/{}", credential.uid),
+                    "name": format!("{FIRESTORE_DOCUMENTS_RESOURCE}/accounts/{}", credential.uid),
                     "fields": { "serverId": { "stringValue": server_id } }
                 },
                 "currentDocument": { "exists": false }
