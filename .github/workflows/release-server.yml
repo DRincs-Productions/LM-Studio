@@ -15,8 +15,21 @@ concurrency:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    outputs:
+      prerelease: ${{ steps.release-metadata.outputs.prerelease }}
     steps:
       - uses: actions/checkout@v4
+      - id: release-metadata
+        name: Detect prerelease tag
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          version="${RELEASE_TAG#server-v}"
+          if [[ "$version" == *-* ]]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Validate tag against all server manifests
         env:
           RELEASE_TAG: ${{ github.ref_name }}
@@ -43,9 +56,11 @@ jobs:
           - os: windows-latest
             name: windows-x86_64
             bundles: nsis
+            artifact_path: apps/shadow-controller/src-tauri/target/release/bundle/nsis/*-setup.exe*
           - os: ubuntu-24.04
             name: linux-x86_64
             bundles: appimage
+            artifact_path: apps/shadow-controller/src-tauri/target/release/bundle/appimage/*.AppImage*
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -78,7 +93,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: shadow-controller-${{ matrix.name }}
-          path: apps/shadow-controller/src-tauri/target/release/bundle/**
+          path: ${{ matrix.artifact_path }}
           if-no-files-found: error
           retention-days: 7
 
@@ -108,11 +123,11 @@ jobs:
           name: ${{ github.ref_name }}
           files: release-assets/**/*
           generate_release_notes: true
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          prerelease: ${{ needs.validate.outputs.prerelease == 'true' }}
 
   updater-smoke-test:
-    needs: publish
-    if: ${{ !contains(github.ref_name, '-') }}
+    needs: [validate, publish]
+    if: ${{ needs.validate.outputs.prerelease != 'true' }}
     runs-on: windows-latest
     steps:
       - name: Install latest release and verify no-update startup
