@@ -59,12 +59,12 @@ function createServer(): McpServer {
   });
 
   server.registerTool("shadow_auth_token_status", {
-    description: "Check that Firebase can refresh this enrolled client's identity token. Does not connect to the relay.",
+    description: "Check that Firebase can refresh this enrolled client's identity token. This does not verify relay connectivity.",
     inputSchema: z.object({}),
   }, async () => {
     try {
       await getClientIdToken();
-      return { content: [{ type: "text", text: "Firebase identity token refreshed for the enrolled client. Relay transport is not available yet." }] };
+      return { content: [{ type: "text", text: "Firebase identity token refreshed for the enrolled client. Use shadow_relay_status to verify the server connection." }] };
     } catch (error) {
       return errorResult(error);
     }
