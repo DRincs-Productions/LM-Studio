@@ -117,4 +117,4 @@ jobs:
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
           CURRENT_TAG: ${{ github.ref_name }}
-        run: pwsh -NoProfile -File scripts/updater-smoke-test.ps1
+        run: pwsh -NoProfile -File apps/shadow-controller/scripts/updater-smoke-test.ps1
