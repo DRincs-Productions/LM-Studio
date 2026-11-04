@@ -46,14 +46,22 @@ function Remove-TestInstall($test) {
   Remove-Item -LiteralPath $test.Root -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-function Wait-ForLog($test, $pattern, $timeoutSeconds = 240) {
+function Wait-ForLog($test, $pattern, $timeoutSeconds = 240, $process = $null) {
   $log = Join-Path $test.Data 'update.log'
   $deadline = (Get-Date).AddSeconds($timeoutSeconds)
   while ((Get-Date) -lt $deadline) {
     if ((Test-Path $log) -and (Select-String -Path $log -Pattern $pattern -Quiet)) { return $log }
+    if ($process -and $process.HasExited) {
+      Write-Host "Application exited before logging '$pattern' (PID $($process.Id), exit code $($process.ExitCode))."
+      Get-WinEvent -FilterHashtable @{ LogName = 'Application'; StartTime = $process.StartTime } -ErrorAction SilentlyContinue |
+        Where-Object { $_.Message -match 'shadow-controller|Shadow Controller|WebView2' } |
+        Select-Object -First 10 TimeCreated, Id, ProviderName, Message |
+        Format-List
+      break
+    }
     Start-Sleep -Seconds 2
   }
-  if (Test-Path $log) { Get-Content $log }
+  if (Test-Path $log) { Get-Content $log } else { Write-Host "Update log was never created: $log" }
   $coordinatorLog = Join-Path $test.Data 'coordinator.log'
   if (Test-Path $coordinatorLog) {
     Write-Host "Coordinator log: $coordinatorLog"
@@ -93,7 +101,7 @@ try {
   Clear-UpdateLog $currentTest
   $currentProcess = Start-Process -FilePath $currentTest.Exe -ArgumentList '--background' -PassThru
   Write-Host "Started $($current.tag_name) smoke app as PID $($currentProcess.Id)"
-  $currentLog = Wait-ForLog $currentTest 'No newer release available'
+  $currentLog = Wait-ForLog $currentTest 'No newer release available' 240 $currentProcess
   Write-Host "PASS: $($current.tag_name) starts with no update and logs $currentLog"
   Stop-TestCoordinator $currentTest $true
   Remove-TestInstall $currentTest
@@ -105,8 +113,8 @@ try {
     $previousProcess = Start-Process -FilePath $previousTest.Exe -ArgumentList '--background' -PassThru
     Write-Host "Started $($previous.tag_name) upgrade app as PID $($previousProcess.Id)"
     $upgradePattern = "Found signed update $($current.tag_name.Substring('server-v'.Length))"
-    $upgradeLog = Wait-ForLog $previousTest $upgradePattern 360
-    $stableLog = Wait-ForLog $previousTest 'No newer release available' 360
+    $upgradeLog = Wait-ForLog $previousTest $upgradePattern 360 $previousProcess
+    $stableLog = Wait-ForLog $previousTest 'No newer release available' 360 $previousProcess
     Write-Host "PASS: $($previous.tag_name) automatically updated to $($current.tag_name); update log $upgradeLog; post-update log $stableLog"
     Stop-TestCoordinator $previousTest $true
   } else {

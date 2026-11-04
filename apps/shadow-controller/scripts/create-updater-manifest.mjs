@@ -29,7 +29,9 @@ export function createUpdaterManifest({ assetsDir, tag, repository, pubDate = ne
     if (!fs.existsSync(signaturePath)) throw new Error(`Missing signature for ${bundle.name}`);
     const signature = fs.readFileSync(signaturePath, "utf8").trim();
     if (!signature) throw new Error(`Empty signature for ${bundle.name}`);
-    const assetUrl = `https://github.com/${repository}/releases/download/${tag}/${encodeURIComponent(bundle.name)}`;
+    // GitHub release uploads normalize spaces in Tauri bundle names to dots.
+    const releaseAssetName = bundle.name.replaceAll(" ", ".");
+    const assetUrl = `https://github.com/${repository}/releases/download/${tag}/${encodeURIComponent(releaseAssetName)}`;
     platforms[platform] = { url: assetUrl, signature };
   }
 

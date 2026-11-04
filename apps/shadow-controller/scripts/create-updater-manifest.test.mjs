@@ -22,7 +22,7 @@ test("creates signed platform entries for a stable server release", () => {
     assert.equal(manifest.version, "0.1.3");
     assert.equal(manifest.pub_date, "2026-11-04T00:00:00Z");
     assert.equal(Object.keys(manifest.platforms).length, 2);
-    assert.match(manifest.platforms["windows-x86_64"].url, /server-v0\.1\.3\/Shadow%20Controller_0\.1\.3_x64-setup\.exe$/);
+    assert.match(manifest.platforms["windows-x86_64"].url, /server-v0\.1\.3\/Shadow\.Controller_0\.1\.3_x64-setup\.exe$/);
     assert.equal(manifest.platforms["linux-x86_64"].signature, "signature:Shadow Controller_0.1.3_amd64.AppImage");
   } finally {
     fs.rmSync(assetsDir, { recursive: true, force: true });
