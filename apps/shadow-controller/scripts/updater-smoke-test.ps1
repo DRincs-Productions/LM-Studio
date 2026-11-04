@@ -69,15 +69,14 @@ function Wait-ForLog($test, $pattern, $timeoutSeconds = 240) {
 function Stop-TestCoordinator($test, $requestStop = $false) {
   if (-not $test) { return }
   $stopFile = Join-Path $test.Data 'coordinator.stop'
-  $lockFile = Join-Path $test.Data 'coordinator.lock'
   $pidFile = Join-Path $test.Data 'coordinator.pid'
   if ($requestStop -and (Test-Path $pidFile)) {
     $token = (Get-Content $pidFile | Select-Object -Skip 1 -First 1)
     if ($token) { Set-Content -LiteralPath $stopFile -Value $token -NoNewline }
   }
   $deadline = (Get-Date).AddSeconds(30)
-  while ((Get-Date) -lt $deadline -and (Test-Path $lockFile)) { Start-Sleep -Milliseconds 250 }
-  if (Test-Path $lockFile) { throw "Coordinator did not release its isolated lease: $lockFile" }
+  while ((Get-Date) -lt $deadline -and (Test-Path $pidFile)) { Start-Sleep -Milliseconds 250 }
+  if (Test-Path $pidFile) { throw "Coordinator did not stop in its isolated profile: $pidFile" }
   if (Test-Path $stopFile) { Remove-Item -LiteralPath $stopFile -Force }
 }
 
