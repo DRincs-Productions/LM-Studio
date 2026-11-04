@@ -224,7 +224,14 @@ fn show_main_window(app: &tauri::AppHandle) {
 
 async fn check_for_updates(app: tauri::AppHandle) {
     append_update_log(&app, "Checking for signed updates");
-    let update = match app.updater() {
+    let update = match app
+        .updater_builder()
+        .on_before_exit({
+            let app = app.clone();
+            move || append_update_log(&app, "Windows updater launched the installer; closing this instance")
+        })
+        .build()
+    {
         Ok(updater) => match updater.check().await {
             Ok(Some(update)) => {
                 append_update_log(&app, &format!("Found signed update {}", update.version));

@@ -114,8 +114,8 @@ try {
     Write-Host "Started $($previous.tag_name) upgrade app as PID $($previousProcess.Id)"
     $upgradePattern = "Found signed update $($current.tag_name.Substring('server-v'.Length))"
     $upgradeLog = Wait-ForLog $previousTest $upgradePattern 360 $previousProcess
-    $installedLog = Wait-ForLog $previousTest 'Update installed; restarting application' 120 $previousProcess
-    $stableLog = Wait-ForLog $previousTest 'No newer release available' 120
+    $installedLog = Wait-ForLog $previousTest 'Windows updater launched the installer; closing this instance' 120 $previousProcess
+    $stableLog = Wait-ForLog $previousTest 'No newer release available' 180
     $installedVersion = (Get-Item $previousTest.Exe).VersionInfo.ProductVersion
     if ($installedVersion -notmatch [regex]::Escape($current.tag_name.Substring('server-v'.Length))) {
       throw "Updater restart logged, but installed executable reports version '$installedVersion' instead of $($current.tag_name)"
