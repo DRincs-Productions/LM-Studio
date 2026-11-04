@@ -161,7 +161,7 @@ async fn connect_and_serve(
                 return Ok(());
             }
             _ = credential_check.tick() => {
-                if !crate::auth::is_signed_in().unwrap_or(false) {
+                if crate::auth::current_uid().ok().flatten().as_deref() != Some(uid) {
                     let _ = socket.close(None).await;
                     return Ok(());
                 }

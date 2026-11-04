@@ -308,8 +308,8 @@ pub fn identity() -> Result<Option<AuthIdentity>, String> {
     }))
 }
 
-pub fn is_signed_in() -> Result<bool, String> {
-    Ok(read_credential()?.is_some())
+pub fn current_uid() -> Result<Option<String>, String> {
+    Ok(read_credential()?.map(|credential| credential.uid))
 }
 
 pub fn relay_credentials() -> Result<Option<RelayCredentials>, String> {

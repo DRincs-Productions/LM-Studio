@@ -61,8 +61,8 @@ mod auth {
         Ok(None)
     }
 
-    pub fn is_signed_in() -> Result<bool, String> {
-        Ok(false)
+    pub fn current_uid() -> Result<Option<String>, String> {
+        Ok(None)
     }
 
     pub fn id_token() -> Result<String, String> {
