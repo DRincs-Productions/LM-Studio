@@ -60,7 +60,7 @@ Il progetto usa hardware di seconda mano e comprende Shadow PC nell’ambiente d
 
 **Decisione architetturale:** il ruolo Regia è eliminato. Codex è l'unica interfaccia conversazionale; il Coordinatore gestisce le code. I modelli, i profili Bionic, i prompt, gli adapter e le configurazioni dedicati esclusivamente alla Regia saranno rimossi in una successiva fase di pulizia, previa verifica delle dipendenze condivise. Non rimuovere componenti ancora utilizzati da altri worker.
 
-The user works with Codex. Codex sends requests through its local MCP client and the authenticated Cloudflare relay to the server Coordinator. The Coordinator persists and reports queue state; production dispatch is not connected yet. The Shadow Controller desktop signs users in through a Firebase-hosted web portal, which returns the verified session to the desktop over its temporary local callback.
+The user works with Codex. Codex sends requests through its local MCP client and the authenticated Cloudflare relay to the server Coordinator. The Coordinator persists and reports queue state; production dispatch is not connected yet. The Shadow Controller desktop signs users in through a Firebase-hosted web portal on the Firebase Auth helper domain, which returns the verified session to the desktop over its temporary local callback.
 
 ```mermaid
 flowchart TD

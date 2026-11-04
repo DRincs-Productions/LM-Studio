@@ -19,7 +19,8 @@ const FIRESTORE_DOCUMENTS_URL: &str = "https://firestore.googleapis.com/v1/proje
 const KEYRING_SERVICE: &str = "com.drincs.shadowcontroller";
 const KEYRING_ACCOUNT: &str = "firebase.refresh-token";
 const SERVER_ID_KEYRING_ACCOUNT: &str = "server.identity";
-const AUTH_ORIGIN: &str = "https://shadow-controller-20261103.web.app";
+// Keep the desktop portal on the same Firebase origin used as the SDK authDomain.
+const AUTH_ORIGIN: &str = "https://shadow-controller-20261103.firebaseapp.com";
 static ACTIVE_LOGIN: Mutex<Option<Arc<AtomicBool>>> = Mutex::new(None);
 
 #[derive(Debug, Clone, Serialize)]

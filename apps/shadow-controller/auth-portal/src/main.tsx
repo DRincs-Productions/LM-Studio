@@ -97,9 +97,28 @@ function App() {
 function describeError(error: unknown): string {
   if (error instanceof Error) {
     const code = "code" in error && typeof error.code === "string" ? ` (${error.code})` : "";
-    return `${error.message}${code}`;
+    const customData = "customData" in error && typeof error.customData === "object" && error.customData !== null
+      ? error.customData as Record<string, unknown>
+      : {};
+    const originalError = customData.originalError;
+    const originalMessage = originalError instanceof Error
+      ? `${originalError.name}: ${originalError.message}`
+      : typeof originalError === "object" && originalError !== null && "message" in originalError
+        && typeof originalError.message === "string"
+        ? originalError.message
+        : typeof originalError === "string" ? originalError : "";
+    const detail = sanitizeErrorDetail(originalMessage);
+    return `${error.message}${code}${detail ? ` Details: ${detail}` : ""}`;
   }
   return "Sign-in failed. Please try again.";
+}
+
+function sanitizeErrorDetail(value: string): string {
+  return value
+    .replace(/\bAIza[0-9A-Za-z_-]{20,}\b/g, "[redacted API key]")
+    .replace(/([?&](?:key|token|access_token|id_token|refresh_token|client_secret)=)[^&\s]+/gi, "$1[redacted]")
+    .replace(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/g, "[redacted email]")
+    .slice(0, 240);
 }
 
 createRoot(document.getElementById("root")!).render(<React.StrictMode><App /></React.StrictMode>);
