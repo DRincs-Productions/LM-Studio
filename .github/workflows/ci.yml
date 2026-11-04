@@ -62,7 +62,8 @@ jobs:
         run: cargo check --manifest-path apps/shadow-controller/src-tauri/Cargo.toml
 
       - name: Build Windows desktop validation executable
-        run: cargo build --manifest-path apps/shadow-controller/src-tauri/Cargo.toml
+        working-directory: apps/shadow-controller
+        run: npx tauri build --debug
 
       - name: Upload Windows desktop validation executable
         uses: actions/upload-artifact@v4
