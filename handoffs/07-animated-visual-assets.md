@@ -15,6 +15,10 @@ Explore whether the project should support creating and using animated visual as
 - What are the costs, hardware needs, and practical limits of producing and rendering these assets?
 - How should generated or externally authored assets be reviewed for visual quality and consistency?
 
+## Deferred task
+
+Evaluate Spine/Spine2D and suitable alternatives, then decide what authoring workflow, export formats, and runtime integration to use. This remains future work; no tool or implementation approach has been selected.
+
 ## Scope and constraints
 
 Do not assume Spine is the preferred option or that a usable MCP integration, command-line interface, or game runtime is available. Verify current product capabilities and licensing before making a recommendation. Compare Spine/Spine2D with relevant alternatives using a small, representative proof of concept before selecting a workflow.
