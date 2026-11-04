@@ -148,11 +148,21 @@ pub fn request_stop(data_dir: &Path) -> Result<bool, RuntimeError> {
 /// The caller receives `Ok(())` when another instance already owns the lock or
 /// when a controlled stop request is received.
 pub fn run_service(data_dir: &Path) -> Result<(), RuntimeError> {
+    run_service_with_startup(data_dir, || {})
+}
+
+/// Runs the Coordinator and invokes `on_started` only after this process owns
+/// the single-instance lease and has recovered the persistent job store.
+pub fn run_service_with_startup(
+    data_dir: &Path,
+    on_started: impl FnOnce(),
+) -> Result<(), RuntimeError> {
     let Some(lease) = CoordinatorLease::acquire(data_dir)? else {
         return Ok(());
     };
     let store = JobStore::open(data_dir.join("coordinator.sqlite3"))?;
     store.mark_running_jobs_interrupted()?;
+    on_started();
 
     loop {
         if lease.stop_requested()? {

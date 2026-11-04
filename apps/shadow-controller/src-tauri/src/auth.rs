@@ -36,6 +36,12 @@ pub struct AuthorizedClient {
     display_name: String,
 }
 
+pub struct RelayCredentials {
+    pub uid: String,
+    pub server_id: String,
+    pub id_token: String,
+}
+
 pub fn server_id() -> Result<String, String> {
     static SERVER_ID_LOCK: Mutex<()> = Mutex::new(());
     let _guard = SERVER_ID_LOCK
@@ -299,6 +305,24 @@ pub fn identity() -> Result<Option<AuthIdentity>, String> {
     Ok(read_credential()?.map(|credential| AuthIdentity {
         uid: credential.uid,
         email: credential.email,
+    }))
+}
+
+pub fn is_signed_in() -> Result<bool, String> {
+    Ok(read_credential()?.is_some())
+}
+
+pub fn relay_credentials() -> Result<Option<RelayCredentials>, String> {
+    let Some(credential) = read_credential()? else {
+        return Ok(None);
+    };
+    if !pairing_status()? {
+        return Ok(None);
+    }
+    Ok(Some(RelayCredentials {
+        uid: credential.uid,
+        server_id: server_id()?,
+        id_token: id_token()?,
     }))
 }
 

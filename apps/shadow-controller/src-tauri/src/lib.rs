@@ -1,6 +1,18 @@
 #[cfg(any(windows, target_os = "macos", target_os = "linux"))]
 mod auth;
 
+#[cfg(any(windows, target_os = "macos", target_os = "linux"))]
+mod relay;
+
+#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
+mod relay {
+    use std::sync::{Arc, atomic::AtomicBool};
+
+    pub fn start(_data_dir: std::path::PathBuf, _stop: Arc<AtomicBool>) -> Option<std::thread::JoinHandle<()>> {
+        None
+    }
+}
+
 #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
 mod auth {
     #[derive(Debug, Clone, serde::Serialize)]
@@ -49,8 +61,22 @@ mod auth {
         Ok(None)
     }
 
+    pub fn is_signed_in() -> Result<bool, String> {
+        Ok(false)
+    }
+
     pub fn id_token() -> Result<String, String> {
         Err("Google sign-in is not supported on this platform yet".to_owned())
+    }
+
+    pub struct RelayCredentials {
+        pub uid: String,
+        pub server_id: String,
+        pub id_token: String,
+    }
+
+    pub fn relay_credentials() -> Result<Option<RelayCredentials>, String> {
+        Ok(None)
     }
 
     pub fn sign_out() -> Result<(), String> {
@@ -137,7 +163,15 @@ use tauri::Manager;
 pub fn run_coordinator_from_environment() -> Result<(), shadow_coordinator::runtime::RuntimeError> {
     let data_dir = shadow_coordinator::runtime::default_data_dir()?;
     append_coordinator_log(&data_dir, "Background Coordinator starting");
-    let result = shadow_coordinator::runtime::run_service(&data_dir);
+    let relay_stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let mut relay_thread = None;
+    let result = shadow_coordinator::runtime::run_service_with_startup(&data_dir, || {
+        relay_thread = relay::start(data_dir.clone(), std::sync::Arc::clone(&relay_stop));
+    });
+    relay_stop.store(true, std::sync::atomic::Ordering::Release);
+    if let Some(thread) = relay_thread {
+        let _ = thread.join();
+    }
     match &result {
         Ok(()) => append_coordinator_log(&data_dir, "Background Coordinator stopped"),
         Err(error) => append_coordinator_log(&data_dir, &format!("Background Coordinator failed: {error}")),
