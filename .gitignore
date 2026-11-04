@@ -59,3 +59,7 @@ node_modules
 /apps/bionic/.internal/ng-sessions.sqlite-shm
 /apps/bionic/.internal/ng-sessions.sqlite-wal
 /project-worker/mcp/work/
+
+# Firebase CLI local deployment cache
+.firebase/
+*.tsbuildinfo

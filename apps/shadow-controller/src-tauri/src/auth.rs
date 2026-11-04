@@ -19,8 +19,7 @@ const FIRESTORE_DOCUMENTS_URL: &str = "https://firestore.googleapis.com/v1/proje
 const KEYRING_SERVICE: &str = "com.drincs.shadowcontroller";
 const KEYRING_ACCOUNT: &str = "firebase.refresh-token";
 const SERVER_ID_KEYRING_ACCOUNT: &str = "server.identity";
-const AUTH_PAGE: &str = include_str!("../auth-browser.html");
-const AUTH_SCRIPT: &str = include_str!("../auth-browser.js");
+const AUTH_ORIGIN: &str = "https://shadow-controller-20261103.web.app";
 static ACTIVE_LOGIN: Mutex<Option<Arc<AtomicBool>>> = Mutex::new(None);
 
 #[derive(Debug, Clone, Serialize)]
@@ -78,6 +77,7 @@ struct StoredCredential {
 #[serde(rename_all = "camelCase")]
 struct LoginCallback {
     state: String,
+    port: u16,
     id_token: String,
     refresh_token: String,
 }
@@ -151,8 +151,7 @@ pub fn begin_login() -> Result<String, String> {
     let server = Server::from_listener(listener, None)
         .map_err(|_| "Could not start the local sign-in listener".to_owned())?;
     let state = Uuid::new_v4().to_string();
-    let origin = format!("http://localhost:{port}");
-    let browser_url = format!("{origin}/auth?login_session={state}");
+    let browser_url = format!("{AUTH_ORIGIN}/auth?port={port}&login_session={state}");
     let cancelled = Arc::new(AtomicBool::new(false));
     {
         let mut active = ACTIVE_LOGIN.lock().map_err(|_| "Sign-in state is unavailable".to_owned())?;
@@ -164,7 +163,7 @@ pub fn begin_login() -> Result<String, String> {
     let worker_cancelled = Arc::clone(&cancelled);
     let spawn_result = thread::Builder::new()
         .name("shadow-firebase-login".to_owned())
-        .spawn(move || serve_login(server, state, origin, worker_cancelled));
+        .spawn(move || serve_login(server, port, state, worker_cancelled));
     if spawn_result.is_err() {
         clear_active_login(&cancelled);
         return Err("Could not start the local sign-in listener".to_owned());
@@ -189,7 +188,7 @@ fn clear_active_login(cancelled: &Arc<AtomicBool>) {
     }
 }
 
-fn serve_login(server: Server, state: String, origin: String, cancelled: Arc<AtomicBool>) {
+fn serve_login(server: Server, port: u16, state: String, cancelled: Arc<AtomicBool>) {
     let deadline = Instant::now() + Duration::from_secs(300);
     while Instant::now() < deadline && !cancelled.load(Ordering::Acquire) {
         let request = match server.recv_timeout(Duration::from_secs(1)) {
@@ -198,55 +197,40 @@ fn serve_login(server: Server, state: String, origin: String, cancelled: Arc<Ato
             Err(_) => break,
         };
 
-        if request.method() == &Method::Get && request.url() == format!("/auth?login_session={state}") {
-            let _ = request.respond(html_response(AUTH_PAGE, 200));
-            continue;
-        }
-        if request.method() == &Method::Get && request.url() == "/auth-browser.js" {
-            let _ = request.respond(content_response(AUTH_SCRIPT, 200, "text/javascript; charset=utf-8"));
-            continue;
-        }
-        if request.method() == &Method::Get && request.url() == "/config" {
-            let _ = request.respond(content_response(&firebase_config().to_string(), 200, "application/json"));
+        if request.url() != "/complete" || !has_origin(&request, AUTH_ORIGIN) {
+            let _ = request.respond(cors_response(
+                "Invalid sign-in origin.",
+                403,
+                Some(AUTH_ORIGIN),
+            ));
             continue;
         }
 
-        if request.method() == &Method::Post && request.url() == "/complete" {
-            if !has_origin(&request, &origin) {
-                let _ = request.respond(html_response("Invalid sign-in origin.", 403));
-                continue;
-            }
-            match accept_login(request, &state) {
+        if request.method() == &Method::Options {
+            let _ = request.respond(cors_response("", 204, Some(AUTH_ORIGIN)));
+            continue;
+        }
+        if request.method() == &Method::Post {
+            match accept_login(request, &state, port) {
                 Ok(()) => break,
-                Err(message) => {
-                    let _ = message;
-                }
+                Err(_) => continue,
             }
-            continue;
         }
-
-        let _ = request.respond(html_response("Not found.", 404));
     }
     clear_active_login(&cancelled);
 }
 
-fn firebase_config() -> serde_json::Value {
-    serde_json::json!({
-        "apiKey": FIREBASE_API_KEY,
-        "authDomain": "shadow-controller-20261103.firebaseapp.com",
-        "projectId": PROJECT_ID,
-        "appId": "1:561681360090:web:2af6f0a94083fbd85b31e3",
-        "messagingSenderId": "561681360090"
-    })
-}
-
-fn accept_login(mut request: Request, expected_state: &str) -> Result<(), String> {
+fn accept_login(
+    mut request: Request,
+    expected_state: &str,
+    expected_port: u16,
+) -> Result<(), String> {
     if !request
         .headers()
         .iter()
         .any(|header| header.field.equiv("Content-Type") && header.value.as_str().starts_with("application/json"))
     {
-        let _ = request.respond(html_response("Invalid sign-in request.", 415));
+        let _ = request.respond(cors_response("Invalid sign-in request.", 415, Some(AUTH_ORIGIN)));
         return Err("Invalid content type".to_owned());
     }
 
@@ -258,28 +242,28 @@ fn accept_login(mut request: Request, expected_state: &str) -> Result<(), String
         .is_err()
         || body.len() > 8192
     {
-        let _ = request.respond(html_response("Sign-in response is too large.", 413));
+        let _ = request.respond(cors_response("Sign-in response is too large.", 413, Some(AUTH_ORIGIN)));
         return Err("Oversized sign-in response".to_owned());
     }
     let callback: LoginCallback = match serde_json::from_str(&body) {
         Ok(value) => value,
         Err(_) => {
-            let _ = request.respond(html_response("Invalid sign-in response.", 400));
+            let _ = request.respond(cors_response("Invalid sign-in response.", 400, Some(AUTH_ORIGIN)));
             return Err("Invalid sign-in response".to_owned());
         }
     };
-    if callback.state != expected_state {
-        let _ = request.respond(html_response("Sign-in state did not match.", 403));
+    if callback.state != expected_state || callback.port != expected_port {
+        let _ = request.respond(cors_response("Sign-in session did not match.", 403, Some(AUTH_ORIGIN)));
         return Err("Sign-in state mismatch".to_owned());
     }
 
     match validate_and_store(&callback.id_token, &callback.refresh_token) {
         Ok(()) => {
-            let _ = request.respond(html_response("Sign-in complete. Return to Shadow Controller.", 200));
+            let _ = request.respond(cors_response("Sign-in complete. Return to Shadow Controller.", 200, Some(AUTH_ORIGIN)));
             Ok(())
         }
         Err(_) => {
-            let _ = request.respond(html_response("Could not verify the Firebase sign-in. Try again.", 401));
+            let _ = request.respond(cors_response("Could not verify the Firebase sign-in. Try again.", 401, Some(AUTH_ORIGIN)));
             Err("Firebase sign-in verification failed".to_owned())
         }
     }
@@ -579,41 +563,24 @@ fn has_origin(request: &Request, expected_origin: &str) -> bool {
     })
 }
 
-fn html_response(body: &str, status: u16) -> Response<std::io::Cursor<Vec<u8>>> {
-    content_response(body, status, "text/html; charset=utf-8")
-}
-
-fn content_response(
+fn cors_response(
     body: &str,
     status: u16,
-    content_type: &str,
+    origin: Option<&str>,
 ) -> Response<std::io::Cursor<Vec<u8>>> {
     let mut response = Response::from_string(body).with_status_code(status);
-    let content_type = Header::from_bytes("Content-Type", content_type)
-        .expect("static content-type header is valid");
-    let cache_control = Header::from_bytes("Cache-Control", "no-store")
-        .expect("static cache-control header is valid");
-    let csp = Header::from_bytes(
-        "Content-Security-Policy",
-        "default-src 'none'; script-src 'self' https://www.gstatic.com; style-src 'unsafe-inline'; connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googleapis.com; frame-src https://*.firebaseapp.com https://accounts.google.com https://*.google.com; base-uri 'none'; form-action 'none'",
-    )
-    .expect("static CSP header is valid");
-    response.add_header(content_type);
-    response.add_header(cache_control);
-    response.add_header(csp);
-    response
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn login_page_has_no_embedded_or_persistent_auth_session() {
-        let page = super::AUTH_PAGE;
-        let script = super::AUTH_SCRIPT;
-        assert!(page.contains("/auth-browser.js"));
-        assert!(script.contains("inMemoryPersistence"));
-        assert!(script.contains("signInWithPopup"));
-        assert!(!script.contains("browserLocalPersistence"));
-        assert!(!script.contains("localStorage"));
+    for (name, value) in [
+        ("Content-Type", "text/plain; charset=utf-8"),
+        ("Cache-Control", "no-store"),
+        ("Access-Control-Allow-Methods", "POST, OPTIONS"),
+        ("Access-Control-Allow-Headers", "Content-Type"),
+        ("Access-Control-Max-Age", "300"),
+        ("Vary", "Origin"),
+    ] {
+        response.add_header(Header::from_bytes(name, value).expect("static HTTP header is valid"));
     }
+    if let Some(origin) = origin {
+        response.add_header(Header::from_bytes("Access-Control-Allow-Origin", origin).expect("static origin is valid"));
+    }
+    response
 }
