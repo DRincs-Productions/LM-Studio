@@ -3,8 +3,8 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 const platformPatterns = [
-  ["windows-x86_64", /\.nsis\.zip$/i],
-  ["linux-x86_64", /\.appimage\.tar\.gz$/i],
+  ["windows-x86_64", /-setup\.exe$/i],
+  ["linux-x86_64", /\.appimage$/i],
 ];
 
 function listAssetFiles(root, relativeDirectory = "") {
