@@ -36,6 +36,10 @@ jobs:
         working-directory: apps/shadow-controller
         run: npm run build
 
+      - name: Test updater manifest generation
+        working-directory: apps/shadow-controller
+        run: npm run test:updater
+
       - name: Install MCP client dependencies
         working-directory: apps/shadow-client
         run: npm ci

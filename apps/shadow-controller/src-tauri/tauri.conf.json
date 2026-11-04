@@ -32,6 +32,11 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -39,5 +44,16 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDYyODc5NDM3MTJFNDFBRjMKUldUekd1UVNONVNIWW9xcDBCc1FWU3F2dGVDMlI2Rmc2MXZIQ1d6TDBTcENzUUVnencwOUh2MzIK",
+      "endpoints": [
+        "https://github.com/DRincs-Productions/LM-Studio/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

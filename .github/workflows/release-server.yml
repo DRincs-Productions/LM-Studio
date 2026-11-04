@@ -41,11 +41,14 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            name: windows
+            name: windows-x86_64
+            bundles: nsis
           - os: ubuntu-24.04
-            name: linux
+            name: linux-x86_64
+            bundles: appimage
           - os: macos-latest
-            name: macos
+            name: darwin-aarch64
+            bundles: dmg
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -70,7 +73,9 @@ jobs:
 
       - name: Build Tauri installers
         working-directory: apps/shadow-controller
-        run: npm run tauri build
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: npm run tauri -- build --bundles ${{ matrix.bundles }} --config src-tauri/tauri.updater.conf.json
 
       - name: Upload installers
         uses: actions/upload-artifact@v4
@@ -89,6 +94,13 @@ jobs:
           pattern: shadow-controller-*
           path: release-assets
           merge-multiple: true
+
+      - name: Create signed updater manifest
+        working-directory: apps/shadow-controller
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: node scripts/create-updater-manifest.mjs ../../release-assets "$RELEASE_TAG" "$GITHUB_REPOSITORY" ../../release-assets/latest.json
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2

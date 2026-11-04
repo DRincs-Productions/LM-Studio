@@ -90,7 +90,9 @@ mod auth {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let builder = tauri::Builder::default().plugin(tauri_plugin_opener::init());
+    let builder = tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build());
 
     builder
         .manage(CoordinatorState::default())
@@ -127,13 +129,20 @@ pub fn run() {
             let state = app.state::<CoordinatorState>();
             store(&state, app.handle()).map_err(std::io::Error::other)?;
 
+            let update_app = app.handle().clone();
+            if !cfg!(debug_assertions) {
+                tauri::async_runtime::spawn(async move {
+                    check_for_updates(update_app).await;
+                });
+            }
+
             #[cfg(windows)]
             {
                 use tauri_plugin_autostart::ManagerExt;
                 app.handle()
                     .plugin(tauri_plugin_autostart::init(
                         tauri_plugin_autostart::MacosLauncher::LaunchAgent,
-                        Some(vec!["--coordinator"]),
+                        Some(vec!["--background"]),
                     ))?;
                 if !cfg!(debug_assertions) {
                     if let Err(error) = app.autolaunch().enable() {
@@ -143,11 +152,135 @@ pub fn run() {
                 if let Err(error) = ensure_coordinator_started(&data_dir) {
                     append_coordinator_log(&data_dir, &format!("Could not start Coordinator: {error}"));
                 }
+
+                if std::env::args().any(|argument| argument == "--background") {
+                    if let Some(window) = app.get_webview_window("main") {
+                        let _ = window.hide();
+                    }
+                }
             }
+
+            let open_item = tauri::menu::MenuItem::with_id(
+                app.handle(),
+                "open",
+                "Open Shadow Controller",
+                true,
+                None::<&str>,
+            )?;
+            let exit_item = tauri::menu::MenuItem::with_id(
+                app.handle(),
+                "exit",
+                "Exit Shadow Controller",
+                true,
+                None::<&str>,
+            )?;
+            let tray_menu = tauri::menu::Menu::with_items(app.handle(), &[&open_item, &exit_item])?;
+            let tray_icon = app.default_window_icon().cloned().ok_or_else(|| {
+                std::io::Error::new(std::io::ErrorKind::NotFound, "Default app icon is missing")
+            })?;
+            tauri::tray::TrayIconBuilder::new()
+                .icon(tray_icon)
+                .tooltip("Shadow Controller")
+                .menu(&tray_menu)
+                .show_menu_on_left_click(false)
+                .on_menu_event(|app, event| {
+                    if event.id() == "open" {
+                        show_main_window(app);
+                    } else if event.id() == "exit" {
+                        exit_server_from_tray(app);
+                    }
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if matches!(
+                        event,
+                        tauri::tray::TrayIconEvent::Click {
+                            button: tauri::tray::MouseButton::Left,
+                            button_state: tauri::tray::MouseButtonState::Up,
+                            ..
+                        }
+                    ) {
+                        show_main_window(tray.app_handle());
+                    }
+                })
+                .build(app)?;
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = window.hide();
+            }
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+fn show_main_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+async fn check_for_updates(app: tauri::AppHandle) {
+    let update = match app.updater() {
+        Ok(updater) => match updater.check().await {
+            Ok(Some(update)) => {
+                append_update_log(&app, &format!("Found signed update {}", update.version));
+                update
+            }
+            Ok(None) => {
+                append_update_log(&app, "No newer release available");
+                return;
+            }
+            Err(error) => {
+                append_update_log(&app, &format!("Update check failed; continuing startup: {error}"));
+                return;
+            }
+        },
+        Err(error) => {
+            append_update_log(&app, &format!("Updater unavailable; continuing startup: {error}"));
+            return;
+        }
+    };
+
+    if let Err(error) = update.download_and_install(|_, _| {}, || {}).await {
+        append_update_log(&app, &format!("Update install failed; continuing startup: {error}"));
+        return;
+    }
+
+    append_update_log(&app, "Update installed; restarting application");
+    app.restart();
+}
+
+fn append_update_log(app: &tauri::AppHandle, message: &str) {
+    let Ok(data_dir) = app.path().app_data_dir() else {
+        return;
+    };
+    if fs::create_dir_all(&data_dir).is_err() {
+        return;
+    }
+    let Ok(mut log) = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(data_dir.join("update.log"))
+    else {
+        return;
+    };
+    let _ = writeln!(log, "{:?} {message}", SystemTime::now());
+}
+
+fn exit_server_from_tray(app: &tauri::AppHandle) {
+    match app.path().app_data_dir() {
+        Ok(data_dir) => match shadow_coordinator::runtime::request_stop(&data_dir) {
+            Ok(_) => app.exit(0),
+            Err(error) => {
+                append_coordinator_log(&data_dir, &format!("Could not stop Coordinator from tray: {error}"));
+                show_main_window(app);
+            }
+        },
+        Err(error) => show_main_window(app),
+    }
 }
 
 use std::{
@@ -158,6 +291,7 @@ use std::{
     sync::{Arc, Mutex},
     time::SystemTime,
 };
+use tauri_plugin_updater::UpdaterExt;
 
 use serde::{Deserialize, Serialize};
 use shadow_coordinator::{
