@@ -152,7 +152,7 @@ pub fn begin_login() -> Result<String, String> {
         .map_err(|_| "Could not start the local sign-in listener".to_owned())?;
     let state = Uuid::new_v4().to_string();
     let origin = format!("http://localhost:{port}");
-    let browser_url = format!("{origin}/auth?state={state}");
+    let browser_url = format!("{origin}/auth?login_session={state}");
     let cancelled = Arc::new(AtomicBool::new(false));
     {
         let mut active = ACTIVE_LOGIN.lock().map_err(|_| "Sign-in state is unavailable".to_owned())?;
@@ -198,7 +198,7 @@ fn serve_login(server: Server, state: String, origin: String, cancelled: Arc<Ato
             Err(_) => break,
         };
 
-        if request.method() == &Method::Get && request.url() == format!("/auth?state={state}") {
+        if request.method() == &Method::Get && request.url() == format!("/auth?login_session={state}") {
             let _ = request.respond(html_response(AUTH_PAGE, 200));
             continue;
         }

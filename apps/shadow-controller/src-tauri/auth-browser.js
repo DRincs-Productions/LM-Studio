@@ -8,7 +8,7 @@ import {
   signOut,
 } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js";
 
-const state = new URLSearchParams(window.location.search).get("state");
+const state = new URLSearchParams(window.location.search).get("login_session");
 const button = document.getElementById("sign-in");
 const message = document.getElementById("message");
 let auth = null;
