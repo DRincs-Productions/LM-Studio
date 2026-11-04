@@ -114,7 +114,11 @@ try {
     Write-Host "Started $($previous.tag_name) upgrade app as PID $($previousProcess.Id)"
     $upgradePattern = "Found signed update $($current.tag_name.Substring('server-v'.Length))"
     $upgradeLog = Wait-ForLog $previousTest $upgradePattern 360 $previousProcess
-    $installedLog = Wait-ForLog $previousTest 'Windows updater launched the installer; closing this instance' 120 $previousProcess
+    $previousVersion = [version]$previous.tag_name.Substring('server-v'.Length)
+    $installedLog = $upgradeLog
+    if ($previousVersion -ge [version]'0.1.11') {
+      $installedLog = Wait-ForLog $previousTest 'Windows updater launched the installer; closing this instance' 120 $previousProcess
+    }
     $stableLog = Wait-ForLog $previousTest 'No newer release available' 180
     $installedVersion = (Get-Item $previousTest.Exe).VersionInfo.ProductVersion
     if ($installedVersion -notmatch [regex]::Escape($current.tag_name.Substring('server-v'.Length))) {
