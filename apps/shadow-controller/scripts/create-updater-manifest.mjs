@@ -7,21 +7,29 @@ const platformPatterns = [
   ["linux-x86_64", /\.appimage\.tar\.gz$/i],
 ];
 
+function listAssetFiles(root, relativeDirectory = "") {
+  return fs.readdirSync(path.join(root, relativeDirectory), { withFileTypes: true }).flatMap((entry) => {
+    const relativePath = path.join(relativeDirectory, entry.name);
+    if (entry.isDirectory()) return listAssetFiles(root, relativePath);
+    return entry.isFile() ? [{ name: entry.name, relativePath }] : [];
+  });
+}
+
 export function createUpdaterManifest({ assetsDir, tag, repository, pubDate = new Date().toISOString() }) {
   if (!/^server-v\d+\.\d+\.\d+(?:-[\w.-]+)?$/.test(tag)) throw new Error(`Invalid server release tag: ${tag}`);
   if (!/^[\w.-]+\/[\w.-]+$/.test(repository)) throw new Error(`Invalid GitHub repository: ${repository}`);
   const version = tag.slice("server-v".length);
-  const files = fs.readdirSync(assetsDir).filter((file) => fs.statSync(path.join(assetsDir, file)).isFile());
+  const files = listAssetFiles(assetsDir);
   const platforms = {};
 
   for (const [platform, pattern] of platformPatterns) {
-    const bundle = files.find((file) => pattern.test(file));
+    const bundle = files.find((file) => pattern.test(file.name));
     if (!bundle) throw new Error(`Missing updater bundle for ${platform}`);
-    const signaturePath = path.join(assetsDir, `${bundle}.sig`);
-    if (!fs.existsSync(signaturePath)) throw new Error(`Missing signature for ${bundle}`);
+    const signaturePath = path.join(assetsDir, `${bundle.relativePath}.sig`);
+    if (!fs.existsSync(signaturePath)) throw new Error(`Missing signature for ${bundle.name}`);
     const signature = fs.readFileSync(signaturePath, "utf8").trim();
-    if (!signature) throw new Error(`Empty signature for ${bundle}`);
-    const assetUrl = `https://github.com/${repository}/releases/download/${tag}/${encodeURIComponent(bundle)}`;
+    if (!signature) throw new Error(`Empty signature for ${bundle.name}`);
+    const assetUrl = `https://github.com/${repository}/releases/download/${tag}/${encodeURIComponent(bundle.name)}`;
     platforms[platform] = { url: assetUrl, signature };
   }
 

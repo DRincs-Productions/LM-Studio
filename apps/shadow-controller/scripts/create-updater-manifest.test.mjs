@@ -8,10 +8,15 @@ import { createUpdaterManifest } from "./create-updater-manifest.mjs";
 test("creates signed platform entries for a stable server release", () => {
   const assetsDir = fs.mkdtempSync(path.join(os.tmpdir(), "shadow-updater-"));
   try {
-    const bundles = ["Shadow.Controller_0.1.1_x64-setup.nsis.zip", "Shadow.Controller_0.1.1_amd64.AppImage.tar.gz"];
-    for (const bundle of bundles) {
-      fs.writeFileSync(path.join(assetsDir, bundle), "bundle");
-      fs.writeFileSync(path.join(assetsDir, `${bundle}.sig`), `signature:${bundle}\n`);
+    const bundles = [
+      ["nsis", "Shadow.Controller_0.1.1_x64-setup.nsis.zip"],
+      ["appimage", "Shadow.Controller_0.1.1_amd64.AppImage.tar.gz"],
+    ];
+    for (const [directory, bundle] of bundles) {
+      const bundleDirectory = path.join(assetsDir, directory);
+      fs.mkdirSync(bundleDirectory);
+      fs.writeFileSync(path.join(bundleDirectory, bundle), "bundle");
+      fs.writeFileSync(path.join(bundleDirectory, `${bundle}.sig`), `signature:${bundle}\n`);
     }
     const manifest = createUpdaterManifest({ assetsDir, tag: "server-v0.1.1", repository: "DRincs-Productions/LM-Studio", pubDate: "2026-11-04T00:00:00Z" });
     assert.equal(manifest.version, "0.1.1");
@@ -27,7 +32,11 @@ test("creates signed platform entries for a stable server release", () => {
 test("rejects an unsigned artifact", () => {
   const assetsDir = fs.mkdtempSync(path.join(os.tmpdir(), "shadow-updater-"));
   try {
-    for (const bundle of ["app.nsis.zip", "app.AppImage.tar.gz", "app.app.tar.gz"]) fs.writeFileSync(path.join(assetsDir, bundle), "bundle");
+    for (const [directory, bundle] of [["nsis", "app.nsis.zip"], ["appimage", "app.AppImage.tar.gz"]]) {
+      const bundleDirectory = path.join(assetsDir, directory);
+      fs.mkdirSync(bundleDirectory);
+      fs.writeFileSync(path.join(bundleDirectory, bundle), "bundle");
+    }
     assert.throws(() => createUpdaterManifest({ assetsDir, tag: "server-v0.1.1", repository: "owner/repo" }), /Missing signature/);
   } finally {
     fs.rmSync(assetsDir, { recursive: true, force: true });
