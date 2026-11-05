@@ -97,3 +97,7 @@ Gemory is exceptionally fast in these short samples, but its normal scene misses
 - [Hemmingway–Skyfall 36B v2 comparison](../production-tests/WRITER-SKYFALL-HEMMINGWAY-PAIRED-2026-10-26.md): three complete Skyfall runs, a complete violent pair, and two Hemmingway runs interrupted before revision.
 - [Test PaintedFantasy del 25 ottobre](../production-tests/WRITER-2026-10-25.md), sezione nel README e manifest collegati per run.
 - I run individuali, i prompt e le valutazioni sono conservati in `production-tests/components/` e nelle cartelle collegate ai rapporti.
+
+### Gemini-reviewed matched intimacy comparison — 5 November 2026
+
+A fresh, matched non-graphic intimacy fixture was drafted and revised by Hemmingway and Magidonia, with one Gemini review and one Writer revision per model. Hemmingway took 5:56 to its revised text (683 words); Magidonia took 7:24 (1,037 words). Final Codex scores were 4/5 prose and 3/5 constraints for Hemmingway, and 3/5 prose and 2/5 constraints for Magidonia. Hemmingway better met the length and endpoint requirements and finished sooner. Gemini found useful first-pass issues in both drafts, but its post-revision checks timed out for both models and its initial Hemmingway constraint score missed unsupported details. Treat Gemini review as experimental. The full rubric, evidence, scores, time breakdown and run IDs are in the [Gemini-reviewed comparison report](WRITER-GEMINI-REVIEWED-COMPARISON-2026-11-05.md); raw runs remain under `production-tests/gemini-reviewed-comparison/`.
