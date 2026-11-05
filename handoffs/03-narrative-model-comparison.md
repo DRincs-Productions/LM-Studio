@@ -1,6 +1,6 @@
 # Handoff 03 — Confronto modelli narrativi
 
-**Status (5 November 2026):** The Hemmingway–Magidonia NCF comparison is complete across fresh normal, hot, and violent fixtures; results are in `docs/CONFRONTO-MODELLI-NARRAZIONE.md`. Hemmingway remains the operational Writer; both Hemmingway and Magidonia remain installed at the user's direction. Gemory 26B-A4B Q4_K_M completed download verification and its isolated normal, hot, and violent tests, but was not promoted because of endpoint and constraint failures. At the user's request, its main GGUF and 1.19 GB mmproj were moved to the Recycle Bin, and its Bionic profile was removed from the repository and pushed in commit `61d0ec5`. The model is absent from `lms ls`, but the GGUF files still occupy disk space until permanently removed from the Recycle Bin. Test outcomes remain in `docs/CONFRONTO-MODELLI-NARRAZIONE.md` and `production-tests/WRITER-GEMORY-26B-A4B-Q4_K_M-2026-11-05.md`. Hearthfire is also evaluated and removed; its config and evidence remain historical. Among the named candidates, Venice is the only one without a completed evaluation, but the linked repository currently has no downloadable GGUF. Do not guess a replacement source or size; identify a verifiable GGUF before scheduling it. The user decides which other installed models to remove.
+**Status (5 November 2026):** The Hemmingway–Magidonia NCF comparison is complete across fresh normal, hot, and violent fixtures; results are in `docs/CONFRONTO-MODELLI-NARRAZIONE.md`. Hemmingway remains the operational Writer; both Hemmingway and Magidonia remain installed at the user's direction. Gemory 26B-A4B Q4_K_M completed download verification and its isolated normal, hot, and violent tests, but was not promoted because of endpoint and constraint failures. At the user's request, its main GGUF and 1.19 GB mmproj were moved to the Recycle Bin, and its Bionic profile was removed from the repository and pushed in commit `61d0ec5`. The model is absent from `lms ls`, but the GGUF files still occupy disk space until permanently removed from the Recycle Bin. Test outcomes remain in `docs/CONFRONTO-MODELLI-NARRAZIONE.md` and `production-tests/WRITER-GEMORY-26B-A4B-Q4_K_M-2026-11-05.md`. Hearthfire is also evaluated and removed; its config and evidence remain historical. The user declined to pursue Venice Role Play Uncensored; it has been removed from the candidate list and must not be downloaded or scheduled for testing.
 **Ambito:** test isolati del Writer narrativo su Shadow con LM Studio; nessuna sostituzione automatica del modello operativo.
 
 ## Obiettivo
@@ -26,15 +26,7 @@ Confrontare nuovi modelli narrativi con il Writer attualmente operativo (**Hemmi
 - **GGUF:** https://huggingface.co/bartowski/TheDrummer_Magidonia-24B-v4.3-GGUF
 - **Evaluation status:** The isolated normal, hot, and violent cases and a matched Hemmingway comparison are complete. Keep installed at the user's direction; see `docs/CONFRONTO-MODELLI-NARRAZIONE.md`.
 
-### 3. Venice Role Play Uncensored 24B
-
-- **Autore/famiglia dichiarati:** Dolphin / Venice; 24B.
-- **Motivo della prova:** modello orientato a roleplay e avventure narrative, presentato con buone capacità di seguire istruzioni; documentazione da verificare su continued pretraining e fine-tuning.
-- **Ipotesi da verificare:** gestione di scene adulte consensuali e cruente mantenendo il rispetto del `SceneContract`. Il nome “Uncensored” **non garantisce** assenza di rifiuti né qualità editoriale.
-- **GGUF:** https://huggingface.co/dphn/Venice-Role-Play-Uncensored-GGUF
-- **Evaluation status:** Not evaluated. The linked repository currently contains only `.gitattributes` and `README.md`, with no downloadable GGUF. Public quantizations of the related Dolphin Mistral 24B Venice Edition exist, but their checkpoint identity has not been verified as the exact Venice Role Play Uncensored candidate. Do not substitute them without verifying model identity. No exact download size or test run is available yet.
-
-### 4. Gemory 26B-A4B — isolated evaluation complete; removed at user's request
+### 3. Gemory 26B-A4B — isolated evaluation complete; removed at user's request
 
 - **Famiglia dichiarata:** Gemma 4; MoE; circa 4B parametri attivi.
 - **Motivo della prova:** fine-tune presentato per scrittura creativa, voce dei personaggi, dialoghi, continuità e progressione della scena; utile per confrontare una famiglia differente dai Mistral 24B.
