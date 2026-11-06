@@ -64,6 +64,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          sparse-checkout: apps/shadow-controller
 
       - if: runner.os == 'Linux'
         name: Install Linux desktop dependencies
@@ -131,6 +133,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          sparse-checkout: apps/shadow-controller
 
       - name: Install latest release and verify no-update startup
         env:
