@@ -291,3 +291,19 @@ Il Project Worker offre due strumenti per il Programmatore: `select_programmer` 
 I quattro server sono configurati anche per Codex in `C:\Users\Shadow\.codex\config.toml`: Project Worker, Image Worker, Asset Worker e Audio Worker. Il Coordinatore abilita i soli strumenti Audio Worker necessari nella fase `audio_cue_production`: ricerca asset, generazione, ispezione, anteprima loop, ascolto locale, finalizzazione e pubblicazione. La fase audio è separata da Writer e Disegnatore e non richiede Claude.
 
 Per le procedure e i comandi di test da terminale, consultare [AGENTS.md](AGENTS.md). I rapporti dei test storici rimangono disponibili nella documentazione e in `production-tests/`; alcune procedure di AGENTS.md descrivono ancora il flusso precedente e dovranno essere aggiornate alla nuova architettura.
+
+## Skills
+
+Copy the complete skill directory, including supporting files. Run these PowerShell commands from the repository root on the machine that uses the skill. Planned entries become installable when their directories ship.
+
+| Skill | Installation | Machine | Purpose |
+| --- | --- | --- | --- |
+| Narration | Codex: `Copy-Item skills/narration "$env:USERPROFILE/.codex/skills/" -Recurse` · Gemini: `Copy-Item skills/narration "$env:USERPROFILE/.gemini/skills/" -Recurse` | Server and client, wherever the agent runs | Defines the scene artifact and inline NCF cues. |
+| Shadow Narration Coordinator (planned) | Codex: `Copy-Item skills/shadow-narration-coordinator "$env:USERPROFILE/.codex/skills/" -Recurse` | Server | Defines the complete narrative workflow independently of this README. |
+| Shadow Narration request | Install and enable the `shadow-narration` Codex plugin after the relay acceptance test. | Client | Submits narration requests and retrieves completed text through the authenticated relay. |
+
+The planned remote flow is Codex client → authenticated relay → server queue → server Codex → verified narrative → relay → Codex client. The client can run on a separate PC. The queue executes typed operations and retains terminal records for reconnects. Narration returns English prose and NCF cues. Asset production is a separate client decision.
+
+Server Codex owns the plan. An optional local Qwen consultation can propose alternatives for specific violent or intimate beats, subject to canon, consent and the approved scope. Codex integrates useful advice into one SceneContract. The Writer receives the contract and the operative narration instructions. Gemini reviews up to five submissions, then Codex checks and finalizes the accepted scene. Project Worker verifies the artifact before delivery. See [Handoff 08](handoffs/08-server-narration.md).
+
+Keep the consultation model loaded across follow-up turns, then release it before the Writer starts. Before handback, verify that the job has stopped its review processes and released its local model instances.
