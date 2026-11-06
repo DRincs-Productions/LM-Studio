@@ -251,13 +251,27 @@ fn submit_job(store: &JobStore, uid: &str, client_id: &str, message_id: &str, me
     let Some(params) = message.pointer("/payload/params").filter(|value| value.is_object()) else {
         return error_reply(Some(message_id.to_owned()), "invalid_payload", "Operation parameters must be an object.", false);
     };
+    if operation != "narrative.generate" {
+        return error_reply(Some(message_id.to_owned()), "operation_unavailable", "This server does not support the requested operation.", false);
+    }
+    if payload_version != 1 || !valid_narrative_payload(params) {
+        return error_reply(Some(message_id.to_owned()), "invalid_payload", "Narration requires projectId, projectSha256, and a non-empty brief; metadata, when provided, must be an object.", false);
+    }
+    // Ignore future/unknown client fields and persist only the documented contract.
+    let mut normalized_params = serde_json::Map::new();
+    for key in ["projectId", "projectSha256", "brief"] {
+        normalized_params.insert(key.to_owned(), params[key].clone());
+    }
+    if let Some(metadata) = params.get("metadata") {
+        normalized_params.insert("metadata".to_owned(), metadata.clone());
+    }
     let accepted = store.submit(SubmitRequest {
         uid: uid.to_owned(),
         client_id: client_id.to_owned(),
         request_id: request_id.unwrap().to_owned(),
         operation: operation.to_owned(),
         payload_version: payload_version as u32,
-        payload: params.clone(),
+        payload: Value::Object(normalized_params),
     });
     match accepted {
         Ok(accepted) => json!({
@@ -271,6 +285,21 @@ fn submit_job(store: &JobStore, uid: &str, client_id: &str, message_id: &str, me
         Err(shadow_coordinator::StoreError::IdempotencyConflict) => error_reply(Some(message_id.to_owned()), "idempotency_conflict", "requestId was already used with a different payload.", false),
         Err(_) => error_reply(Some(message_id.to_owned()), "invalid_payload", "The job request was rejected.", false),
     }
+}
+
+fn valid_narrative_payload(payload: &Value) -> bool {
+    let Some(object) = payload.as_object() else { return false; };
+    if !object.contains_key("projectId") || !object.contains_key("projectSha256") || !object.contains_key("brief") {
+        return false;
+    }
+    let project_id = object.get("projectId").and_then(Value::as_str);
+    let project_hash = object.get("projectSha256").and_then(Value::as_str);
+    let brief = object.get("brief").and_then(Value::as_str);
+    let metadata_valid = object.get("metadata").is_none_or(Value::is_object);
+    project_id.is_some_and(|value| Uuid::parse_str(value).is_ok())
+        && project_hash.is_some_and(|value| value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase()))
+        && brief.is_some_and(|value| !value.trim().is_empty() && value.len() <= 12_000)
+        && metadata_valid
 }
 
 fn job_status(store: &JobStore, uid: &str, client_id: &str, message_id: &str, message: &Value) -> Value {
