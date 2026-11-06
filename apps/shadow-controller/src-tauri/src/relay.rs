@@ -230,8 +230,9 @@ fn handle_request(store: &JobStore, uid: &str, message: &Value) -> Value {
         Some("job.status") => job_status(store, uid, client_id, message_id, message),
         Some("job.list") => list_jobs(store, uid, client_id, message_id, message),
         Some("job.cancel") => cancel_job(store, uid, client_id, message_id, message),
-        Some("job.retry") => error_reply(Some(message_id.to_owned()), "operation_unavailable", "Manual retry is not implemented yet.", false),
-        Some("asset.list" | "asset.get") => error_reply(Some(message_id.to_owned()), "artifact_unavailable", "Asset metadata is not implemented yet.", false),
+        Some("job.retry") => retry_job(store, uid, client_id, message_id, message),
+        Some("asset.list") => list_assets(store, uid, client_id, message_id, message),
+        Some("asset.get") => get_asset(store, uid, client_id, message_id, message),
         _ => error_reply(Some(message_id.to_owned()), "invalid_payload", "Unsupported client request.", false),
     }
 }
@@ -252,28 +253,67 @@ fn submit_job(store: &JobStore, uid: &str, client_id: &str, message_id: &str, me
         return error_reply(Some(message_id.to_owned()), "invalid_payload", "Operation parameters must be an object.", false);
     };
     if operation != "narrative.generate" {
+        if operation == "codex.execute" {
+            return submit_codex_job(store, uid, client_id, message_id, request_id.unwrap(), payload_version as u32, params);
+        }
         return error_reply(Some(message_id.to_owned()), "operation_unavailable", "This server does not support the requested operation.", false);
     }
     if payload_version != 1 || !valid_narrative_payload(params) {
         return error_reply(Some(message_id.to_owned()), "invalid_payload", "Narration requires projectId, projectSha256, and a non-empty brief; metadata, when provided, must be an object.", false);
     }
-    // Ignore future/unknown client fields and persist only the documented contract.
-    let mut normalized_params = serde_json::Map::new();
-    for key in ["projectId", "projectSha256", "brief"] {
-        normalized_params.insert(key.to_owned(), params[key].clone());
+    let mut sanitized = serde_json::Map::new();
+    for key in ["projectId", "projectSha256", "brief", "metadata"] {
+        if let Some(value) = params.get(key) {
+            sanitized.insert(key.to_owned(), value.clone());
+        }
     }
-    if let Some(metadata) = params.get("metadata") {
-        normalized_params.insert("metadata".to_owned(), metadata.clone());
+    let sanitized_payload = Value::Object(sanitized);
+    if serde_json::to_vec(&sanitized_payload).is_ok_and(|encoded| encoded.len() > 48 * 1024) {
+        return error_reply(Some(message_id.to_owned()), "invalid_payload", "Narration fields exceed the supported size limit.", false);
     }
-    let accepted = store.submit(SubmitRequest {
+    match store.submit(SubmitRequest {
         uid: uid.to_owned(),
         client_id: client_id.to_owned(),
         request_id: request_id.unwrap().to_owned(),
-        operation: operation.to_owned(),
-        payload_version: payload_version as u32,
-        payload: Value::Object(normalized_params),
-    });
-    match accepted {
+        operation: "narrative.generate".to_owned(),
+        payload_version: 1,
+        payload: sanitized_payload,
+        retry_of_job_id: None,
+    }) {
+        Ok(accepted) => json!({
+            "version": 1,
+            "type": "job.accepted",
+            "messageId": Uuid::new_v4().to_string(),
+            "replyTo": message_id,
+            "requestId": request_id,
+            "job": accepted
+        }),
+        Err(shadow_coordinator::StoreError::IdempotencyConflict) => error_reply(Some(message_id.to_owned()), "idempotency_conflict", "requestId was already used with a different payload.", false),
+        Err(_) => error_reply(Some(message_id.to_owned()), "invalid_payload", "The narration request was rejected.", false),
+    }
+}
+
+fn submit_codex_job(
+    store: &JobStore,
+    uid: &str,
+    client_id: &str,
+    message_id: &str,
+    request_id: &str,
+    payload_version: u32,
+    params: &Value,
+) -> Value {
+    if payload_version != 1 || !valid_codex_payload(params) {
+        return error_reply(Some(message_id.to_owned()), "invalid_payload", "codex.execute v1 requires exactly one non-empty task string of at most 12,000 characters.", false);
+    }
+    match store.submit(SubmitRequest {
+        uid: uid.to_owned(),
+        client_id: client_id.to_owned(),
+        request_id: request_id.to_owned(),
+        operation: "codex.execute".to_owned(),
+        payload_version,
+        payload: params.clone(),
+        retry_of_job_id: None,
+    }) {
         Ok(accepted) => json!({
             "version": 1,
             "type": "job.accepted",
@@ -285,6 +325,13 @@ fn submit_job(store: &JobStore, uid: &str, client_id: &str, message_id: &str, me
         Err(shadow_coordinator::StoreError::IdempotencyConflict) => error_reply(Some(message_id.to_owned()), "idempotency_conflict", "requestId was already used with a different payload.", false),
         Err(_) => error_reply(Some(message_id.to_owned()), "invalid_payload", "The job request was rejected.", false),
     }
+}
+
+fn valid_codex_payload(payload: &Value) -> bool {
+    let Some(object) = payload.as_object() else { return false; };
+    if object.len() != 1 || !object.contains_key("task") { return false; }
+    object.get("task").and_then(Value::as_str)
+        .is_some_and(|task| !task.trim().is_empty() && task.chars().count() <= 12_000)
 }
 
 fn valid_narrative_payload(payload: &Value) -> bool {
@@ -361,6 +408,108 @@ fn cancel_job(store: &JobStore, uid: &str, client_id: &str, message_id: &str, me
     }
 }
 
+fn retry_job(store: &JobStore, uid: &str, client_id: &str, message_id: &str, message: &Value) -> Value {
+    let Some(job_id) = message.get("jobId").and_then(Value::as_str) else {
+        return error_reply(Some(message_id.to_owned()), "invalid_payload", "jobId is required.", false);
+    };
+    if Uuid::parse_str(job_id).is_err() {
+        return error_reply(Some(message_id.to_owned()), "invalid_payload", "jobId must be a UUID.", false);
+    }
+    let Some(retry_request_id) = message.get("retryRequestId").and_then(Value::as_str) else {
+        return error_reply(Some(message_id.to_owned()), "invalid_payload", "retryRequestId is required.", false);
+    };
+    if Uuid::parse_str(retry_request_id).is_err() {
+        return error_reply(Some(message_id.to_owned()), "invalid_payload", "retryRequestId must be a UUID.", false);
+    }
+    match store.retry_failed(uid, client_id, job_id, retry_request_id) {
+        Ok(accepted) => json!({
+            "version": 1,
+            "type": "job.retry.accepted",
+            "messageId": Uuid::new_v4().to_string(),
+            "replyTo": message_id,
+            "requestId": retry_request_id,
+            "job": accepted.job,
+            "duplicate": accepted.duplicate
+        }),
+        Err(shadow_coordinator::StoreError::JobNotFound) => error_reply(Some(message_id.to_owned()), "job_not_found", "Job was not found.", false),
+        Err(shadow_coordinator::StoreError::InvalidRequest(_)) => error_reply(Some(message_id.to_owned()), "job_not_cancellable", "Only failed jobs can be manually retried.", false),
+        Err(shadow_coordinator::StoreError::IdempotencyConflict) => error_reply(Some(message_id.to_owned()), "idempotency_conflict", "retryRequestId was already used for a different request.", false),
+        Err(_) => error_reply(Some(message_id.to_owned()), "internal_error", "Could not create the manual retry.", false),
+    }
+}
+
+fn list_assets(store: &JobStore, uid: &str, client_id: &str, message_id: &str, message: &Value) -> Value {
+    let limit = message.get("limit").and_then(Value::as_u64).unwrap_or(50);
+    if !(1..=100).contains(&limit) {
+        return error_reply(Some(message_id.to_owned()), "invalid_payload", "Asset limit must be between 1 and 100.", false);
+    }
+    let jobs = if let Some(job_id) = message.get("jobId").and_then(Value::as_str) {
+        if Uuid::parse_str(job_id).is_err() {
+            return error_reply(Some(message_id.to_owned()), "invalid_payload", "jobId must be a UUID.", false);
+        }
+        match store.get(job_id) {
+            Ok(Some(job)) if job.uid == uid && job.client_id == client_id => vec![job],
+            Ok(_) => return json!({ "version": 1, "type": "asset.list", "messageId": Uuid::new_v4().to_string(), "replyTo": message_id, "assets": [] }),
+            Err(_) => return error_reply(Some(message_id.to_owned()), "internal_error", "Could not list assets.", false),
+        }
+    } else {
+        match store.list(uid, client_id, limit as u32) {
+            Ok(jobs) => jobs,
+            Err(_) => return error_reply(Some(message_id.to_owned()), "internal_error", "Could not list assets.", false),
+        }
+    };
+    let assets = jobs.iter().filter_map(narrative_asset).collect::<Vec<_>>();
+    json!({ "version": 1, "type": "asset.list", "messageId": Uuid::new_v4().to_string(), "replyTo": message_id, "assets": assets })
+}
+
+fn get_asset(store: &JobStore, uid: &str, client_id: &str, message_id: &str, message: &Value) -> Value {
+    let Some(asset_id) = message.get("assetId").and_then(Value::as_str) else {
+        return error_reply(Some(message_id.to_owned()), "invalid_payload", "assetId is required.", false);
+    };
+    let Some(job_id) = asset_id.strip_prefix("narrative:") else {
+        return error_reply(Some(message_id.to_owned()), "artifact_unavailable", "Asset was not found.", false);
+    };
+    if Uuid::parse_str(job_id).is_err() {
+        return error_reply(Some(message_id.to_owned()), "invalid_payload", "assetId is invalid.", false);
+    }
+    match store.get(job_id) {
+        Ok(Some(job)) if job.uid == uid && job.client_id == client_id => match narrative_asset(&job) {
+            Some(asset) => json!({ "version": 1, "type": "asset.available", "messageId": Uuid::new_v4().to_string(), "replyTo": message_id, "asset": asset }),
+            None => error_reply(Some(message_id.to_owned()), "artifact_unavailable", "No verified narrative artifact is available for this job.", false),
+        },
+        Ok(_) => error_reply(Some(message_id.to_owned()), "artifact_unavailable", "Asset was not found.", false),
+        Err(_) => error_reply(Some(message_id.to_owned()), "internal_error", "Could not read asset metadata.", false),
+    }
+}
+
+fn narrative_asset(job: &shadow_coordinator::JobRecord) -> Option<Value> {
+    let manifest = job.result_manifest.as_ref()?;
+    let remote_path = manifest.get("narrativeRemotePath")?.as_str()?;
+    let expected_path = format!("imagecloud:NarrationWorker/final/{}/scene.md", job.job_id);
+    if remote_path != expected_path {
+        return None;
+    }
+    let sha256 = manifest.get("narrativeSha256")?.as_str()?;
+    if sha256.len() != 64 || !sha256.bytes().all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase()) {
+        return None;
+    }
+    let bytes = manifest.get("stages")?.as_array()?.iter().find_map(|stage| {
+        (stage.get("stage")?.as_str()? == "onedrive" && stage.get("outcome")?.as_str()? == "verified")
+            .then(|| stage.get("bytes")?.as_u64())
+            .flatten()
+    })?;
+    Some(json!({
+        "assetId": format!("narrative:{}", job.job_id),
+        "jobId": job.job_id,
+        "kind": "narrative",
+        "name": "scene.md",
+        "remotePath": remote_path,
+        "sha256": sha256,
+        "sizeBytes": bytes,
+        "downloadTool": "get_narration_result"
+    }))
+}
+
 fn error_reply(reply_to: Option<String>, code: &str, message: &str, retryable: bool) -> Value {
     json!({
         "version": 1,
@@ -393,4 +542,46 @@ fn append_log(data_dir: &PathBuf, message: &str) {
         return;
     };
     let _ = writeln!(log, "{:?} {message}", std::time::SystemTime::now());
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn completed_job(remote_path: String, sha256: &str) -> shadow_coordinator::JobRecord {
+        shadow_coordinator::JobRecord {
+            job_id: "148a32da-6c82-4b0e-a1c3-a567070d5511".into(),
+            uid: "user-1".into(),
+            client_id: "client-1".into(),
+            request_id: "request-1".into(),
+            state: JobState::Succeeded,
+            fifo_sequence: 1,
+            engine: Some("narration".into()),
+            created_at: "2026-11-06T00:00:00Z".into(),
+            started_at: Some("2026-11-06T00:00:01Z".into()),
+            finished_at: Some("2026-11-06T00:00:02Z".into()),
+            timeout_at: None,
+            error_code: None,
+            result_manifest: Some(json!({
+                "narrativeRemotePath": remote_path,
+                "narrativeSha256": sha256,
+                "stages": [{ "stage": "onedrive", "outcome": "verified", "bytes": 321 }]
+            })),
+            retry_of_job_id: None,
+        }
+    }
+
+    #[test]
+    fn asset_metadata_requires_the_canonical_path_and_verified_hash() {
+        let job_id = "148a32da-6c82-4b0e-a1c3-a567070d5511";
+        let path = format!("imagecloud:NarrationWorker/final/{job_id}/scene.md");
+        let asset = narrative_asset(&completed_job(path.clone(), &"a".repeat(64))).unwrap();
+        assert_eq!(asset["assetId"], format!("narrative:{job_id}"));
+        assert_eq!(asset["remotePath"], path);
+        assert_eq!(asset["sha256"], "a".repeat(64));
+        assert_eq!(asset["sizeBytes"], 321);
+
+        assert!(narrative_asset(&completed_job("imagecloud:other/scene.md".into(), &"a".repeat(64))).is_none());
+        assert!(narrative_asset(&completed_job(path, &"A".repeat(64))).is_none());
+    }
 }

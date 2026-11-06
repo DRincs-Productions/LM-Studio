@@ -5,12 +5,15 @@
   "type": "module",
   "scripts": {
     "build": "wrangler types && tsc --noEmit",
+    "test": "vitest run --max-workers=1 --no-isolate",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy"
   },
   "devDependencies": {
+    "@cloudflare/vitest-plugin": "^1.6.0",
     "@types/node": "^24.19.2",
     "typescript": "~6.0.3",
+    "vitest": "^4.1.12",
     "wrangler": "^4.157.0"
   }
 }

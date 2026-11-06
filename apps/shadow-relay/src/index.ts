@@ -23,7 +23,7 @@ interface FirestoreDocument {
   fields?: Record<string, { stringValue?: string }>;
 }
 
-interface RelayIdentity {
+export interface RelayIdentity {
   uid: string;
   role: "server" | "client";
   serverId?: string;
@@ -62,13 +62,18 @@ export default {
   },
 } satisfies ExportedHandler<Env>;
 
-async function authenticateRequest(request: Request, url: URL, env: Env): Promise<RelayIdentity | null> {
+export async function authenticateRequest(request: Request, url: URL, env: Env): Promise<RelayIdentity | null> {
   const authorization = request.headers.get("Authorization");
   const match = authorization?.match(/^Bearer\s+([^\s]+)$/i);
   if (!match) return null;
 
   const role = url.searchParams.get("role");
   if (role !== "server" && role !== "client") return null;
+  const requestedServerId = role === "server" ? url.searchParams.get("serverId") : null;
+  const clientId = role === "client" ? url.searchParams.get("clientId") : null;
+  if (role === "server" && (!requestedServerId || !UUID_PATTERN.test(requestedServerId))) return null;
+  if (role === "client" && (!clientId || !UUID_PATTERN.test(clientId))) return null;
+
   const lookupResponse = await fetch(
     `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(env.FIREBASE_API_KEY)}`,
     {
@@ -85,26 +90,22 @@ async function authenticateRequest(request: Request, url: URL, env: Env): Promis
   }
 
   if (role === "server") {
-    const serverId = url.searchParams.get("serverId");
-    if (!serverId || !UUID_PATTERN.test(serverId)) return null;
     const document = await readFirestoreDocument(match[1], `accounts/${encodeURIComponent(user.localId)}`, env);
-    if (document?.fields?.serverId?.stringValue !== serverId) return null;
-    return { uid: user.localId, role, serverId };
+    if (document?.fields?.serverId?.stringValue !== requestedServerId) return null;
+    return { uid: user.localId, role, serverId: requestedServerId! };
   }
 
-  const clientId = url.searchParams.get("clientId");
-  if (!clientId || !UUID_PATTERN.test(clientId)) return null;
   const account = await readFirestoreDocument(match[1], `accounts/${encodeURIComponent(user.localId)}`, env);
   const serverId = account?.fields?.serverId?.stringValue;
   if (!serverId || !UUID_PATTERN.test(serverId)) return null;
   const document = await readFirestoreDocument(
     match[1],
-    `accounts/${encodeURIComponent(user.localId)}/authorizedClients/${encodeURIComponent(clientId)}`,
+    `accounts/${encodeURIComponent(user.localId)}/authorizedClients/${encodeURIComponent(clientId!)}`,
     env,
   );
   const publicKey = document?.fields?.publicKey?.stringValue;
   if (!publicKey || publicKey.length > 512) return null;
-  return { uid: user.localId, role, serverId, clientId, publicKey };
+  return { uid: user.localId, role, serverId, clientId: clientId!, publicKey };
 }
 
 async function readFirestoreDocument(idToken: string, path: string, env: Env): Promise<FirestoreDocument | null> {

@@ -512,6 +512,7 @@ fn submit_local_job(
             operation: job.operation,
             payload_version: job.payload_version,
             payload: job.payload,
+            retry_of_job_id: None,
         })
         .map_err(display_store_error)
 }

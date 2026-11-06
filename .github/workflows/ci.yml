@@ -56,6 +56,10 @@ jobs:
         working-directory: apps/shadow-relay
         run: npm run build
 
+      - name: Test Cloudflare relay authentication and closed state
+        working-directory: apps/shadow-relay
+        run: npm test
+
       - name: Check Rust formatting
         run: cargo fmt --manifest-path apps/shadow-controller/coordinator/Cargo.toml -- --check
 

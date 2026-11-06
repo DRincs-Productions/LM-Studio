@@ -6,56 +6,18 @@ For every architectural change in this repository, update the root `README.md` i
 
 Before making architectural changes, read the relevant project documentation and preserve existing user work. Keep generated Markdown documentation under `C:\Users\Shadow\.lmstudio`.
 
-## Releases and GitHub Actions
+## Testing installed Shadow Controller updates
 
-The user authorizes Codex to create, commit, tag, push and publish as many project releases as needed during development and delivery, including experimental releases, prereleases and fixes to failed releases. Choose appropriate versions and release timing autonomously; consuming or skipping version numbers is acceptable. Do not ask for permission merely to increment a version or publish another release. This authorization does not permit paid services, destructive changes, bypassing authentication/security gates, or changes to unrelated cloud resources.
-
-### Gemini CLI
-
-Gemini is an experimental validation/review candidate for generated narrative, image, audio and future media. It is not yet an approved production reviewer; evaluate it against the existing reviewer and deterministic checks before proposing adoption. Use the user's connected Gemini CLI account and automatic model selection (`auto`). Do not request an API key or pin a specific model unless the user changes this preference. Start Gemini CLI with `gemini` and leave model selection on Auto (or explicitly use `gemini --model auto`). Gemini receives the artifact, brief, canon and a structured review rubric; it returns evidence, findings, uncertainty and a verdict. Treat the verdict as advisory until the relevant evaluation gate passes and the user approves adoption. Gemini never decides publication, edits canon, authorizes a job, or approves its own generated output.
-
-Gemini CLI does not receive MCP tools. Codex running as server Coordinator owns and calls the configured MCP tools, obtains or stages artifact inputs for review, invokes Gemini as a bounded reviewer where supported, checks the response and deterministically enforced assertions, and decides the next handoff. Never expose MCP credentials/tools to Gemini or let model text invoke tools. An unavailable, malformed, refused or uncertain review is a failed/incomplete review, never an implicit PASS. The user reports that Gemini is connected; if CLI authentication fails, report the exact failure and do not switch authentication methods or incur API charges without instruction. Gemini CLI is installed globally as `@google/gemini-cli`; if `gemini` is unavailable in a new terminal, reopen the terminal and check the npm global PATH.
-
-Releases must be selected by the prefix of a pushed Git tag. Each component has independent Semantic Versioning:
-
-| Tag pattern | Dedicated CI responsibility |
-|---|---|
-| `lib-v<version>` | Validate and build the TypeScript MCP client/library with tsup, then publish its npm package. |
-| `server-v<version>` | Validate and build the Tauri/React server and persistent Rust Coordinator, then publish a GitHub Release with the installers for supported, verified targets. |
-| `relay-v<version>` | Validate the Cloudflare Worker/Durable Object, then deploy only `shadow-mcp-relay` after the Firebase authorization and relay security gates pass. |
-
-Examples: `lib-v0.1.0-dev.1`, `server-v0.1.0`, `relay-v0.1.1`. An unprefixed `v<version>` must not publish every component. Each release workflow must filter its own tag prefix, validate the full version and confirm that the tag version matches that component's manifests. Ordinary branch pushes and pull requests run checks without publishing or deploying. Use npm's `next` dist-tag for prereleases and `latest` for stable releases; mark prerelease GitHub Releases accordingly. Additional separately published libraries need their own documented prefix and workflow.
-
-Before the first library release, configure the repository Actions secret `NPM_TOKEN` with a publishing token for `shadow-controller-mcp-client`. The server release uses the repository's `GITHUB_TOKEN` and creates GitHub Release installer assets. The relay release requires the Actions secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, plus repository variable `RELAY_RELEASE_ENABLED=true`; keep this variable unset or false until Firebase auth, pairing, relay isolation and security gates F1/F4 have been verified. Do not create a release tag merely to probe missing credentials: check repository configuration first and report missing access.
-
-Release procedure:
-
-1. Inspect the current branch, user changes, existing tags, component manifests and `.github/workflows/`. Never include unrelated local changes. Verify package name, registry access, GitHub permissions and the intended cloud target from actual configuration.
-2. Update only the selected component's version and corresponding lockfiles/manifests, document relevant changes, and run its required checks. Commit the intended release contents and ensure that the release tag points to that exact commit with its workflows included.
-3. Create a new annotated tag, for example `git tag -a lib-v0.1.0-dev.1 <release-commit-sha> -m "Release MCP client 0.1.0-dev.1"`, then push the intended branch and that exact tag: `git push origin <development-branch>` followed by `git push origin lib-v0.1.0-dev.1`. Do not use `git push --tags`, move published tags, or overwrite existing package versions/assets. Fix a failed release with a fresh version when needed.
-4. Inspect the triggered GitHub Actions run, jobs, logs and artifacts. Prefer the connected `@github` tools for repository and CI information; use an authenticated `gh` CLI when needed. Do not assume a successful Git push means publication succeeded. Report missing access or configuration precisely rather than inventing CI results.
-5. Verify the published package/version and installable exports, or the GitHub Release and actual installer assets, or the deployed relay health and applicable security checks. Report the tag, commit, workflow URL, publication URL and any failure or unverified target.
-
-### Testing installed Shadow Controller updates
-
-For a quick end-to-end test of the installed Windows server updater, use a stable `server-v<version>` release (the updater checks the latest stable release, not prereleases):
-
-1. Publish a new server release and wait for its GitHub Release to contain `latest.json`, the signed Windows installer and its `.sig` asset. Confirm the release workflow's `publish` job succeeded.
-2. Leave the previously installed version in place. After the release is published, fully terminate Shadow Controller from Task Manager, then launch it again from the Start menu or its installed shortcut. Closing its window only hides it in the notification area and is not a fresh process start.
-3. The app checks for updates during startup and installs a newer signed release in the background. Allow a short time for the updater installer to run and the app to restart; no admin prompt is expected for the current-user Windows installation.
-4. Confirm the new version in the app's update log at `%APPDATA%\com.drincs.shadowcontroller\update.log` or in the app's version/about information. If the app does not restart on the new version, preserve the log and workflow evidence before trying another release; do not repeatedly relaunch or reinstall over uncertain state.
-
-The CI smoke test remains the primary isolated regression check: it installs the latest stable release and the previous stable version in separate runner directories, checks no-update startup, then verifies automatic upgrade, restart and the installed executable version. A local manual run is a convenient follow-up, not a replacement for the CI evidence.
-
-Implementation status: these tag prefixes and permissions are the approved release contract. Tag workflows now exist in `.github/workflows/release-lib.yml`, `release-server.yml` and `release-relay.yml`; each validates the matching version. The npm workflow needs `NPM_TOKEN`. The relay workflow needs `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, and repository variable `RELAY_RELEASE_ENABLED=true`, and will not deploy before that gate is set. The Tauri/React desktop shell, persistent Windows Coordinator process and initial SQLite job-store core exist in `apps/shadow-controller`. Windows Google sign-in and server pairing were verified in CI. Stable signed Windows/Linux installers are published; `server-v0.1.12` passed the Windows end-to-end updater smoke test from `0.1.11`, including restart and executable version verification. Linux runtime updating, macOS builds, production job dispatch, Firebase authorization and live relay security remain incomplete. Keep secrets in the appropriate credential store or GitHub Actions secrets, never in Git or logs. CI must stay within the approved free services and quotas.
+To test the installed Windows server updater, publish a stable `server-v<version>` release and wait until GitHub Actions has successfully published its GitHub Release and installer assets. Leave the previous version installed. Fully terminate Shadow Controller from Task Manager, then launch it again from the Start menu or installed shortcut; closing the window only hides it in the notification area. The app checks for a newer signed stable version during startup and installs it in the background, then restarts. Allow a short time for the installer and restart to complete. Verify the new version in the app or `%APPDATA%\com.drincs.shadowcontroller\update.log`. The isolated CI smoke test remains the primary check and verifies no-update startup, automatic upgrade, restart and executable version. Preserve logs and CI evidence if a local update does not complete; do not repeatedly relaunch or reinstall over uncertain state.
 
 ## Language policy
 
-All model-generated project content and production artifacts must be in English, including Project Files, narrative prose and dialogue, plans, reviews, summaries, prompts, labels, and other generated documentation. Models must communicate with the user in the language the user is currently using in the chat. Keep the model's user-facing chat in that language while ensuring every produced project artifact remains in English. If the user changes chat language, adapt the conversation language; do not translate project artifacts out of English unless the user explicitly asks for a translated deliverable.
+All model-generated outputs other than direct user-facing chat messages must be in English, including Project Files, narrative prose and dialogue, plans, reviews, summaries, prompts, labels, and other generated documentation. Models must communicate with the user in the language the user is currently using in the chat. Keep every project artifact in English even when the user chats in another language. If the user changes chat language, adapt the conversation language; do not translate project artifacts out of English unless the user explicitly asks for a translated deliverable.
 
 ## Test workflow
 
 All tests are started and driven from a terminal. Do not use LM Studio/Bionic GUI automation in this repository's test workflow.
+The component harness defaults to `http://127.0.0.1:1234` for the local model API. If the active Bionic/LM Studio server uses another local port, set `BIONIC_LM_API_BASE_URL` to that base URL for the test process; keep model tests terminal-driven.
 
 There are two test modes:
 
@@ -83,11 +45,9 @@ Project Worker source access is limited to `.ink` files and Markdown under `docs
 
 Evaluating a new Writer model requires three separate component-test runs using that exact model profile: `normal`, `hot`, and `violent`. Each run gets a fresh premise, canon, scenario, Project File, seed/run ID, and output directory; do not reuse story facts or drafts across the three. The normal case contains ordinary non-sexual, non-graphic narrative; the hot case is an explicitly consensual erotic scene between clearly adult fictional characters and may be sexually explicit; the violent case is fictional gruesome violence without sexual violence. For every run, assess and record generation speed (first draft and revision elapsed time, plus tokens/second if available), writing quality (clarity, voice, dialogue, pacing, and scene coherence), and fidelity to supplied information and constraints (canon, required beats, tone, consent/safety boundaries, and endpoint). Give each dimension a 1–5 score with brief evidence, and identify any invented facts, omissions, contradictions, or boundary violations. Do not use word count or surface polish alone as pass criteria.
 
-The production narrative path first creates a validated `SceneContract`: Codex and Qwen propose plans in parallel, then Codex merges them and retains authority over the contract and canon. The Writer receives the approved contract and authors the scene. The Narrative Reviewer returns a verdict and localized revision requests; after any revisions, Codex performs the final constraint and continuity check. Invalid contracts stop before Writer generation, and generated prose never updates canon by itself. Isolated Writer component tests exercise the Writer only with controlled simulated revision replies; they must not invoke the real Narrative Reviewer or downstream production. Keep these test results distinct from complete production-pipeline results.
+Before using a Writer profile, verify its exact model-to-config association in `apps/bionic/.internal/user-concrete-model-default-config`, confirm LM Studio loads the correct GGUF/template, and inspect the model card for supported prompt format and recommended sampling settings. The Bionic system prompt for every Writer profile must include the applicable NCF constants from `skills/narration/SKILL.md`; local models cannot read agent skill files at inference time, so embed the operative schema in the model-specific JSON. Record the prompt and settings in each run manifest and verify the raw request contains them. If the Writer prompt or sampling configuration changes, rerun all three cases in fresh runs; mark prior runs as superseded and exclude them from the final score table.
 
-### Experimental generated-artifact reviewer evaluation
-
-Gemini may be evaluated as a reviewer for narrative, image, audio and future generated media. This is an experiment, not an approved production role. For each medium, compare Gemini with the current reviewer on the same artifacts, briefs, canon/context, rubric and prediction conditions. Use blinded matched samples that include known seeded defects and clean controls; measure defect recall, evidence accuracy, actionable localized findings, false positives/negatives, verdict consistency, refusals, latency, quotas and cost. Record model selection mode, CLI version, prompt/rubric, artifact hashes, outputs and scores in a unique report/run. Deterministic assertions (schema, hashes, required beats, endpoint, technical media properties and safety gates) remain independently enforced in code and cannot be waived by Gemini. Do not let Gemini generate content, use MCP tools, publish assets or approve its own output. Codex remains Coordinator and uses MCP; it judges review evidence and controls handoffs. Keep the existing Qwen/Codex reviewers in production until evaluations are complete and the user explicitly approves a change. Existing evaluation plans are in `handoffs/03-narrative-model-comparison.md`, `handoffs/04-image-generator-and-reviewer-evaluation.md`, and `handoffs/06-audio-review-gemini-evaluation.md`.
+The production narrative path first creates a validated `SceneContract` using Codex as sole planner and editor. The Writer receives the approved contract and authors the scene. Gemini CLI in Auto mode acts as text-only Narrative Reviewer, applying the scene-craft, revision-continuity, and line-editing review criteria. Gemini has no MCP access; Codex retains orchestration, MCP access, and final constraint and continuity approval. Gemini failure or timeout stops the review gate and preserves evidence. The pipeline allows at most five Writer/Reviewer cycles. Invalid contracts stop before Writer generation, and generated prose never updates canon by itself. Isolated Writer component tests exercise the Writer only with controlled simulated revision replies; they must not invoke the real Narrative Reviewer or downstream production. Keep these test results distinct from complete production-pipeline results.
 
 For PaintedFantasy v4.1, first load only the target model from the terminal, then run these independently from `project-worker\mcp`:
 
@@ -114,6 +74,46 @@ The component profile must point to the exact installed `Q4_K_S` GGUF path and i
 
 For a direct Hemmingway comparison, create a fresh matched fixture set and run each case on both models with the same `--writer-brief-file` and `--comparison-seed` within each pair. Give each invocation its own Project File, run ID, and output directory; the fixture seed is not a sampler seed because the LM Studio API request does not expose sampler seed control. Run both models sequentially, one model loaded at a time, and capture each draft and simulated revision. Inspect the produced text directly for canon, endpoints, and revision adherence; report latency, tokens/second where available, and 1–5 speed, prose-quality, and constraint-fidelity scores with evidence. Keep all partial/failed attempts and do not replay an uncertain generation. Report both completed runs and pre-generation failures separately. Example paired flags: `npm run test:component -- --role writer --writer-profile hemmingway --writer-case normal --writer-brief-file <fixture.md> --comparison-seed <16-hex-id>` and the same command with `--writer-profile qwenwriter27b`.
 
+Skyfall 36B v2 was removed after its isolated evaluation; its model, config, and component-test profile are no longer installed or available. Keep its completed and partial historical results in `production-tests/WRITER-SKYFALL-HEMMINGWAY-PAIRED-2026-10-26.md`. BlueStar was also removed after its paired evaluation; its archived results are in `production-tests/WRITER-BLUESTAR-HEMMINGWAY-PAIRED-2026-10-26.md`.
+
+For Dark Champion 30B A3B Heretic, LM Studio selected the `Q3_K_S` variant. Its exact GGUF is `mradermacher/Llama3.2-30B-A3B-II-Dark-Champion-INSTRUCT-Heretic-Abliterated-Uncensored-GGUF/Llama3.2-30B-A3B-II-Dark-Champion-INSTRUCT-Heretic-Abliterated-Uncensored.Q3_K_S.gguf`; use the matching `darkchampion30ba3b` profile and dedicated config at `apps/bionic/.internal/user-concrete-model-default-config/mradermacher/Llama3.2-30B-A3B-II-Dark-Champion-INSTRUCT-Heretic-Abliterated-Uncensored-GGUF/Llama3.2-30B-A3B-II-Dark-Champion-INSTRUCT-Heretic-Abliterated-Uncensored.Q3_K_S.gguf.json`. Load only this model with context 8192, GPU 0.85 and parallel 1; run each case once and sequentially:
+
+```powershell
+lms load llama3.2-30b-a3b-ii-dark-champion-instruct-heretic-abliterated-uncensored --identifier writer-darkchampion-test --context-length 8192 --gpu 0.85 --parallel 1 --yes
+npm run test:component -- --role writer --writer-profile darkchampion30ba3b --writer-case normal
+npm run test:component -- --role writer --writer-profile darkchampion30ba3b --writer-case hot
+npm run test:component -- --role writer --writer-profile darkchampion30ba3b --writer-case violent
+lms unload writer-darkchampion-test
+```
+
+Dark Champion's standalone evaluation completed on 27 October 2026. Initial throughput was about 23–29 tokens/s, but all three cases missed important constraints; the hot draft and revision and violent revision hit the 3,072-token cap with repetition. It is not promoted. Report and run evidence: `production-tests/WRITER-DARK-CHAMPION-30B-A3B-HERETIC-2026-10-27.md`.
+
+### Gemory 26B-A4B Q4_K_M Writer evaluation
+
+Gemory 26B-A4B Q4_K_M is installed in LM Studio as `gemory-26b-a4b`. Its dedicated Bionic profile is `apps/bionic/.internal/user-concrete-model-default-config/UltimateIntent/Gemory-26B-A4B-GGUF/Gemory-26B-A4B-Q4_K_M.gguf.json`. This profile uses the shared current NCF Writer system prompt and the publisher's Q4 sampler settings: temperature 0.2, top-p 0.98, top-k 80, min-p 0.03 and repeat penalty 1.15. Runtime load settings for evaluation were context 8192, GPU offload 0.85, batch sizes 512, parallel 1, and auto-fit disabled.
+
+The isolated normal, hot, and violent tests were completed once on 5 November 2026. Do not rerun them or treat Gemory as promoted. It is fast (about 26–30 tokens/s) but showed substantial endpoint and constraint failures: normal omitted the explicit key placement and radio handoff; hot stopped before intimacy and added an unauthorized Visual cue in revision; violent invented character genders and medical details. Keep the GGUF installed until the user decides which models to remove. Full report: `production-tests/WRITER-GEMORY-26B-A4B-Q4_K_M-2026-11-05.md`; run IDs are `20261105124910736_415fdb3df4b7`, `20261105125019882_3ac013e64dfa`, and `20261105125124912_1a3afec8fc93`.
+
+For a future explicitly requested repeat evaluation, load only this model and run each fresh component case once sequentially from `project-worker\mcp`:
+
+```powershell
+lms load gemory-26b-a4b --identifier writer-gemory-test --context-length 8192 --gpu 0.85 --parallel 1 --yes
+$env:BIONIC_LM_API_BASE_URL = 'http://127.0.0.1:1235'
+npm run test:component -- --role writer --writer-profile gemory26ba4b --writer-case normal
+npm run test:component -- --role writer --writer-profile gemory26ba4b --writer-case hot
+npm run test:component -- --role writer --writer-profile gemory26ba4b --writer-case violent
+lms unload writer-gemory-test
+```
+
+These are Writer-only tests with controlled simulated revision replies. Do not invoke the real Reviewer, production, asset creation, finalization, or publication.
+
+### Narrative Reviewer: Gemini CLI
+
+The selected Narrative Reviewer is Gemini CLI using `--model auto` in read-only plan mode, with no MCP servers or extensions. It receives the scene, canon, approved brief, deterministic checks, and review criteria informed by the installed `scene-craft`, `revision-continuity`, and `line-editing` skills. It may return at most five localized corrections. Codex validates evidence, controls revisions, retains MCP access, and makes final approval. Gemini CLI error, timeout, malformed JSON, or unverifiable verdict stops production and preserves the request and logs. Do not silently substitute a local model or claim approval. The 5 November 2026 comparison found useful initial findings but post-revision timeouts; monitor reliability. See `docs/WRITER-GEMINI-REVIEWED-COMPARISON-2026-11-05.md`.
+### Removed Qwen3.5 9B Abliterated Reviewer candidate
+
+Qwen3.5 9B Abliterated Q4_K_M, its dedicated model config, and its component-test profile were removed after evaluation. Qwen3 8B was later removed from its Narrative Reviewer role and is no longer the configured Reviewer; preserve all historical comparison reports and run evidence under `production-tests` without reusing their fixtures. The old comparison scores are historical only. Reports: `production-tests/REVIEWER-QWEN35-9B-ABLITERATED-2026-10-27.md` and `production-tests/REVIEWER-COMPARISON-QWEN3-8B-QWEN35-9B-ABLITERATED-2026-10-27.md`.
+
 ## Where to change the pipeline
 
 - MCP server entrypoints and their package manifests are in `project-worker/mcp`, `image-worker/mcp`, `asset-worker/mcp` and `audio/mcp`. Coordinator orchestration and Project Worker tool contracts are under `project-worker/mcp/orchestration`.
@@ -134,4 +134,8 @@ Use the bionic-regia-orchestration skill for detailed routing, canonical-file pe
 
 ### Isolated Planner evaluation
 
-Run `npm run test:planner` once from `project-worker\mcp`. The component runner creates a fresh run ID and independent fixtures, obtains Codex and Qwen proposals in parallel, and has Codex merge them into validated SceneContracts. It records prompts, model/config identifiers, proposals, merged contracts, hashes and outcomes under `production-tests\components`. It must not invoke Writer, production, asset creation, finalization or publication. Preserve partial evidence and do not replay uncertain model calls. Record the blind paired comparison and selected planner arrangement in the run report.
+The active planner is Codex-only. The October 25 2026 Codex/Qwen parallel comparison is historical; Qwen3 8B is no longer part of current planning or narrative review. Planner component checks must validate Codex's proposal and bounded repair against fresh fixtures without loading a local Reviewer model or invoking Writer, production, asset creation, finalization, or publication. Preserve partial evidence and do not replay uncertain model calls.
+
+## Remote builds and releases when local tools are unavailable
+
+When a required compiler, SDK, or tool is unavailable locally, use the repository's existing GitHub Actions YAML workflow to build, test, or package the change, and inspect its run logs and artifacts. Do not stop at “cannot test locally” when an applicable workflow can do the work. For a release the user has authorized, prepare the matching version or tag and use the existing release workflow; verify the workflow and published artifacts before reporting success. Respect workflow release gates and required security and authentication checks; never bypass a gate or claim completion without successful CI or release evidence. Preserve existing local changes and use the workflow's documented tag and version convention.

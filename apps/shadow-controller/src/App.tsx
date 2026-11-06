@@ -251,7 +251,7 @@ function Jobs() {
     try {
       const rows = await invoke<Job[]>("list_local_jobs", { clientId: "desktop-ui", limit: 50 });
       setJobs(rows);
-      setMessage(`${rows.length} local job${rows.length === 1 ? "" : "s"}. The execution worker is not connected yet.`);
+      setMessage(`${rows.length} local job${rows.length === 1 ? "" : "s"}. Only authenticated codex.execute requests are sent to server-side Codex; local placeholders are not executed.`);
     } catch (error) {
       setMessage(String(error));
     } finally {
@@ -266,13 +266,13 @@ function Jobs() {
         job: {
           clientId: "desktop-ui",
           requestId: crypto.randomUUID(),
-          operation: "narrative.generate",
+          operation: "local.placeholder",
           payloadVersion: 1,
           payload: { source: "desktop-queue-placeholder" },
         },
       });
       await refresh();
-      setMessage("A local queue entry was saved. It will remain queued until an execution worker is implemented.");
+      setMessage("A local placeholder was saved. It is not a Codex task and will not start execution.");
     } catch (error) {
       setMessage(String(error));
       setBusy(false);
@@ -428,7 +428,7 @@ function Overview({ authIdentity, authPending, authMessage, serverId, pairingSta
       <section className="status-grid" aria-label="System status">
         <StatusCard icon="⌘" label="Server" value={pairingStatus === "paired" ? "Paired" : "Not paired"} detail={serverId ? `ID ${serverId}` : "Server identity unavailable"} tone="amber" />
         <StatusCard icon="◉" label="Authentication" value={authIdentity ? "Signed in" : "Not signed in"} detail={authIdentity ? authIdentity.email : "Google sign-in is ready."} tone="blue" />
-        <StatusCard icon="⇄" label="Relay" value="Not deployed" detail="Remote connections stay disabled until security gates pass." tone="violet" />
+        <StatusCard icon="⇄" label="Relay" value="Setup" detail="The Cloudflare bootstrap is reachable; repository relay code awaits gated deployment." tone="violet" />
       </section>
 
       <section className="bottom-grid">

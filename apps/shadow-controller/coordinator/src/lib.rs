@@ -9,9 +9,10 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 use uuid::Uuid;
 
-const SCHEMA_VERSION: i64 = 2;
+const SCHEMA_VERSION: i64 = 3;
 const INITIAL_SCHEMA: &str = include_str!("../migrations/0001_initial.sql");
 const SINGLE_ACTIVE_JOB_MIGRATION: &str = include_str!("../migrations/0002_single_active_job.sql");
+const MANUAL_RETRY_MIGRATION: &str = include_str!("../migrations/0003_manual_retry.sql");
 
 #[derive(Debug, Error)]
 pub enum StoreError {
@@ -106,6 +107,7 @@ pub struct SubmitRequest {
     pub operation: String,
     pub payload_version: u32,
     pub payload: serde_json::Value,
+    pub retry_of_job_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -124,6 +126,7 @@ pub struct JobRecord {
     pub timeout_at: Option<String>,
     pub error_code: Option<String>,
     pub result_manifest: Option<serde_json::Value>,
+    pub retry_of_job_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -156,6 +159,11 @@ pub enum JobExecutionOutcome {
     },
     Cancelled {
         message_redacted: String,
+        result_manifest: Option<serde_json::Value>,
+    },
+    Interrupted {
+        message_redacted: String,
+        result_manifest: Option<serde_json::Value>,
     },
 }
 
@@ -194,6 +202,12 @@ impl JobStore {
             transaction.pragma_update(None, "user_version", 2)?;
             transaction.commit()?;
         }
+        if version < 3 {
+            let transaction = connection.unchecked_transaction()?;
+            transaction.execute_batch(MANUAL_RETRY_MIGRATION)?;
+            transaction.pragma_update(None, "user_version", 3)?;
+            transaction.commit()?;
+        }
         Ok(Self {
             connection: Mutex::new(connection),
         })
@@ -202,11 +216,19 @@ impl JobStore {
     pub fn submit(&self, request: SubmitRequest) -> Result<AcceptedJob, StoreError> {
         validate_request(&request)?;
         let payload_json = serde_json::to_string(&request.payload)?;
-        let idempotency_material = serde_json::to_vec(&(
-            &request.operation,
-            request.payload_version,
-            &request.payload,
-        ))?;
+        let idempotency_material = match request.retry_of_job_id.as_deref() {
+            Some(source_job_id) => serde_json::to_vec(&(
+                &request.operation,
+                request.payload_version,
+                &request.payload,
+                Some(source_job_id),
+            ))?,
+            None => serde_json::to_vec(&(
+                &request.operation,
+                request.payload_version,
+                &request.payload,
+            ))?,
+        };
         let payload_hash = format!("{:x}", Sha256::digest(idempotency_material));
         let mut connection = self
             .connection
@@ -262,15 +284,16 @@ impl JobStore {
         )?;
         transaction.execute(
             "INSERT INTO jobs (
-                job_id, uid, client_id, request_id, state, fifo_sequence, created_at
-             ) VALUES (?1, ?2, ?3, ?4, 'queued', ?5, ?6)",
+                job_id, uid, client_id, request_id, state, fifo_sequence, created_at, retry_of_job_id
+             ) VALUES (?1, ?2, ?3, ?4, 'queued', ?5, ?6, ?7)",
             params![
                 job_id,
                 request.uid,
                 request.client_id,
                 request.request_id,
                 fifo_sequence,
-                now
+                now,
+                request.retry_of_job_id
             ],
         )?;
         append_event(
@@ -297,6 +320,27 @@ impl JobStore {
         Ok(load_job(&connection, job_id)?)
     }
 
+    /// Returns the immutable operation envelope associated with a persisted job.
+    pub fn request_context(&self, job_id: &str) -> Result<Option<serde_json::Value>, StoreError> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| StoreError::LockPoisoned)?;
+        let serialized: Option<(String, u32, String)> = connection
+            .query_row(
+                "SELECT r.operation, r.payload_version, r.payload_json FROM requests r INNER JOIN jobs j ON j.request_id = r.request_id AND j.uid = r.uid AND j.client_id = r.client_id WHERE j.job_id = ?1",
+                [job_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .optional()?;
+        serialized
+            .map(|(operation, version, payload)| {
+                let payload: serde_json::Value = serde_json::from_str(&payload)?;
+                Ok(serde_json::json!({ "operation": operation, "payloadVersion": version, "payload": payload }))
+            })
+            .transpose()
+    }
+
     pub fn get_by_request(
         &self,
         uid: &str,
@@ -318,6 +362,78 @@ impl JobStore {
             .map(|id| load_job(&connection, &id))
             .transpose()
             .map(Option::flatten)?)
+    }
+
+    /// Queues a new run only when the authorized caller explicitly retries a failed job.
+    /// The retry request ID is idempotent, and interrupted jobs are never replayed.
+    pub fn retry_failed(
+        &self,
+        uid: &str,
+        client_id: &str,
+        job_id: &str,
+        retry_request_id: &str,
+    ) -> Result<AcceptedJob, StoreError> {
+        let source = self
+            .get(job_id)?
+            .filter(|job| job.uid == uid && job.client_id == client_id)
+            .ok_or(StoreError::JobNotFound)?;
+        if source.state != JobState::Failed {
+            return Err(StoreError::InvalidRequest(
+                "only failed jobs can be manually retried",
+            ));
+        }
+        if Uuid::parse_str(retry_request_id).is_err() {
+            return Err(StoreError::InvalidRequest(
+                "retry request ID must be a UUID",
+            ));
+        }
+        let context = self
+            .request_context(job_id)?
+            .ok_or(StoreError::JobNotFound)?;
+        let operation = context
+            .get("operation")
+            .and_then(serde_json::Value::as_str)
+            .ok_or(StoreError::InvalidRequest(
+                "original operation is unavailable",
+            ))?;
+        let payload_version = context
+            .get("payloadVersion")
+            .and_then(serde_json::Value::as_u64)
+            .ok_or(StoreError::InvalidRequest(
+                "original payload version is unavailable",
+            ))? as u32;
+        let payload = context
+            .get("payload")
+            .cloned()
+            .ok_or(StoreError::InvalidRequest(
+                "original payload is unavailable",
+            ))?;
+        let accepted = self.submit(SubmitRequest {
+            uid: uid.to_owned(),
+            client_id: client_id.to_owned(),
+            request_id: retry_request_id.to_owned(),
+            operation: operation.to_owned(),
+            payload_version,
+            payload,
+            retry_of_job_id: Some(job_id.to_owned()),
+        })?;
+        if !accepted.duplicate {
+            let connection = self
+                .connection
+                .lock()
+                .map_err(|_| StoreError::LockPoisoned)?;
+            let transaction = connection.unchecked_transaction()?;
+            append_event(
+                &transaction,
+                &accepted.job.job_id,
+                "job.retry_requested",
+                None,
+                Some(JobState::Queued),
+                "Manual retry explicitly requested by the authorized client",
+            )?;
+            transaction.commit()?;
+        }
+        Ok(accepted)
     }
 
     pub fn next_queued(&self) -> Result<Option<JobRecord>, StoreError> {
@@ -374,8 +490,21 @@ impl JobStore {
         )?;
         transaction.execute(
             "INSERT INTO job_attempts (job_id, attempt_number, cause, approved_by, started_at)
-             VALUES (?1, 1, 'initial_request', 'client_request', ?2)",
-            params![job_id, now],
+             VALUES (?1, 1, ?2, ?3, ?4)",
+            params![
+                job_id,
+                if current.retry_of_job_id.is_some() {
+                    "manual_retry"
+                } else {
+                    "initial_request"
+                },
+                if current.retry_of_job_id.is_some() {
+                    "authorized_client"
+                } else {
+                    "client_request"
+                },
+                now
+            ],
         )?;
         append_event(
             &transaction,
@@ -407,7 +536,7 @@ impl JobStore {
             .map_err(|_| StoreError::LockPoisoned)?;
         let mut statement = connection.prepare(
             "SELECT job_id, uid, client_id, request_id, state, fifo_sequence, engine,
-                    created_at, started_at, finished_at, timeout_at, error_code, result_manifest
+                    created_at, started_at, finished_at, timeout_at, error_code, result_manifest, retry_of_job_id
              FROM jobs WHERE uid = ?1 AND client_id = ?2
              ORDER BY fifo_sequence DESC LIMIT ?3",
         )?;
@@ -550,16 +679,31 @@ impl JobStore {
                 result_manifest.as_ref(),
                 &message_redacted,
             )?,
-            JobExecutionOutcome::Cancelled { message_redacted }
-                if current_state == JobState::CancelRequested =>
-            {
-                self.transition(&job.job_id, JobState::Cancelled, None, &message_redacted)?
-            }
+            JobExecutionOutcome::Cancelled {
+                message_redacted,
+                result_manifest,
+            } if current_state == JobState::CancelRequested => self.transition_with_manifest(
+                &job.job_id,
+                JobState::Cancelled,
+                None,
+                result_manifest.as_ref(),
+                &message_redacted,
+            )?,
             JobExecutionOutcome::Cancelled { .. } => self.transition(
                 &job.job_id,
                 JobState::Failed,
                 Some("executor_cancelled_without_request"),
                 "Executor stopped without a recorded cancellation request",
+            )?,
+            JobExecutionOutcome::Interrupted {
+                message_redacted,
+                result_manifest,
+            } => self.transition_with_manifest(
+                &job.job_id,
+                JobState::Interrupted,
+                Some("executor_interrupted"),
+                result_manifest.as_ref(),
+                &message_redacted,
             )?,
         };
         Ok(Some(completed))
@@ -621,6 +765,15 @@ fn validate_request(request: &SubmitRequest) -> Result<(), StoreError> {
     if request.payload_version != 1 {
         return Err(StoreError::InvalidRequest("unsupported payload version"));
     }
+    if request
+        .retry_of_job_id
+        .as_ref()
+        .is_some_and(|value| Uuid::parse_str(value).is_err())
+    {
+        return Err(StoreError::InvalidRequest(
+            "retry source job ID must be a UUID",
+        ));
+    }
     Ok(())
 }
 
@@ -655,7 +808,7 @@ fn load_job(connection: &Connection, job_id: &str) -> Result<Option<JobRecord>, 
     connection
         .query_row(
             "SELECT job_id, uid, client_id, request_id, state, fifo_sequence, engine,
-                created_at, started_at, finished_at, timeout_at, error_code, result_manifest
+                created_at, started_at, finished_at, timeout_at, error_code, result_manifest, retry_of_job_id
          FROM jobs WHERE job_id = ?1",
             [job_id],
             row_to_job,
@@ -691,6 +844,7 @@ fn row_to_job(row: &rusqlite::Row<'_>) -> Result<JobRecord, rusqlite::Error> {
         timeout_at: row.get(10)?,
         error_code: row.get(11)?,
         result_manifest,
+        retry_of_job_id: row.get(13)?,
     })
 }
 
@@ -722,6 +876,7 @@ mod tests {
             operation: "narrative.generate".into(),
             payload_version: 1,
             payload: serde_json::json!({ "seed": value }),
+            retry_of_job_id: None,
         }
     }
 
@@ -855,6 +1010,78 @@ mod tests {
     }
 
     #[test]
+    fn manual_retry_creates_one_linked_queued_job_only_for_the_owner() {
+        let store = JobStore::open_in_memory().unwrap();
+        let original = store.submit(request("request-original", 7)).unwrap();
+        store
+            .run_next(|_, _| JobExecutionOutcome::Failed {
+                error_code: "engine_unavailable".into(),
+                message_redacted: "Configured executor is unavailable".into(),
+                result_manifest: None,
+            })
+            .unwrap()
+            .unwrap();
+
+        assert!(matches!(
+            store.retry_failed(
+                "other-user",
+                "client-1",
+                &original.job.job_id,
+                "6a17f3cb-a44b-46ab-9c5f-94e08f123ed1"
+            ),
+            Err(StoreError::JobNotFound)
+        ));
+        let retry_id = "6a17f3cb-a44b-46ab-9c5f-94e08f123ed1";
+        let retry = store
+            .retry_failed("user-1", "client-1", &original.job.job_id, retry_id)
+            .unwrap();
+        assert!(!retry.duplicate);
+        assert_eq!(retry.job.state, JobState::Queued);
+        assert_eq!(
+            retry.job.retry_of_job_id.as_deref(),
+            Some(original.job.job_id.as_str())
+        );
+        assert_eq!(
+            store.request_context(&retry.job.job_id).unwrap(),
+            store.request_context(&original.job.job_id).unwrap(),
+        );
+
+        let duplicate = store
+            .retry_failed("user-1", "client-1", &original.job.job_id, retry_id)
+            .unwrap();
+        assert!(duplicate.duplicate);
+        assert_eq!(duplicate.job.job_id, retry.job.job_id);
+
+        let claimed = store.claim_next_queued().unwrap().unwrap();
+        assert_eq!(claimed.job_id, retry.job.job_id);
+        let connection = store.connection.lock().unwrap();
+        let (cause, approved_by): (String, String) = connection.query_row(
+            "SELECT cause, approved_by FROM job_attempts WHERE job_id = ?1 AND attempt_number = 1",
+            [&retry.job.job_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        ).unwrap();
+        assert_eq!(cause, "manual_retry");
+        assert_eq!(approved_by, "authorized_client");
+    }
+
+    #[test]
+    fn manual_retry_refuses_interrupted_jobs() {
+        let store = JobStore::open_in_memory().unwrap();
+        let original = store.submit(request("request-interrupted", 9)).unwrap();
+        store.claim_next_queued().unwrap().unwrap();
+        store.mark_running_jobs_interrupted().unwrap();
+        assert!(matches!(
+            store.retry_failed(
+                "user-1",
+                "client-1",
+                &original.job.job_id,
+                "b4d8bf97-77fd-4223-9981-84c6e87c9261"
+            ),
+            Err(StoreError::InvalidRequest(_))
+        ));
+    }
+
+    #[test]
     fn run_next_marks_cancelled_only_after_a_cancel_request() {
         let store = JobStore::open_in_memory().unwrap();
         store.submit(request("request-1", 1)).unwrap();
@@ -870,6 +1097,7 @@ mod tests {
                     .unwrap();
                 JobExecutionOutcome::Cancelled {
                     message_redacted: "Executor confirmed cancellation".into(),
+                    result_manifest: None,
                 }
             })
             .unwrap()

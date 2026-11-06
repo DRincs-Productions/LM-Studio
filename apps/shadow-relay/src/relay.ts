@@ -123,8 +123,8 @@ export class AccountRelay extends DurableObject<Env> {
     return this.close(socket, 4001, "Unknown connection role");
   }
 
-  webSocketClose(socket: WebSocket, code: number, reason: string): void {
-    socket.close(code, reason);
+  webSocketClose(_socket: WebSocket, _code: number, _reason: string): void {
+    // The runtime has already closed the socket when this event is delivered.
   }
 
   webSocketError(socket: WebSocket): void {

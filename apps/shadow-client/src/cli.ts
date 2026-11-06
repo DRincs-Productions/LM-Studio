@@ -1,5 +1,10 @@
 #!/usr/bin/env node
 import { clientStatus, enrollClient, login, logout } from "./auth.js";
+import { copyFile, mkdir, readFile } from "node:fs/promises";
+import { constants } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 async function main(): Promise<void> {
   const command = process.argv[2] ?? "help";
@@ -27,7 +32,24 @@ async function main(): Promise<void> {
     console.log("Client authorization revoked and local credentials removed.");
     return;
   }
-  console.log("Shadow Controller client commands:\n  shadow-client login\n  shadow-client register\n  shadow-client status\n  shadow-client logout");
+  if (command === "install-skill") {
+    const codexHome = process.env.CODEX_HOME || join(homedir(), ".codex");
+    const destination = join(codexHome, "skills", "shadow-requests", "SKILL.md");
+    const source = join(dirname(fileURLToPath(import.meta.url)), "..", "skills", "shadow-requests", "SKILL.md");
+    await mkdir(dirname(destination), { recursive: true });
+    try {
+      const installed = await readFile(destination, "utf8");
+      const bundled = await readFile(source, "utf8");
+      if (installed !== bundled) throw new Error(`An existing Shadow Requests skill differs and was preserved: ${destination}`);
+      console.log(`Shadow Requests is already installed at ${destination}`);
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith("An existing Shadow Requests skill")) throw error;
+      await copyFile(source, destination, constants.COPYFILE_EXCL);
+      console.log(`Installed Shadow Requests at ${destination}`);
+    }
+    return;
+  }
+  console.log("Shadow Controller client commands:\n  shadow-client install-skill\n  shadow-client login\n  shadow-client register\n  shadow-client status\n  shadow-client logout");
 }
 
 main().catch((error: unknown) => {

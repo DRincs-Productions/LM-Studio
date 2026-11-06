@@ -1,25 +1,28 @@
-# Handoff 08 — Remote narration through Shadow Controller
+# Handoff 08 — Server narration through Shadow Controller
 
-## 1. Generic Codex connection
+## Client request and queue
 
-Continue the connection already started. The server accepts authenticated typed operations, validates input against the operation schema and enqueues by account and request ID. Dispatch one job at a time to server-side Codex, wait for the verified outcome, and move the job out of the active queue while retaining its terminal record. Use server-owned prompts, allowlisted tools and a bounded runtime. Cancellation and restart must preserve evidence and clean up only owned processes and model instances. An uncertain attempt must not replay automatically.
+The client exposes two narrative entrypoints through its MCP server: `shadow_submit_narration` for a chat brief and `shadow_submit_narration_file` for an explicitly selected UTF-8 file. The file tool reads and sends the file itself, so the client model does not need to inspect it before submission. Both send `narrative.generate` v1 with `projectId`, `projectSha256`, `brief`, optional `metadata`, and a stable request ID. Requests are authenticated, size-checked, persisted in the server SQLite FIFO queue and idempotent by request ID. Duplicate submissions return the existing job; conflicting reuse is rejected. Jobs are not automatically replayed after restart.
 
-## 2. Server narration skill
+`projectSha256` is currently an identifier supplied by the client. The server does not resolve a project registry or retrieve canonical project contents from that hash. If the client has authorized canon text, it can be included in `metadata.canon`; otherwise the Writer receives only the brief and the result records that the canon was absent. Do not claim that the server verified the revision or that the brief's content is approved merely because the hash is present.
 
-Create a self-contained skill under `skills/shadow-narration-coordinator` during implementation. Embed the operational steps and output rules in the skill. Codex first plans against the approved brief and pinned canon. Prefer a focused Qwen consultation on specific violent or intimate beats over a second full plan. Give Qwen advice weight in those beats when it fits canon, consent and scope. Codex resolves disagreements and authors the sole validated SceneContract.
+## Server workflow
 
-The installed Qwen3.5 27B Writer V2 Uncensored Heretic Q4_K_S is a candidate for an isolated consultation evaluation. Its existing configuration is a Writer profile. Inspect the actual prompt and runtime before selecting it, and evaluate a separate consultation profile without altering the Writer profile. Keep consultation optional until it demonstrates value.
+The server Coordinator executes one job at a time and uses the original brief and available canon directly. It does not ask Codex to plan or draft a proposal before Writer generation.
 
-Send the approved contract and operative NCF instructions from the narration skill to Hemmingway. Run Gemini Auto for at most five review submissions, using the narration, scene craft, continuity and line editing criteria. Codex makes the final canon and presentation check. Project Worker saves the English scene with inline cues and verifies its hash. Reuse deterministic MCP tools for validation, model execution, review evidence and finalization to limit repeated context and token use.
+1. The Writer creates the English scene with the project's Markdown envelope and NCF cue conventions. Cues are directions in text; the narration operation does not generate images, audio or animation assets.
+2. Gemini CLI in Auto mode reviews the original brief, available canon and latest usable draft. The Coordinator allows up to five review calls. Actionable feedback is sent to the Writer for a focused revision; a pass ends review early.
+3. If Gemini errors, refuses, returns malformed output or reaches the review limit, record the stage outcome and reason. Continue with the latest usable draft; do not represent an error or exhaustion as a pass.
+4. Codex receives the original brief, available canon, latest usable draft and Gemini stage outcomes. It checks the complete request and may make a bounded improvement. Accept only a scene matching the required artifact envelope; otherwise retain the latest usable draft and record the Codex error.
+5. Validate the selected scene, save stage evidence and the local manifest, upload it with rclone to `imagecloud:NarrationWorker/final/<jobId>/scene.md`, and download/read back the remote bytes. Compare SHA-256 before returning a reference.
+6. Unload the job-owned Writer model after the complete review cycle. Gemini and Codex are command processes and must have exited before delivery. Cleanup failure is included in the manifest and changes an otherwise usable result to `completed_with_warnings`. Cancellation, timeout, process failure and interruption preserve evidence; uncertain work is not replayed automatically.
 
-## 3. Narration operation
+The server requires `SHADOW_NARRATION_MODEL`. Optional environment settings are `SHADOW_LM_API_BASE_URL` (default `http://127.0.0.1:1234`), `SHADOW_NARRATION_CONTEXT`, `SHADOW_LMS_EXECUTABLE`, `SHADOW_GEMINI_EXECUTABLE`, `SHADOW_CODEX_EXECUTABLE`, and `SHADOW_RCLONE_EXECUTABLE`. The same server account needs the configured LM Studio model, `lms`, Gemini CLI, authenticated Codex CLI and the rclone `imagecloud:` remote.
 
-Register `narrative.generate` v1 explicitly. Resolve the project within the authenticated account, pin and recheck its canonical hash, and pass the approved brief as data. Treat optional metadata as descriptive. Return the verified scene and hash via the relay, with bounded retrieval for content larger than the relay envelope. Return prose and cue descriptions only. Asset production is an independent client decision.
+## Result and client retrieval
 
-## 4. Client activation and acceptance
+The authenticated job status includes the server result manifest. It carries `jobId`, `requestId`, manifest status (`succeeded`, `completed_with_warnings`, `failed`, or `cancelled`), `narrativeRemotePath`, `narrativeSha256`, `projectSha256`, `selectedDraft`, stage outcomes/attempts/error codes/reasons, and warnings where applicable. A path and hash are returned only for a usable, remotely verified scene. Queue state may be `succeeded` while the manifest status is `completed_with_warnings`; the manifest is authoritative for stage outcomes.
 
-After a real relay run from an enrolled client verifies completion and byte-identical retrieval, enable `@shadow-narration` through the client plugin. Verify duplicate submission, stale canon, cancellation, restart and retrieval after reconnect. Preserve evidence from the previous successful narration cycle and consolidate that path. The prior cycle does not establish that cross-PC relay delivery works.
+The client calls `get_narration_result` with `jobId`. That MCP tool resolves the authenticated job status, downloads only the expected OneDrive path through rclone, verifies the SHA-256, and writes an exclusive local copy. The client must complete this download and integrity check before reading or analysing the scene. A failed verification returns an error and no usable local path.
 
-### Resource lifecycle
-
-Keep the same Qwen instance loaded across consultation turns. Unload that instance and verify its removal before loading the Writer. Before returning the result to the Coordinator, stop any remaining job-owned Gemini processes and unload any remaining job-owned local models. Apply the same cleanup on failure and cancellation. Block further dispatch if cleanup cannot be verified. Prefer MCP tools for the consultation session and deterministic lifecycle checks. Audit existing tools and callers before removing any obsolete entry.
+The client skill is [Shadow Requests](../apps/shadow-client/skills/shadow-requests/SKILL.md), included in the client package and installed with `shadow-client install-skill`. The standalone local planning role is separately documented in [Handoff 09 — Bionic Regia](09-bionic-regia.md).
