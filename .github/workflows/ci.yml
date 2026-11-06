@@ -13,6 +13,8 @@ jobs:
   desktop-and-coordinator:
     runs-on: windows-latest
     steps:
+      - name: Enable Windows long paths for checkout
+        run: git config --global core.longpaths true
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
