@@ -1,8 +1,13 @@
 {
   "name": "shadow-controller-mcp-client",
   "version": "0.1.0",
-  "description": "Shadow Controller desktop client authentication and MCP integration",
+  "description": "Shadow Controller client CLI and authenticated MCP server",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DRincs-Productions/LM-Studio.git",
+    "directory": "apps/shadow-client"
+  },
   "bin": {
     "shadow-client": "dist/cli.js",
     "shadow-controller-mcp": "dist/server.js"

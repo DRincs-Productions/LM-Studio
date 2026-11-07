@@ -39,6 +39,34 @@ jobs:
       - run: npm ci
       - run: npm run build
 
+      - name: Verify npm package contents
+        run: |
+          node --input-type=module <<'NODE'
+          import { spawnSync } from 'node:child_process';
+
+          const result = spawnSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], { encoding: 'utf8' });
+          if (result.status !== 0) {
+            process.stderr.write(result.stderr || 'npm pack dry run failed.\n');
+            process.exit(result.status || 1);
+          }
+          const files = new Set(JSON.parse(result.stdout)[0].files.map(file => file.path));
+          const required = [
+            'package.json',
+            'README.md',
+            'dist/cli.js',
+            'dist/server.js',
+            'assets/auth-browser.html',
+            'assets/auth-browser.js',
+            'skills/shadow-requests/SKILL.md'
+          ];
+          const missing = required.filter(file => !files.has(file));
+          if (missing.length) {
+            console.error(`npm tarball is missing required files: ${missing.join(', ')}`);
+            process.exit(1);
+          }
+          console.log(`Verified ${files.size} packed files for ${JSON.parse(result.stdout)[0].filename}.`);
+          NODE
+
       - name: Publish package
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

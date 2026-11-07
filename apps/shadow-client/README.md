@@ -8,17 +8,28 @@ For `codex.execute` v1, the client accepts only `{ "task": "..." }`. For `narrat
 
 ## Commands
 
-Install this package from the local repository checkout; it is not published to the npm registry:
+Install the published package from npm:
 
 ```powershell
-npm install --global .\apps\shadow-client
+npm install --global shadow-controller-mcp-client
 shadow-client login
 shadow-client status
 shadow-client logout
 shadow-client install-skill
 ```
 
-Run the install command from the repository root. It installs the local package and exposes the `shadow-client` login utility and `shadow-controller-mcp` server command. During package development, run commands from this directory with `npm run start -- <command>` after building.
+The package exposes `shadow-client` for login and account management and `shadow-controller-mcp` for the Codex MCP connection. During package development, run commands from this directory with `npm run start -- <command>` after building.
+
+## Publishing a release
+
+GitHub Actions publishes this package when a `lib-v<version>` tag is pushed. Set the repository Actions secret `NPM_TOKEN` to an npm publish token. Update both `package.json` and `package-lock.json` to the release version, commit and push the changes, then create and push a matching tag. For example, when both manifests contain `0.1.0`:
+
+```powershell
+git tag lib-v0.1.0
+git push origin lib-v0.1.0
+```
+
+The workflow checks that the tag matches the package version, installs dependencies, builds the CLI/MCP server, checks the npm tarball contents, publishes stable versions under `latest` and prereleases under `next`, then creates a GitHub Release. See [`release-lib.yml`](../../.github/workflows/release-lib.yml).
 
 Run `shadow-client install-skill` to install the bundled `shadow-requests` skill into Codex's skills directory. Register the local MCP server in Codex using the installed `shadow-controller-mcp` command. Set `SHADOW_RELAY_URL` in the MCP process environment and as a user environment variable on the paired server to the relay HTTPS base URL. On the server configure `SHADOW_NARRATION_MODEL` to an installed LM Studio model identifier; optionally set `SHADOW_LM_API_BASE_URL` (default `http://127.0.0.1:1234`), `SHADOW_NARRATION_CONTEXT`, `SHADOW_LMS_EXECUTABLE`, `SHADOW_GEMINI_EXECUTABLE`, `SHADOW_CODEX_EXECUTABLE`, and `SHADOW_RCLONE_EXECUTABLE`. For Windows, set Gemini's executable to its bundled `gemini.js` path and Codex's to an executable or Node-compatible `.js` entrypoint. The server user must have working LM Studio, `lms`, Gemini CLI in Auto mode, authenticated Codex CLI, and rclone's `imagecloud:` remote. `shadow_submit_job` with operation `codex.execute` and payload `{ "task": "..." }` queues a generic task. Use the returned requestId/jobId to poll; no automatic resubmission occurs. Run logs, stage records and manifests are kept in the server app data directory. The skill file is bundled at `skills/shadow-requests/SKILL.md`.
 
