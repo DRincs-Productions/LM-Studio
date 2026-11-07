@@ -1,0 +1,59 @@
+## PROMPT 3 — Normal Narration
+
+**ROLE**
+You are a third-person narrator, focalised on Davide. Write a realistic scene of small-scale family conflict, in near-continuous real time. No narrator commentary, no moral at the end.
+
+**EXACT TASK**
+You do not invent the plot. The plot is in **MANDATORY OUTLINE**. You rewrite it in prose, beat by beat, filling it with dialogue, gestures, objects, heat, background noise. You may only add: lines of dialogue, minor gestures, sensations. You may not add events, drop beats, change the order, or introduce significant characters or objects.
+
+**REGISTER**
+Present tense. Standard Italian setting with spoken Bolognese in the dialogue. Long sentences when they are killing time, short ones when they fight. Very concrete: objects matter more than declarations. Bitter comedy, never sentimental. The heat is a physical fact, not a metaphor.
+
+**CAST**
+
+- **DAVIDE MANFREDI, 34.** Back from Berlin two days ago after ten years. Thin, long curly hair badly tied back, patchy beard, grey t-shirt with a hole over the stomach. Walking barefoot on the terracotta. One of those relatives who leaves and then comes back to legislate on memory. Stated goal: save what can be saved. Real goal: postpone.
+- **ELENA MANFREDI, 41.** Older sister. She held the house and the mother for four years. Badly dyed short hair, hard shoulders, tracksuit shorts, glasses pushed up on her head. Practical to the point of rudeness. Goal: empty house in three days, deed signed Monday, and no discussion.
+- **IRIS BULGARELLI, 78.** Neighbour from downstairs. Brings up a tray with a cake and stays too long. Knows everything about the building. Takes no side, but tilts.
+
+**SETTING**
+Fourth-floor flat with no lift, Mazzini district, Bologna, 10 August, 3:20 p.m. Shutters drawn to, table fan moving warm air. Rooms half emptied: open boxes, packing tape, a sofa already under a sheet, pale marks on the walls where the pictures were. Smell of mothballs and of a shut house stirred up. A radio comes up from the courtyard.
+
+**MANDATORY OUTLINE** (fixed order, nothing added)
+
+1. Davide in the corridor, on his knees in front of a box of crockery, wrapping a plate in newspaper. Elena in the kitchen, back turned, stripping a wall cupboard.
+2. Elena tells him to throw out the broken crockery instead of wrapping it. Brief, pointless squabble about twenty-four pieces of cutlery.
+3. Davide goes into the bedroom. The wardrobe is open. On the top shelf there is a light blue cardboard folder. He takes it.
+4. Inside are the mother's medical records. Reports, dates, stamps, the name of a ward.
+5. Davide sits on the edge of the unmade bed and starts reading the dates. The fan points at him.
+6. Elena comes in and says she has already seen those, they go in the bin as well.
+7. Davide asks since when. She answers: "Since it started." He shows her the first date.
+8. Elena realises what he is holding and sits down too, but on the opposite side of the bed, far away.
+9. Davide reads a date aloud, then another, then the name of a treatment. Elena stops correcting him.
+10. Davide reaches the last page. The count is four years. He knew eight months. He says so.
+11. Elena says from Berlin nothing could be done, that he called on Sundays, that the calls lasted six minutes.
+12. Davide answers that six minutes were the ones she allowed. Elena doesn't reply and starts wrapping again, but gets it wrong and balls up the newspaper.
+13. The intercom rings. It's Iris with the tray. Elena buzzes her in, to have something to do.
+14. Iris comes in, sets the cake on the table, looks at the boxes, says one thing about the mother that neither of them expected. Then asks if they can give her the geranium pot from the balcony.
+15. Elena says yes. Davide says he's taking the pot to Berlin. It's a trifle and they fight about it anyway.
+16. Iris leaves. Silence. They sit on the floor in the kitchen, one on each side of the table, and eat the cake with their hands. Elena tells him to take the piano, since there's no room for it in this house any more. Close on a physical detail.
+
+**CONSTRAINTS**
+- Length: 1200-1500 words.
+- No blood, no sex, no physical violence.
+- No twist beyond the one in the outline. No further secret.
+- Forbidden: crying as an emotional shortcut, "a silence that said everything", weather used as a mood.
+- The conflict does not resolve. Nobody apologises.
+- Mandatory: objects being moved, the heat, the radio from the courtyard, the sound of the tape.
+- Dialect in dialogue only, and only where it would come naturally.
+- Close on beat 16, with no reflection.
+
+**VISUAL BEATS** (panel framings)
+
+1. Medium shot, backlit by the shutters. Davide in the corridor wrapping a plate, boxes around him, the t-shirt with the hole.
+2. Detail. Elena's hands pulling a cupboard door off, the contents sliding, glasses knocking together.
+3. Low medium shot. Davide in front of the open wardrobe, arm raised to the shelf, the light blue folder backlit.
+4. High close-up. The records open on the unmade sheet, the stamps, a date circled in pen.
+5. Wide lateral shot. The two of them sitting on opposite sides of the bed, the fan between them, the width of the mattress.
+6. Frontal close-up. Davide reading aloud, mouth open, eyes on the page and not on his sister.
+7. Medium shot at the doorway. Iris on the threshold with the tray, the boxes in front of her, her duty smile.
+8. Low medium shot, table light. The two of them on the kitchen floor, the cake between them, crumbs on their knees.

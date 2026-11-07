@@ -1,0 +1,63 @@
+## Cyberpunk psicosi - Part 2
+
+**ROLE**
+You are a third-person narrator with alternating focalisation between Ren and Mira, anchored on Ren. Write a cyberpunk heist that degenerates into a massacre and ends with the death of both protagonists. Explicit gore. No commentary, no moral at the end.
+
+**EXACT TASK**
+You do not invent the plot. The plot is in **MANDATORY OUTLINE**. You rewrite it in prose, beat by beat, filling it with dialogue, bodies, blood, sound, smell, material detail. You may only add: lines of dialogue, minor gestures, sensations. You may not add events, drop beats, change the order, or introduce significant characters or objects.
+
+**REGISTER**
+Present tense. Clipped sentences, nominal where needed, a rhythm that accelerates beat by beat until it turns staccato. Concrete, material vocabulary: metal, latex, ozone, copper, cooked meat. No epic tone: the massacre is dirty, loud, uncomfortable.
+
+**THE KEY POINT — DOUBLE CONSCIOUSNESS**
+From the middle of the outline onward, Ren is not fully present. His body runs half a second ahead of his thought: the hand goes, then he looks at what it did. His visual field tears into glitches, he hears a hum nobody else hears, he loses chunks of time. **And he enjoys it.** Write it as pleasure, not agony: he hums a radio tune, he laughs, he apologises to the dead mid-stroke, he stops for a moment to admire the colour. Alternate very brief moments of lucidity, in which he understands, and immediately slides back. Mira is the only one who tries to call him back, and that must be planted early so her death lands.
+
+**CAST**
+
+- **RENZO "REN" VESPA, 34.** Ex-corporate security, discharged with a debt and one implant too many. Chrome: subdermal plates on forearms and sternum, retractable monofilament blade in the right forearm, artificial eyes with brass bezels, spinal shunt, black renal filter. Skin grey with scars, head shaved to the bone, a snake tattoo on the left arm interrupted by a burn. His neural buffer is patched with contraband firmware and runs hot. Heavy body, broad shoulders, moves with a delay that looks like slowness and isn't.
+- **MIRA SARTI, 29.** Netrunner and handler. Chrome: reinforced dermal weave, tendon prosthetics in both legs, optic overlay, data port behind her right ear. Thin, quick, short black hair with bleached roots, an oversized synthetic leather jacket. Calm, practical, few words. Goal: get the cargo out and get Ren out. She never says it aloud.
+- **Antagonists in order of appearance**: 2 interior guards, 1 patrol guard, 4 lobby security, street crowd, 2 patrol officers, 1 drone, 6 riot squad men, 1 sniper on a balcony, netrunner support (never shown). Weapons: electric batons, shotguns, service pistols.
+
+**SETTING**
+Porto Ferro, Adriatic megacity, 3:40 a.m., fine warm rain. Dock district, old organ-storage clinic "SAN CALOGERO": concrete yard with containers, loading ramp, blue-lit corridor, extraction room, refrigerated vault, lobby with a fake marble counter, exit onto a four-lane avenue with shuttered stalls. The vault floor has drainage grates. Smell of disinfectant, of ozone, then of copper.
+
+**MANDATORY OUTLINE** (fixed order, nothing added)
+
+1. Yard in the rain. Mira on the ramp lock, Ren covering with his back to her, motionless. Minimal, technical dialogue.
+2. Blue corridor. Two interior guards. Ren opens them with the mono, fast and clean. First blood, control still total.
+3. The buffer glitches: his right eye desynchronises, he hears the hum. He shakes his head, tells Mira he's fine.
+4. Vault. Mira detaches the neural buffer crate from the rack. A patrol guard wakes and fires: round to Ren's shoulder, plate punched through, splinters.
+5. Ren kills him. And doesn't stop: keeps cutting the corpse, sitting on his heels, laughing low.
+6. The alarm goes. Mira yells at him to move. He stands and walks, instead of running.
+7. Lobby. Four security. Ren goes through them. Mono, sprays, a severed hand on the counter. Mira picks up one of their pistols.
+8. Avenue. Night crowd. Ren cuts through the people. A courier, a woman with groceries, a kid with a balloon.
+9. Mira calls his name, dragging the crate. He doesn't hear.
+10. First patrol: two officers and a drone. Ren shoots the drone out of the air with the stolen pistol, then the two officers. The drone drops and sputters in the puddle.
+11. The riot van arrives, six men with shields. Ren goes through them. A shotgun blast opens his cheek: the plate is underneath, not muscle.
+12. Ren hums. He is elsewhere. Blood reaches his ankles in the puddle: he dips a finger in and looks at it as if it were a nice colour.
+13. Second wave, heavier, with netrunner support and a sniper on a balcony. His left leg gives. He keeps going on three limbs.
+14. Mira drops the crate, steps in front of him, hands open, and calls him. He stops. For one second he recognises her.
+15. He takes her head in both hands, almost tenderly. Then the blade opens her throat and runs down into her chest. She goes down. He doesn't seem to register it.
+16. He stays over her. The sniper fires and takes his already ruined shoulder. He turns toward the balcony.
+17. He kills the sniper. Meanwhile the buffer is cooking his skull: smoke from the cranial seams, fingers stiffening.
+18. He drops to his knees. A wounded officer drags himself over and puts a round through his eye. Silence. Rain. Close on a physical detail.
+
+**CONSTRAINTS**
+- Length: 1500-1800 words.
+- Gore: explicit. Colour, temperature, texture, direction of sprays, pools, clots, smell of copper and cooked meat, steam in the puddles.
+- The double consciousness and the enjoyment must be present across at least five consecutive beats (7 to 13), with at least three different signals: humming, laughing, apologising, admiring, wasting time.
+- Forbidden: "in the grip of madness", "he was no longer himself", "like an animal", generic war metaphors.
+- Mandatory: Ren's body failing in stages, damage tracked precisely.
+- Mira does not monologue. Few words, concrete, and at the end only his name.
+- Close on beat 18, with no reflection.
+
+**VISUAL BEATS** (panel framings)
+
+1. Medium shot, backlit rain. Mira bent over the lock, Ren covering with his back to her, blade half drawn, neon reflection in the puddle.
+2. Macro detail. The mono open on the first guard's throat, the line of blood starting before the man falls.
+3. Close-up. Ren's artificial eye desynchronising, brass bezel spinning free, pupil out of alignment.
+4. Low medium shot, blue light. Ren on his heels over the guard's corpse, blade raised, grin showing, spatter across the forearm plates.
+5. Wide frontal shot. The avenue: Ren in the middle of the crowd, figures opening at the sides, a balloon rising, Mira's shape behind him with the crate.
+6. Frontal close-up, lightning. The opened cheek, bare plate beneath, blood running into his collar. Eyes out of focus, mouth humming.
+7. High detail. Ren's finger in the red puddle, the widening ring, the fingertip lifting dripping.
+8. Medium shot, smoke. Ren on his knees, skull smoking from the seams, Mira face-up in front of him with her throat open, the empty avenue around them.
