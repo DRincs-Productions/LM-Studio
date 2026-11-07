@@ -7,6 +7,7 @@ import { createServer } from "http";
 var API_KEY = "AIzaSyCO-OtHIxbarCVRGh3qLDeNhUT2ArrngUY";
 var PROJECT_ID = "shadow-controller-20261103";
 var FIRESTORE_DOCUMENTS_URL = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents`;
+var FIRESTORE_DOCUMENTS_RESOURCE = `projects/${PROJECT_ID}/databases/(default)/documents`;
 var AUTH_ORIGIN = `https://${PROJECT_ID}.firebaseapp.com`;
 var KEYRING_SERVICE = "com.drincs.shadowcontroller.client";
 var KEYRING_ACCOUNT = "firebase-session";
@@ -55,7 +56,9 @@ async function enrollClient() {
   if (refreshed.user_id !== credential.uid) throw new Error("Firebase refreshed credentials for a different account.");
   credential = { ...credential, refreshToken: refreshed.refresh_token };
   saveCredential(credential);
-  const documentUrl = `${FIRESTORE_DOCUMENTS_URL}/accounts/${credential.uid}/authorizedClients/${credential.clientId}`;
+  const documentPath = `accounts/${credential.uid}/authorizedClients/${credential.clientId}`;
+  const documentUrl = `${FIRESTORE_DOCUMENTS_URL}/${documentPath}`;
+  const documentName = `${FIRESTORE_DOCUMENTS_RESOURCE}/${documentPath}`;
   const existing = await fetch(documentUrl, { headers: { Authorization: `Bearer ${refreshed.id_token}` } });
   if (existing.ok) {
     const document = await existing.json();
@@ -75,7 +78,7 @@ async function enrollClient() {
     body: JSON.stringify({
       writes: [{
         update: {
-          name: documentUrl,
+          name: documentName,
           fields: {
             displayName: { stringValue: credential.displayName },
             publicKey: { stringValue: credential.publicKey }
@@ -85,10 +88,21 @@ async function enrollClient() {
       }]
     })
   });
-  if (!registration.ok) throw new Error("Firebase rejected client enrollment. Check the Firestore database and security rules.");
+  if (!registration.ok) throw await firebaseResponseError("Firebase rejected client enrollment", registration);
   credential = { ...credential, registered: true };
   saveCredential(credential);
   return credential;
+}
+async function firebaseResponseError(context, response) {
+  let detail = "";
+  try {
+    const body = await response.json();
+    const status = typeof body.error?.status === "string" ? body.error.status : "";
+    const message = typeof body.error?.message === "string" ? body.error.message : "";
+    detail = [status, message].filter(Boolean).join(": ");
+  } catch {
+  }
+  return new Error(`${context} (HTTP ${response.status}${detail ? `: ${detail.slice(0, 300)}` : ""}).`);
 }
 async function logout() {
   const credential = readCredential();

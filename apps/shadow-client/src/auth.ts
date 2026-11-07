@@ -7,6 +7,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 const API_KEY = "AIzaSyCO-OtHIxbarCVRGh3qLDeNhUT2ArrngUY";
 const PROJECT_ID = "shadow-controller-20261103";
 const FIRESTORE_DOCUMENTS_URL = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents`;
+const FIRESTORE_DOCUMENTS_RESOURCE = `projects/${PROJECT_ID}/databases/(default)/documents`;
 const AUTH_ORIGIN = `https://${PROJECT_ID}.firebaseapp.com`;
 const KEYRING_SERVICE = "com.drincs.shadowcontroller.client";
 const KEYRING_ACCOUNT = "firebase-session";
@@ -98,7 +99,9 @@ export async function enrollClient(): Promise<ClientCredential> {
   credential = { ...credential, refreshToken: refreshed.refresh_token };
   saveCredential(credential);
 
-  const documentUrl = `${FIRESTORE_DOCUMENTS_URL}/accounts/${credential.uid}/authorizedClients/${credential.clientId}`;
+  const documentPath = `accounts/${credential.uid}/authorizedClients/${credential.clientId}`;
+  const documentUrl = `${FIRESTORE_DOCUMENTS_URL}/${documentPath}`;
+  const documentName = `${FIRESTORE_DOCUMENTS_RESOURCE}/${documentPath}`;
   const existing = await fetch(documentUrl, { headers: { Authorization: `Bearer ${refreshed.id_token}` } });
   if (existing.ok) {
     const document = await existing.json() as FirestoreDocument;
@@ -119,7 +122,7 @@ export async function enrollClient(): Promise<ClientCredential> {
     body: JSON.stringify({
       writes: [{
         update: {
-          name: documentUrl,
+          name: documentName,
           fields: {
             displayName: { stringValue: credential.displayName },
             publicKey: { stringValue: credential.publicKey },
@@ -129,10 +132,23 @@ export async function enrollClient(): Promise<ClientCredential> {
       }],
     }),
   });
-  if (!registration.ok) throw new Error("Firebase rejected client enrollment. Check the Firestore database and security rules.");
+  if (!registration.ok) throw await firebaseResponseError("Firebase rejected client enrollment", registration);
   credential = { ...credential, registered: true };
   saveCredential(credential);
   return credential;
+}
+
+async function firebaseResponseError(context: string, response: Response): Promise<Error> {
+  let detail = "";
+  try {
+    const body = await response.json() as { error?: { message?: unknown; status?: unknown } };
+    const status = typeof body.error?.status === "string" ? body.error.status : "";
+    const message = typeof body.error?.message === "string" ? body.error.message : "";
+    detail = [status, message].filter(Boolean).join(": ");
+  } catch {
+    // Keep the HTTP status useful even when Firebase returns a non-JSON body.
+  }
+  return new Error(`${context} (HTTP ${response.status}${detail ? `: ${detail.slice(0, 300)}` : ""}).`);
 }
 
 export async function logout(): Promise<void> {
