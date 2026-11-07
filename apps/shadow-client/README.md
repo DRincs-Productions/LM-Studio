@@ -8,15 +8,18 @@ For `codex.execute` v1, the client accepts only `{ "task": "..." }`. For `narrat
 
 ## Commands
 
+Install this package from the local repository checkout; it is not published to the npm registry:
+
 ```powershell
-npx --yes --package shadow-controller-mcp-client shadow-client login
-npx --yes --package shadow-controller-mcp-client shadow-client status
-npx --yes --package shadow-controller-mcp-client shadow-client logout
-npx --yes --package shadow-controller-mcp-client shadow-client install-skill
+npm install --global .\apps\shadow-client
+shadow-client login
+shadow-client status
+shadow-client logout
+shadow-client install-skill
 ```
 
-During repository development, run the same commands from this directory with `npm run start -- <command>` after building.
+Run the install command from the repository root. It installs the local package and exposes the `shadow-client` login utility and `shadow-controller-mcp` server command. During package development, run commands from this directory with `npm run start -- <command>` after building.
 
-Run `shadow-client install-skill` to install the bundled `shadow-requests` skill into Codex's skills directory. Register the local MCP server in Codex with command `node` and argument `C:\\path\\to\\apps\\shadow-client\\dist\\server.js`. Set `SHADOW_RELAY_URL` in the MCP process environment and as a user environment variable on the paired server to the relay HTTPS base URL. On the server configure `SHADOW_NARRATION_MODEL` to an installed LM Studio model identifier; optionally set `SHADOW_LM_API_BASE_URL` (default `http://127.0.0.1:1234`), `SHADOW_NARRATION_CONTEXT`, `SHADOW_LMS_EXECUTABLE`, `SHADOW_GEMINI_EXECUTABLE`, `SHADOW_CODEX_EXECUTABLE`, and `SHADOW_RCLONE_EXECUTABLE`. For Windows, set Gemini's executable to its bundled `gemini.js` path and Codex's to an executable or Node-compatible `.js` entrypoint. The server user must have working LM Studio, `lms`, Gemini CLI in Auto mode, authenticated Codex CLI, and rclone's `imagecloud:` remote. `shadow_submit_job` with operation `codex.execute` and payload `{ "task": "..." }` queues a generic task. Use the returned requestId/jobId to poll; no automatic resubmission occurs. Run logs, stage records and manifests are kept in the server app data directory. The skill file is bundled at `skills/shadow-requests/SKILL.md`.
+Run `shadow-client install-skill` to install the bundled `shadow-requests` skill into Codex's skills directory. Register the local MCP server in Codex using the installed `shadow-controller-mcp` command. Set `SHADOW_RELAY_URL` in the MCP process environment and as a user environment variable on the paired server to the relay HTTPS base URL. On the server configure `SHADOW_NARRATION_MODEL` to an installed LM Studio model identifier; optionally set `SHADOW_LM_API_BASE_URL` (default `http://127.0.0.1:1234`), `SHADOW_NARRATION_CONTEXT`, `SHADOW_LMS_EXECUTABLE`, `SHADOW_GEMINI_EXECUTABLE`, `SHADOW_CODEX_EXECUTABLE`, and `SHADOW_RCLONE_EXECUTABLE`. For Windows, set Gemini's executable to its bundled `gemini.js` path and Codex's to an executable or Node-compatible `.js` entrypoint. The server user must have working LM Studio, `lms`, Gemini CLI in Auto mode, authenticated Codex CLI, and rclone's `imagecloud:` remote. `shadow_submit_job` with operation `codex.execute` and payload `{ "task": "..." }` queues a generic task. Use the returned requestId/jobId to poll; no automatic resubmission occurs. Run logs, stage records and manifests are kept in the server app data directory. The skill file is bundled at `skills/shadow-requests/SKILL.md`.
 
 `login` signs in and enrolls a new client. `register` retries an interrupted Firestore enrollment. `logout` removes the Firebase client record before deleting local credentials. If revocation fails, the credentials remain in the OS keychain so the operation can be retried; the desktop Security screen can also revoke an existing client.
