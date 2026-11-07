@@ -4,7 +4,7 @@ import {
   enrollClient,
   login,
   logout
-} from "./chunk-T3RSEUCF.js";
+} from "./chunk-2GDCAL2J.js";
 
 // src/cli.ts
 import { copyFile, mkdir, readFile } from "fs/promises";

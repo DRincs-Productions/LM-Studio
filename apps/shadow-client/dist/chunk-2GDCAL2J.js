@@ -220,8 +220,8 @@ function sendCallbackResponse(response, status, body) {
   response.end(body);
 }
 async function openSystemBrowser(url) {
-  const command = process.platform === "win32" ? "cmd.exe" : process.platform === "darwin" ? "open" : "xdg-open";
-  const args = process.platform === "win32" ? ["/c", "start", "", url] : [url];
+  const command = process.platform === "win32" ? "rundll32.exe" : process.platform === "darwin" ? "open" : "xdg-open";
+  const args = process.platform === "win32" ? ["url.dll,FileProtocolHandler", url] : [url];
   await new Promise((resolve, reject) => {
     const child = spawn(command, args, { detached: true, stdio: "ignore", windowsHide: true });
     child.once("error", reject);
