@@ -1,0 +1,7 @@
+{
+  "name": "shadow-narration",
+  "version": "0.1.0",
+  "description": "Submit narrative jobs to a paired Shadow Controller",
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json"
+}

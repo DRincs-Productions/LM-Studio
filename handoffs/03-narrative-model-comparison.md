@@ -1,6 +1,6 @@
 # Handoff 03 — Confronto modelli narrativi
 
-**Status (5 November 2026):** The Hemmingway–Magidonia NCF comparison is complete across fresh normal, hot, and violent fixtures; results are in `docs/CONFRONTO-MODELLI-NARRAZIONE.md`. Hemmingway remains the operational Writer; both Hemmingway and Magidonia remain installed at the user's direction. Gemory 26B-A4B Q4_K_M completed download verification and its isolated normal, hot, and violent tests, but was not promoted because of endpoint and constraint failures. At the user's request, its main GGUF and 1.19 GB mmproj were moved to the Recycle Bin, and its Bionic profile was removed from the repository and pushed in commit `61d0ec5`. The model is absent from `lms ls`, but the GGUF files still occupy disk space until permanently removed from the Recycle Bin. Test outcomes remain in `docs/CONFRONTO-MODELLI-NARRAZIONE.md` and `production-tests/WRITER-GEMORY-26B-A4B-Q4_K_M-2026-11-05.md`. Hearthfire is also evaluated and removed; its config and evidence remain historical. The user declined to pursue Venice Role Play Uncensored; it has been removed from the candidate list and must not be downloaded or scheduled for testing.
+**Status (5 November 2026):** The Hemmingway–Magidonia NCF comparison and Gemini-reviewed matched comparison are complete; reports are in `docs/CONFRONTO-MODELLI-NARRAZIONE.md` and `docs/WRITER-GEMINI-REVIEWED-COMPARISON-2026-11-05.md`. Hemmingway is the selected Writer and winner. The Magidonia and Qwen3 8B Reviewer Bionic profiles have been removed. Their GGUF files remain in LM Studio because terminal deletion was rejected by the environment. Gemini CLI Auto is the selected Narrative Reviewer using scene-craft, revision-continuity, and line-editing criteria. Gemini has no MCP access; Codex owns planning, tools, revisions, and final approval. Gemini timed out on both post-revision reviews in the comparison, so runtime failure stops the gate and preserves logs. Gemory and Hearthfire remain historical removals with evidence preserved.
 **Ambito:** test isolati del Writer narrativo su Shadow con LM Studio; nessuna sostituzione automatica del modello operativo.
 
 ## Obiettivo
@@ -18,13 +18,13 @@ Confrontare nuovi modelli narrativi con il Writer attualmente operativo (**Hemmi
 - **Scheda:** https://huggingface.co/LatitudeGames/Hearthfire-24B
 - **Local status:** The GGUF was permanently removed on 5 November 2026 after evaluation. Keep its config and reports as historical evidence; do not download it again without a new request.
 
-### 2. Magidonia 24B v4.3 — evaluation complete; retained
+### 2. Magidonia 24B v4.3 — historical evaluation complete; Bionic profile removed
 
 - **Autore/famiglia dichiarati:** TheDrummer; 24B; linea Magistral/Mistral.
 - **Motivo della prova:** candidato orientato a scrittura creativa e roleplay, con attenzione dichiarata a qualità della prosa, dinamismo, coerenza e istruzioni.
 - **Ipotesi da verificare:** alternativa a Cydonia per scene drammatiche, violente e revisioni circoscritte. La provenienza dallo stesso autore **non** dimostra equivalenza con Cydonia.
 - **GGUF:** https://huggingface.co/bartowski/TheDrummer_Magidonia-24B-v4.3-GGUF
-- **Evaluation status:** The isolated normal, hot, and violent cases and a matched Hemmingway comparison are complete. Keep installed at the user's direction; see `docs/CONFRONTO-MODELLI-NARRAZIONE.md`.
+- **Evaluation status:** The isolated normal, hot, and violent cases and a matched Hemmingway comparison are complete. Hemmingway was selected as the winner. The Bionic profile was removed, but its GGUF remains in LM Studio because terminal deletion was rejected by the environment; see `docs/CONFRONTO-MODELLI-NARRAZIONE.md`.
 
 ### 3. Gemory 26B-A4B — isolated evaluation complete; removed at user's request
 
@@ -74,12 +74,12 @@ Scores are provisional human reviews of independent fixtures, not a paired head-
 - **Magidonia hot:** it preserves the ring detail and the revision adds a direct, mutual-consent exchange before sexual contact. The ending introduces a “tomorrow” plan despite the instruction to pause without future plans.
 - **Magidonia violent:** vivid injury detail, the red field bandage, consciousness-maintaining dialogue, and Visual cues are present. However, it invents a precise timeline and the injured person's children, and continues through extraction and a secondary transfer after rescue workers take over.
 
-**Assessment:** neither model is promoted. Magidonia's hot prose was the strongest sample and its normal scene followed the endpoint more closely, while Hearthfire was faster on the hot and violent cases. Both retain material canon or endpoint failures. Keep both models installed until the user chooses which to remove; do not infer a winner from these independent single samples.
+**Historical assessment:** these independent samples did not establish a winner. The later Gemini-reviewed matched comparison selected Hemmingway as the Writer; Magidonia was removed at the user's direction.
 
 ## Integrazione e vincoli
 
 - I test sono **isolati**: non modificano la pipeline dello Scrittore né il modello Writer operativo senza una decisione successiva.
-- **Qwen3 8B rimane il Narrative Reviewer**. L'eventuale confronto Gemini/Qwen3 per la review è una valutazione separata, descritta nell'handoff 01.
+- **Gemini CLI in Auto mode is the selected Narrative Reviewer**, applying relevant criteria from `scene-craft`, `revision-continuity`, and `line-editing`. Gemini has no MCP access; Codex retains coordination, tools, and final approval. Timeouts and errors stop the workflow and preserve logs. Hemmingway is the selected Writer; the Magidonia and Qwen3 8B Reviewer Bionic profiles were removed, while their GGUF files remain in LM Studio because terminal deletion was rejected.
 - Il Coordinatore Rust gestirà i job e le risorse; evitare di caricare contemporaneamente modelli che superano la VRAM disponibile.
 - Non cancellare modelli già installati, dati, configurazioni o file condivisi per fare spazio senza una verifica e approvazione esplicita.
 - Questo handoff è generale e non presuppone un prodotto visual novel. Le scene narrative sono semplicemente uno dei casi d'uso del sistema.

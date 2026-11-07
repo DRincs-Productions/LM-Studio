@@ -60,6 +60,18 @@ node_modules
 /apps/bionic/.internal/ng-sessions.sqlite-wal
 /project-worker/mcp/work/
 
-# Firebase CLI local deployment cache
+# Local Bionic/LM Studio runtime state; retain only checked-in MCP and model configs
+/apps/bionic/.internal/*
+!/apps/bionic/.internal/ng-mcp.json
+!/apps/bionic/.internal/user-concrete-model-default-config/
+!/apps/bionic/.internal/user-concrete-model-default-config/**
+
+# Local credentials, temporary downloads and runtime logs
+/mcp.json
+/settings.json
+/downloads/
+/server-logs/
+
+# Firebase CLI local deployment cache and TypeScript build metadata
 .firebase/
 *.tsbuildinfo

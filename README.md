@@ -101,7 +101,7 @@ The paired server Coordinator claims queued jobs and dispatches `codex.execute` 
 ```mermaid
 flowchart LR
     A[Codex client] --> B[Paired server queue]
-    B --> C[Writer + Gemini review + Codex final check]
+    B --> C[Writer + configured review and editing]
     C --> D[Saved run evidence and result manifest]
     D --> E[OneDrive via rclone · verified SHA-256]
     E --> B
@@ -114,11 +114,16 @@ flowchart TD
     C[Coordinatore]
     subgraph SCRITTORE[Scrittore]
         W[Hemmingway]
-        R[Gemini CLI Auto · Narrative Reviewer]
-        X[Controllo finale Codex]
-        W -->|richiesta di review| R
-        R -->|richiede modifiche · massimo 5 cicli| W
-        R -->|PASS, errore o limite raggiunto| X
+        G[Gemini CLI Auto · current default]
+        X[Codex final check · current default]
+        Q[Qwen2.5 14B · opt-in direct edit]
+        W -->|review request| G
+        G -->|localized correction · up to 5 cycles| W
+        G -->|PASS, error, or cycle limit| X
+        W -. optional Qwen backend .-> Q
+        Q -. direct edit or final edit .-> C
+        Q -. feedback-loop mode: localized feedback .-> W
+        W -. next draft · up to 5 cycles .-> Q
     end
     C -->|richiesta originale e canon disponibile| W
     X --> C
@@ -132,7 +137,9 @@ The matched 5 November NCF comparison selected Hemmingway as the Writer: it had 
 
 The installable [narration skill](skills/narration/SKILL.md) defines the scene artifact and Narrative Cue Format (NCF), combining Story Skills' medium-specific craft conventions with project cues for visual, audio, and animated assets. Bionic's model-specific Writer system prompts embed the applicable NCF schema because local inference models cannot read agent skill files directly. The existing image pipeline consumes `> Visual:`. Inline music, SFX, and animation execution still requires worker/runtime integration; their documented syntax is not evidence that an asset was produced.
 
-The remote Shadow Writer → Reviewer loop allows up to five focused corrections. Gemini CLI runs in Auto mode and returns localized feedback; errors, refusals, malformed replies or exhaustion are recorded and passed to the final Codex check with the latest usable draft. Codex runs as a read-only, ephemeral review without the user's MCP configuration. In the separate Bionic production workflow, Gemini remains a review gate and a failure stops that workflow. The Bionic profile for the Qwen3 8B Reviewer was removed; its local GGUF remains in the catalog because the environment rejected the file deletion. Post-revision Gemini timeouts occurred in an earlier evaluation and should still be monitored.
+The remote Shadow default runs the Writer → Gemini feedback loop (up to five calls) → Codex final check. Errors, refusals, malformed replies or exhaustion are recorded and passed to Codex with the latest usable draft. Codex runs as a read-only, ephemeral review without the user's MCP configuration. The independent Bionic production workflow retains its own Reviewer gate.
+
+Qwen2.5 14B Instruct Abliterated v2 Q4_K_M is available as an opt-in local backend by setting `SHADOW_NARRATION_REVIEW_BACKEND=qwen`; absent an explicit mode, it uses one direct edit after Writer generation. `SHADOW_NARRATION_REVIEW_MODE=feedback-loop` instead asks Qwen for evidence-based feedback, returns requested revisions to the Writer for up to five cycles, then asks Qwen for a final bounded edit. The models are loaded one at a time and unloaded before delivery. A 6 November 2026 normal-scene comparison found that the feedback reviewer returned an unsupported PASS on a clear key-placement order violation, while the final Qwen response was byte-identical to the Writer draft. In two direct-edit runs, Qwen also returned the Writer draft unchanged and left unauthorized cue lines in place. The Qwen backend is therefore not promoted as a replacement for Gemini and Codex; the existing default remains active pending stronger evidence. The direct-worker test bypassed Cloudflare, relay authentication, and the MCP/SQLite queue, and verified the Writer/Qwen stages, OneDrive publication, local download hashes, and model cleanup. See the [Qwen reviewer mode test report](production-tests/shadow-narration/20261106_qwen-reviewer-mode-comparison/report.md).
 
 The reduced-refusal Qwen3.5 9B Abliterated Q4_K_M candidate and the formerly configured Qwen3 8B local Reviewer completed historical evaluations and were removed. In the historical matched comparison, Qwen3 8B detected 6/6 seeded defects while Abliterated detected 2/6, added a false-positive consent finding, and fabricated evidence in the violent case. These local-model evaluations are retained as historical evidence; Gemini CLI Auto is now the Narrative Reviewer. [Historical matched comparison](production-tests/REVIEWER-COMPARISON-QWEN3-8B-QWEN35-9B-ABLITERATED-2026-10-27.md) and [candidate evaluation](production-tests/REVIEWER-QWEN35-9B-ABLITERATED-2026-10-27.md).
 
@@ -564,6 +571,10 @@ flowchart LR
 Gemini and Codex receive the original prompt. Shadow Controller keeps the latest usable draft when either reviewer fails and records each outcome and reason. A missing canonical text is recorded as a limitation: `projectSha256` identifies the revision but does not itself let the server read or validate project contents. Configure `SHADOW_NARRATION_MODEL`, `SHADOW_LM_API_BASE_URL`, `lms`, Gemini CLI, Codex CLI, and `rclone` on the server. The writer instance is unloaded after the full review cycle; cleanup failures appear in the result. The JSON references the English scene on OneDrive only after upload and byte verification. The client uses MCP to download and verify the file before analysis. Asset production is separate. See [Handoff 08](handoffs/08-server-narration.md) and the client [Shadow Requests skill](apps/shadow-client/skills/shadow-requests/SKILL.md).
 
 The three fixed client-driven narration test prompts are [normal](test/normal_narration.txt), [hot](test/hot_narration.txt), and [cyberpunk](test/cyperpunk_narration.txt). Codex submits each file through Shadow Controller MCP, waits for completion, retrieves the verified OneDrive result, and returns the scene as a file. The exact run, recovery, and read-only server/OneDrive diagnostic procedure is in [AGENTS.md](AGENTS.md#test-workflow).
+
+#### Signing in a Shadow client
+
+Before a Codex client can reach its paired Shadow Controller server, sign in and enroll that client once with the `shadow-controller` MCP tool `shadow_login`. It opens Google sign-in in the system browser, then registers the client's public key with the signed-in account. Complete the browser flow and return to Codex; check `shadow_client_status` to confirm `signedIn: true`, then `shadow_relay_status` to confirm the paired server is online. If enrollment was interrupted, run `shadow_register_client` and check status again. The equivalent terminal flow is `npx --yes --package shadow-controller-mcp-client shadow-client login`, followed by `shadow-client status`. Do not change relay URLs or credentials to resolve a sign-in failure; use `shadow_auth_token_status` and the documented recovery flow first.
 
 The queue now supports explicit, owner-authorized retries as new linked jobs and exposes verified narration results through job-scoped asset metadata and client-side download/hash verification. Windows CI run [42261872495](https://github.com/DRincs-Productions/LM-Studio/actions/runs/42261872495) passed the Coordinator tests, Tauri check and debug build, plus client and relay builds/tests. Live relay authentication and end-to-end narration against configured model/reviewer/OneDrive services are still unverified. The deployed Cloudflare endpoint remains a setup-only bootstrap; active relay deployment is gated on F1/F4 security checks.
 

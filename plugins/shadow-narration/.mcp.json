@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "shadow-controller": {
+      "command": "node",
+      "args": [
+        "${SHADOW_CLIENT_ENTRYPOINT}"
+      ]
+    }
+  }
+}

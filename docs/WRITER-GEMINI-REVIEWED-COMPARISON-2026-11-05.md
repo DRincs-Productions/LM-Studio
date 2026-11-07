@@ -44,7 +44,7 @@ The revised prose has vivid weather and differentiated dialogue, but it is 1,037
 
 Hemmingway reached the revised text **1 minute 28 seconds sooner**. Magidonia generated tokens faster in both calls, but its revision was longer and slower overall. Hemmingway is the better result for this fixture on both prose and constraint fidelity. This single matched sample does not establish a general model ranking.
 
-Gemini was useful on the initial pass: it found Hemmingway's coat contradiction and Magidonia's missing consent beats. It did not reliably judge the finished result. Its initial Hemmingway score overlooked invented facts, and the post-revision review timed out for both models. Codex's final checks therefore supply the reported final scores. Gemini should remain an experimental reviewer rather than a required release gate until its API retries and post-revision behavior are more dependable.
+Gemini was useful on the initial pass: it found Hemmingway's coat contradiction and Magidonia's missing consent beats. It did not reliably judge the finished result. Its initial Hemmingway score overlooked invented facts, and the post-revision review timed out for both models. Codex's final checks therefore supply the reported final scores. The user selected Hemmingway as the Writer and Gemini CLI Auto as the Narrative Reviewer, with scene-craft, revision-continuity, and line-editing criteria. Runtime Gemini failures must stop the review gate and preserve logs; Codex retains MCP access and final approval.
 
 Each model received one Writer revision. Hemmingway received one correction request. Magidonia received three correction requests in the same revision. The five-change maximum was not exceeded.
 
@@ -59,4 +59,4 @@ Each model received one Writer revision. Hemmingway received one correction requ
   - Revision run: `20261105191555083_f4d3d2d351db`
   - Gemini review runs: `20261105191335776_4e8e315469ea` (completed), `20261105191916585_f83e0a0a4448` (timed out)
 
-The run folders preserve the shared fixture, final text, prompts, raw local-model requests and responses, settings snapshots, Gemini CLI output, Project Worker MCP records and manifests. No model files were removed.
+The run folders preserve the shared fixture, final text, prompts, raw local-model requests and responses, settings snapshots, Gemini CLI output, Project Worker MCP records and manifests. Following the comparison, the user authorized removal of Magidonia and the local Qwen3 8B Narrative Reviewer model; Hemmingway remains installed.
