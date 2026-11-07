@@ -55,8 +55,6 @@ jobs:
             'README.md',
             'dist/cli.js',
             'dist/server.js',
-            'assets/auth-browser.html',
-            'assets/auth-browser.js',
             'skills/shadow-requests/SKILL.md'
           ];
           const missing = required.filter(file => !files.has(file));

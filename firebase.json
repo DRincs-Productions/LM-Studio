@@ -6,7 +6,10 @@
     "providers": {
       "googleSignIn": {
         "oAuthBrandDisplayName": "Shadow Controller",
-        "supportEmail": "drincs.contact@gmail.com"
+        "supportEmail": "drincs.contact@gmail.com",
+        "authorizedRedirectUris": [
+          "http://localhost"
+        ]
       }
     }
   },

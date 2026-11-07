@@ -1,6 +1,6 @@
 {
   "name": "shadow-controller-mcp-client",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Shadow Controller client CLI and authenticated MCP server",
   "type": "module",
   "repository": {
@@ -14,7 +14,6 @@
   },
   "files": [
     "dist",
-    "assets",
     "skills",
     "README.md"
   ],

@@ -3,18 +3,13 @@ import { generateKeyPairSync, randomUUID } from "node:crypto";
 import { hostname } from "node:os";
 import { spawn } from "node:child_process";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { readFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 
 const API_KEY = "AIzaSyCO-OtHIxbarCVRGh3qLDeNhUT2ArrngUY";
 const PROJECT_ID = "shadow-controller-20261103";
 const FIRESTORE_DOCUMENTS_URL = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents`;
+const AUTH_ORIGIN = `https://${PROJECT_ID}.firebaseapp.com`;
 const KEYRING_SERVICE = "com.drincs.shadowcontroller.client";
 const KEYRING_ACCOUNT = "firebase-session";
-const ASSET_DIRECTORY = join(dirname(fileURLToPath(import.meta.url)), "../assets");
-const AUTH_PAGE = await readFile(join(ASSET_DIRECTORY, "auth-browser.html"), "utf8");
-const AUTH_SCRIPT = await readFile(join(ASSET_DIRECTORY, "auth-browser.js"), "utf8");
 
 export interface ClientCredential {
   uid: string;
@@ -44,6 +39,7 @@ interface FirebaseUserLookup {
 
 interface LoginCallback {
   state: string;
+  port: number;
   idToken: string;
   refreshToken: string;
 }
@@ -193,34 +189,26 @@ async function verifyGoogleIdentity(idToken: string): Promise<{ uid: string; ema
 
 async function browserLogin(): Promise<LoginCallback> {
   const state = randomUUID();
-  const firebaseConfig = {
-    apiKey: API_KEY,
-    authDomain: "shadow-controller-20261103.firebaseapp.com",
-    projectId: PROJECT_ID,
-    appId: "1:561681360090:web:2af6f0a94083fbd85b31e3",
-    messagingSenderId: "561681360090",
-  };
   let server: Server | undefined;
   let timeout: NodeJS.Timeout | undefined;
   try {
     return await new Promise<LoginCallback>((resolve, reject) => {
       server = createServer((request, response) => {
-        void handleAuthRequest(request, response, {
-          state,
-          pageUrl: AUTH_PAGE,
-          script: AUTH_SCRIPT,
-          firebaseConfig,
-          origin: `http://localhost:${(server?.address() as { port: number }).port}`,
-        }).then((callback) => {
-          if (callback) resolve(callback);
-        }).catch(reject);
+        void handleLoginCallback(request, response, state, (server?.address() as { port: number } | null)?.port)
+          .then((callback) => {
+            if (callback) resolve(callback);
+          })
+          .catch(reject);
       });
       server.once("error", reject);
       server.listen(0, "localhost", () => {
         const address = server?.address();
         if (!address || typeof address === "string") return reject(new Error("Could not start the local sign-in listener."));
         timeout = setTimeout(() => reject(new Error("Google sign-in timed out.")), 5 * 60 * 1000);
-        openSystemBrowser(`http://localhost:${address.port}/auth?state=${state}`).catch(reject);
+        const loginUrl = new URL(`${AUTH_ORIGIN}/auth`);
+        loginUrl.searchParams.set("port", String(address.port));
+        loginUrl.searchParams.set("login_session", state);
+        openSystemBrowser(loginUrl.toString()).catch(reject);
       });
     });
   } finally {
@@ -229,34 +217,26 @@ async function browserLogin(): Promise<LoginCallback> {
   }
 }
 
-async function handleAuthRequest(
+async function handleLoginCallback(
   request: IncomingMessage,
   response: ServerResponse,
-  context: { state: string; pageUrl: string; script: string; firebaseConfig: object; origin: string },
+  expectedState: string,
+  expectedPort: number | undefined,
 ): Promise<LoginCallback | null> {
-  const requestUrl = new URL(request.url ?? "/", context.origin);
-  if (request.method === "GET" && requestUrl.pathname === "/auth" && requestUrl.searchParams.get("state") === context.state) {
-    sendText(response, 200, context.pageUrl, "text/html; charset=utf-8");
+  if (request.url !== "/complete" || request.headers.origin !== AUTH_ORIGIN || expectedPort === undefined) {
+    sendCallbackResponse(response, 403, "Invalid sign-in origin.");
     return null;
   }
-  if (request.method === "GET" && requestUrl.pathname === "/auth-browser.js") {
-    sendText(response, 200, context.script, "text/javascript; charset=utf-8");
+  if (request.method === "OPTIONS") {
+    sendCallbackResponse(response, 204, "");
     return null;
   }
-  if (request.method === "GET" && requestUrl.pathname === "/config") {
-    sendText(response, 200, JSON.stringify(context.firebaseConfig), "application/json");
-    return null;
-  }
-  if (request.method !== "POST" || requestUrl.pathname !== "/complete") {
-    sendText(response, 404, "Not found.", "text/plain; charset=utf-8");
-    return null;
-  }
-  if (request.headers.origin !== context.origin) {
-    sendText(response, 403, "Invalid sign-in origin.", "text/plain; charset=utf-8");
+  if (request.method !== "POST") {
+    sendCallbackResponse(response, 405, "Method not allowed.");
     return null;
   }
   if (!request.headers["content-type"]?.startsWith("application/json")) {
-    sendText(response, 415, "Invalid sign-in request.", "text/plain; charset=utf-8");
+    sendCallbackResponse(response, 415, "Invalid sign-in request.");
     return null;
   }
   const body: Buffer[] = [];
@@ -265,7 +245,7 @@ async function handleAuthRequest(
     const buffer = Buffer.from(chunk);
     size += buffer.length;
     if (size > 8192) {
-      sendText(response, 413, "Sign-in response is too large.", "text/plain; charset=utf-8");
+      sendCallbackResponse(response, 413, "Sign-in response is too large.");
       return null;
     }
     body.push(buffer);
@@ -274,26 +254,28 @@ async function handleAuthRequest(
   try {
     callback = JSON.parse(Buffer.concat(body).toString("utf8")) as LoginCallback;
   } catch {
-    sendText(response, 400, "Invalid sign-in response.", "text/plain; charset=utf-8");
+    sendCallbackResponse(response, 400, "Invalid sign-in response.");
     return null;
   }
-  if (callback.state !== context.state || typeof callback.idToken !== "string" || typeof callback.refreshToken !== "string") {
-    sendText(response, 403, "Sign-in state did not match.", "text/plain; charset=utf-8");
+  if (callback.state !== expectedState || callback.port !== expectedPort
+    || typeof callback.idToken !== "string" || typeof callback.refreshToken !== "string") {
+    sendCallbackResponse(response, 403, "Sign-in session did not match.");
     return null;
   }
-  sendText(response, 200, "Sign-in received. Return to the client terminal.", "text/plain; charset=utf-8");
+  sendCallbackResponse(response, 200, "Sign-in received. Return to the client terminal.");
   return callback;
 }
 
-function sendText(response: ServerResponse, status: number, body: string, contentType: string): void {
+function sendCallbackResponse(response: ServerResponse, status: number, body: string): void {
   response.writeHead(status, {
-    "Content-Type": contentType,
+    "Content-Type": "text/plain; charset=utf-8",
     "Content-Length": Buffer.byteLength(body),
     "Cache-Control": "no-store",
-    "Content-Security-Policy": "default-src 'none'; script-src 'self' https://www.gstatic.com; style-src 'unsafe-inline'; connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googleapis.com; frame-src https://*.firebaseapp.com https://accounts.google.com https://*.google.com; base-uri 'none'; form-action 'none'",
-    "Referrer-Policy": "no-referrer",
-    "X-Content-Type-Options": "nosniff",
-    "X-Frame-Options": "DENY",
+    "Access-Control-Allow-Origin": AUTH_ORIGIN,
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Max-Age": "300",
+    "Vary": "Origin",
   });
   response.end(body);
 }
