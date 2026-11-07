@@ -29,11 +29,13 @@ jobs:
           cache-dependency-path: apps/shadow-client/package-lock.json
 
       - name: Validate tag and package version
+        id: validate
         env:
           RELEASE_TAG: ${{ github.ref_name }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           node --input-type=module -e 'import fs from "node:fs"; const expected = process.env.RELEASE_TAG.slice("lib-v".length); const actual = JSON.parse(fs.readFileSync("package.json", "utf8")).version; if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(expected) || expected !== actual) { console.error(`Tag version ${expected} does not match package version ${actual}`); process.exit(1); }'
+          node -e 'const version = require("./package.json").version; console.log(`is_prerelease=${version.includes("-")}`)' >> "$GITHUB_OUTPUT"
           if [ -z "${NPM_TOKEN:-}" ]; then echo "Repository secret NPM_TOKEN is required for npm publishing." >&2; exit 1; fi
 
       - run: npm ci
@@ -68,11 +70,10 @@ jobs:
       - name: Publish package
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          RELEASE_TAG: ${{ github.ref_name }}
         run: |
-          if [[ "$RELEASE_TAG" == *-* ]]; then DIST_TAG=next; else DIST_TAG=latest; fi
           PACKAGE_NAME="$(node -p 'require("./package.json").name')"
           PACKAGE_VERSION="$(node -p 'require("./package.json").version')"
+          if [[ "$PACKAGE_VERSION" == *-* ]]; then DIST_TAG=next; else DIST_TAG=latest; fi
           if npm view "${PACKAGE_NAME}@${PACKAGE_VERSION}" version >/dev/null 2>&1; then
             echo "${PACKAGE_NAME}@${PACKAGE_VERSION} already exists; leaving the immutable registry version untouched."
           else
@@ -87,4 +88,4 @@ jobs:
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
           generate_release_notes: true
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          prerelease: ${{ steps.validate.outputs.is_prerelease == 'true' }}
