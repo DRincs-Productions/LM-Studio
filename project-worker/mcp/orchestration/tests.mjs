@@ -131,7 +131,7 @@ test('Programmer provider selection is recorded but does not launch implementati
   }
 });
 test('narrative checks accept fresh canon, flexible length and multiple visual moments', () => {
-  const body = `# Scene: After the Last Broadcast\n\n## Narrative\n> Visual: Tali in the radio studio at midnight.\nTali and Ivo listen to the signal. ${'The night air carried a faint tune. '.repeat(90)}\n> Visual 2: The pair watch a flower open above the rooftop greenhouse.\nThe future message becomes an invitation.\n\n## Italian Summary\nA warm mystery about a radio signal.`;
+  const body = `# Scene: After the Last Broadcast\n\n## Narrative\n> Visual: Tali in the radio studio at midnight.\nTali and Ivo listen to the signal. ${'The night air carried a faint tune. '.repeat(90)}\n> Visual 2: The pair watch a flower open above the rooftop greenhouse.\nThe future message becomes an invitation.\n\n## English Summary\nA warm mystery about a radio signal.`;
   assert.deepEqual(narrativeContentChecks(body), []);
   assert.deepEqual(narrativePresentationChecks(body), []);
   assert.ok(narrativeContentChecks(body.replace('The future message becomes an invitation.', 'The future message becomes an invitation but')).some(issue => /truncated/i.test(issue)));
@@ -148,7 +148,7 @@ test('one-playback canon catches repeat listening and Ivo hearing the clip witho
   assert.ok(singlePlaybackChecks('He read the event log. It said something about an orchid and coffee.', canon).some(issue => /timing metadata only/i.test(issue)));
   assert.ok(singlePlaybackChecks('At 3:08 she records the memo, then listens to the playback once. At 3:14 the buffer plays it again.', canon).some(issue => /without previewing/i.test(issue)));
   assert.ok(singlePlaybackChecks('Ivo said, “I hear things all night. A memo playing back at 3:14 is going to make you look guilty.”', canon).some(issue => /only Tali hears/i.test(issue)));
-  assert.ok(narrativeContentChecks('# Scene: Test\n\n## Narrative\nAt 3:14 Tali plays the clip once. Later, she replays it again for Ivo. He heard the message.\n\n## Italian Summary\nTest.', canon).length >= 2);
+  assert.ok(narrativeContentChecks('# Scene: Test\n\n## Narrative\nAt 3:14 Tali plays the clip once. Later, she replays it again for Ivo. He heard the message.\n\n## English Summary\nTest.', canon).length >= 2);
 });
 test('review evidence and fallback image prompt follow the current Project File instead of old test canon', () => {
   const narrative = 'The station hummed quietly while Tali held the receiver.';
@@ -156,7 +156,7 @@ test('review evidence and fallback image prompt follow the current Project File 
   assert.deepEqual(reviewPassEvidenceIssues('REVIEW: PASS\nNARRATIVE_EVIDENCE: "the station hummed quietly while Tali held the receiver."', narrative), []);
   const quotedDialogue = '“It was worth it,” she said. “But I am docking you two minutes for the coffee.”';
   assert.deepEqual(reviewPassEvidenceIssues(`REVIEW: PASS\nNARRATIVE_EVIDENCE: "${quotedDialogue}"`, quotedDialogue), []);
-  const evidencePrompt = reviewerInstruction('# Project\n', 'Approved scope', '# Scene: Test\n\n## Narrative\nThe station hummed quietly while Tali held the receiver.\n\n## Italian Summary\nA scene.', []);
+  const evidencePrompt = reviewerInstruction('# Project\n', 'Approved scope', '# Scene: Test\n\n## Narrative\nThe station hummed quietly while Tali held the receiver.\n\n## English Summary\nA scene.', []);
   assert.match(evidencePrompt, /VERBATIM NARRATIVE EVIDENCE CANDIDATES/);
   assert.match(evidencePrompt, /- The station hummed quietly while Tali held the receiver\./);
   const canon = `# Project\n\n## Characters\n\n### Tali Rook\n- Dark hair and green jacket; botanist in the rooftop greenhouse.\n\n### Ivo Senn\n- Light-brown hair, steel-gray eyes, dark work shirt, headset around his neck.\n\n## Locations\n\n### Rooftop Greenhouse\n- Many plants and grow lights.\n\n### Radio Booth\n- Amber console lights, waveform monitor and patch cables.`;
@@ -181,28 +181,28 @@ test('image planner derives moments from distinct narrative sections when Visual
   assert.match(cues[2], /orchid open/);
   const explicit = visualMomentPrompts('> Visual: A quiet booth under amber light.\n\n---\n\nAnother distinct passage.');
   assert.deepEqual(explicit, ['A quiet booth under amber light.']);
-  assert.deepEqual(narrativePresentationChecks(`# Scene: No directives\n\n## Narrative\n${narrative}\n\n## Italian Summary\nA scene.`), []);
+  assert.deepEqual(narrativePresentationChecks(`# Scene: No directives\n\n## Narrative\n${narrative}\n\n## English Summary\nA scene.`), []);
 });
 test('explicit Project File timelines are checked against the Narrative body, not its summary', () => {
   const canon = `#### REQUIRED STORY TIMELINE\n- 3:08 a.m.: Tali records the message without previewing it: “Ivo, come see the orchid at dawn.”\n- 3:14 a.m.: The buffer plays that exact message once: “Ivo, come see the orchid at dawn.”\n- 3:18 a.m.: The scheduler commits the metadata row with label_source=processed_at, four minutes after playback.\n- Dawn: The orchid opens.\n\n## Next Section\nOther content.`;
-  const missing = `# Scene: Test\n\n## Narrative\nTali records the message at 3:08 a.m. and the scheduler shows 3:18 a.m.\n\n## Italian Summary\nAt 3:14 a.m. it plays.`;
+  const missing = `# Scene: Test\n\n## Narrative\nTali records the message at 3:08 a.m. and the scheduler shows 3:18 a.m.\n\n## English Summary\nAt 3:14 a.m. it plays.`;
   assert.equal(requiredTimelineChecks(missing, canon).length, 4);
-  const wrongEvents = `# Scene: Test\n\n## Narrative\nThe buffer plays a clip at 3:08 a.m. Tali records “Ivo, come see the orchid at dawn” at 3:14 a.m. The scheduler logs 3:18 a.m. in error. At dawn the orchid opens.\n\n## Italian Summary\nComplete.`;
+  const wrongEvents = `# Scene: Test\n\n## Narrative\nThe buffer plays a clip at 3:08 a.m. Tali records “Ivo, come see the orchid at dawn” at 3:14 a.m. The scheduler logs 3:18 a.m. in error. At dawn the orchid opens.\n\n## English Summary\nComplete.`;
   assert.equal(requiredTimelineChecks(wrongEvents, canon).length, 3);
-  const complete = `# Scene: Test\n\n## Narrative\nAt 3:08 a.m., Tali records “Ivo, come see the orchid at dawn.” without previewing it. At 3:14 a.m., the buffer plays that exact message once: “Ivo, come see the orchid at dawn.” At 3:18 a.m., the scheduler commits the metadata log row with label_source=processed_at, four minutes after playback. At dawn the orchid opens.\n\n## Italian Summary\nComplete.`;
+  const complete = `# Scene: Test\n\n## Narrative\nAt 3:08 a.m., Tali records “Ivo, come see the orchid at dawn.” without previewing it. At 3:14 a.m., the buffer plays that exact message once: “Ivo, come see the orchid at dawn.” At 3:18 a.m., the scheduler commits the metadata log row with label_source=processed_at, four minutes after playback. At dawn the orchid opens.\n\n## English Summary\nComplete.`;
   assert.deepEqual(requiredTimelineChecks(complete, canon), []);
-  const eventBeforeClock = `# Scene: Test\n\n## Narrative\nAt 3:08 a.m., Tali records “Ivo, come see the orchid at dawn.” without previewing it. Six minutes later the speaker crackles. “Ivo, come see the orchid at dawn.” The buffer plays her exact words once. Tali checks the display: 3:14 a.m. At 3:18 a.m., four minutes after the 3:14 playback, the scheduler commits the metadata row with label_source=processed_at. At dawn Tali and Ivo watch the orchid open.\n\n## Italian Summary\nComplete.`;
+  const eventBeforeClock = `# Scene: Test\n\n## Narrative\nAt 3:08 a.m., Tali records “Ivo, come see the orchid at dawn.” without previewing it. Six minutes later the speaker crackles. “Ivo, come see the orchid at dawn.” The buffer plays her exact words once. Tali checks the display: 3:14 a.m. At 3:18 a.m., four minutes after the 3:14 playback, the scheduler commits the metadata row with label_source=processed_at. At dawn Tali and Ivo watch the orchid open.\n\n## English Summary\nComplete.`;
   assert.deepEqual(requiredTimelineChecks(eventBeforeClock, canon), []);
-  const twentyFourHourClock = `# Scene: Test\n\n## Narrative\n03:08 Tali records “Ivo, come see the orchid at dawn.” without previewing it. At 03:14 the buffer plays that exact message once: “Ivo, come see the orchid at dawn.” At 03:18 the scheduler commits the metadata log row with label_source=processed_at, four minutes after playback. At dawn Tali and Ivo watch the orchid open.\n\n## Italian Summary\nComplete.`;
+  const twentyFourHourClock = `# Scene: Test\n\n## Narrative\n03:08 Tali records “Ivo, come see the orchid at dawn.” without previewing it. At 03:14 the buffer plays that exact message once: “Ivo, come see the orchid at dawn.” At 03:18 the scheduler commits the metadata log row with label_source=processed_at, four minutes after playback. At dawn Tali and Ivo watch the orchid open.\n\n## English Summary\nComplete.`;
   assert.deepEqual(requiredTimelineChecks(twentyFourHourClock, canon), []);
 });
 test('required dawn opening is shown on-page and shared by both leads when canon says so', () => {
   const canon = '#### REQUIRED STORY TIMELINE\n- Dawn: Tali and Ivo share the actual orchid opening; show the petals opening.';
-  const missing = '# Scene: Test\n\n## Narrative\nTali and Ivo promise to return at dawn.\n\n## Italian Summary\nThe orchid opens.';
+  const missing = '# Scene: Test\n\n## Narrative\nTali and Ivo promise to return at dawn.\n\n## English Summary\nThe orchid opens.';
   assert.ok(requiredTimelineChecks(missing, canon).some(issue => /actual dawn opening/i.test(issue)));
-  const notShared = '# Scene: Test\n\n## Narrative\nThe orchid opens at dawn while the greenhouse is empty.\n\n## Italian Summary\nComplete.';
+  const notShared = '# Scene: Test\n\n## Narrative\nThe orchid opens at dawn while the greenhouse is empty.\n\n## English Summary\nComplete.';
   assert.ok(requiredTimelineChecks(notShared, canon).some(issue => /share the flower opening/i.test(issue)));
-  const complete = '# Scene: Test\n\n## Narrative\nAt dawn Tali and Ivo stay beside the orchid. Its petals open in the first light, and they watch together.\n\n## Italian Summary\nComplete.';
+  const complete = '# Scene: Test\n\n## Narrative\nAt dawn Tali and Ivo stay beside the orchid. Its petals open in the first light, and they watch together.\n\n## English Summary\nComplete.';
   assert.deepEqual(requiredTimelineChecks(complete, canon), []);
 });
 test('first encounter stays on the pathway and orchid history is not invented', () => {
@@ -251,53 +251,24 @@ test('SceneContract enforces mode, preserves unknown POV and requires a bounded 
   assert.ok(validateSceneContract({ ...contract, unexpected: true }, 'scene-test').some(issue => /exactly match/.test(issue)));
 });
 
-test('SceneContract runs Codex and Qwen proposals in parallel, then validates Codex merge before Writer', async t => {
+test('SceneContract uses Codex as sole planner and validates its merged contract before Writer', async t => {
   const root = await fs.mkdtemp(path.resolve('work', 'scene contract fixture '));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
-  const base = {
-    scene_id: 'scene-contract-test', mode: 'normal', pov: null, location: 'repair shop', participants: ['Mara'],
-    canon_facts: ['Mara carries a key in her left hand.'], known_by_character: { Mara: ['She carries the key.'] },
-    unknowns: ['The shop address is unspecified.'], required_beats: ['Mara places the key on the counter at the end.'],
-    forbidden_changes: ['Do not add named characters.'], closing_condition: 'End immediately after the key is placed.',
-    creative_permissions: { sensory_details: true, minor_gestures: true, dialogue_within_known_facts: true, new_plot_events: false }
-  };
-  let codexProposalStarted = false, qwenProposalStarted = false, mergeStarted = false;
-  const codexPlanner = async (prompt, outputPath) => {
-    if (prompt.includes('QWEN INDEPENDENT PROPOSAL')) {
-      mergeStarted = true;
-      assert.equal(codexProposalStarted, true);
-      assert.equal(qwenProposalStarted, true);
-      await fs.writeFile(outputPath, JSON.stringify(base));
-      return JSON.stringify(base);
-    }
-    codexProposalStarted = true;
-    await new Promise(resolve => setTimeout(resolve, 10));
-    await fs.writeFile(outputPath, JSON.stringify(base));
-    return JSON.stringify(base);
-  };
-  const predict = async (role, prompt, options) => {
-    assert.equal(role, 'planner');
-    assert.equal(options.systemPromptOverride.includes('SceneContract'), true);
-    qwenProposalStarted = true;
-    await new Promise(resolve => setTimeout(resolve, 10));
-    return JSON.stringify(base);
-  };
-  const result = await createSceneContract({
-    sceneId: base.scene_id, canonical: '# Canon\nMara carries a key in her left hand.', summary: 'Mara closes the repair shop.',
-    out: root, predict, codexPlanner
-  });
-  assert.equal(mergeStarted, true);
+  const base = { scene_id: 'scene-contract-test', mode: 'normal', pov: null, location: 'repair shop', participants: ['Mara'], canon_facts: ['Mara carries a key in her left hand.'], known_by_character: { Mara: ['She carries the key.'] }, unknowns: ['The shop address is unspecified.'], required_beats: ['Mara places the key on the counter at the end.'], forbidden_changes: ['Do not add named characters.'], closing_condition: 'End immediately after the key is placed.', creative_permissions: { sensory_details: true, minor_gestures: true, dialogue_within_known_facts: true, new_plot_events: false } };
+  let calls = 0;
+  const codexPlanner = async prompt => { calls++; assert.match(prompt, /SceneContract/); return JSON.stringify(base); };
+  const result = await createSceneContract({ sceneId: base.scene_id, canonical: '# Canon\nMara carries a key in her left hand.', summary: 'Mara closes the repair shop.', out: root, predict: async () => { throw Error('No local planner should be called'); }, codexPlanner });
+  assert.equal(calls, 2);
   assert.deepEqual(result.contract, base);
   assert.equal((await fs.readFile(result.path, 'utf8')).includes('"mode": "normal"'), true);
   assert.equal(result.sha256.length, 64);
-  assert.equal(await fs.stat(path.join(root, 'scene-contract-codex-proposal.json')).then(s => s.isFile()), true);
-  assert.equal(await fs.stat(path.join(root, 'scene-contract-qwen-proposal.json')).then(s => s.isFile()), true);
+  assert.equal(await fs.stat(path.join(root, 'scene-contract-codex-proposal.json')).then(stat => stat.isFile()), true);
+  assert.equal(await fs.stat(path.join(root, 'scene-contract-qwen-proposal.json')).then(stat => stat.isFile()).catch(() => false), false);
 });
-
 test('Writer and Narrative Reviewer receive the SceneContract as advisory, below Project File and approved brief', () => {
   const contract = { scene_id: 'fixture', mode: 'normal', pov: null, required_beats: ['Show the handoff.'] };
   const writer = writerInstruction('# Canon\nMara is 32.', 'Show the handoff.', '', '', contract);
-  const reviewer = reviewerInstruction('# Canon\nMara is 32.', 'Show the handoff.', '# Scene: Test\n\n## Narrative\nMara hands over the parcel.\n\n## Italian Summary\nConsegna il pacco.', [], contract);
+  const reviewer = reviewerInstruction('# Canon\nMara is 32.', 'Show the handoff.', '# Scene: Test\n\n## Narrative\nMara hands over the parcel.\n\n## English Summary\nConsegna il pacco.', [], contract);
   assert.match(writer, /APPROVED SCENE CONTRACT/);
   assert.match(writer, /does not override the Project File or approved brief/);
   assert.match(reviewer, /canonical Project File and approved scope take precedence/);
@@ -318,7 +289,7 @@ test('LM Studio SSE chat parser waits for and returns the final aggregated chat.
 });
 
 test('CLI loading progress does not pollute a narrative or overflow the MCP response limit', () => {
-  const artifact = '# Scene: Harbor\n\n## Narrative\n\nShe held the parcel.\n\n## Italian Summary\n\nTiene il pacco.';
+  const artifact = '# Scene: Harbor\n\n## Narrative\n\nShe held the parcel.\n\n## English Summary\n\nTiene il pacco.';
   const progress = '\u001b[2KLoading model 81% ⠙\r\nLoading model 81% ⠹\r\n'.repeat(1000);
   assert.ok(progress.length > 30000);
   assert.equal(cleanCliText(progress + artifact), artifact);

@@ -5,7 +5,7 @@ import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { writerInstruction, LocalChatApi } from './production.mjs';
+import { writerInstruction, LocalChatApi, localModelsApiBaseUrl } from './production.mjs';
 import { cleanCliText } from './cli-output.mjs';
 
 const root = path.resolve(process.env.USERPROFILE || 'C:\\Users\\Shadow', '.lmstudio');
@@ -34,6 +34,22 @@ const writerProfiles = {
   qwenwriter27b: {
     config: path.join(modelConfigRoot, 'llmfan46', 'Qwen3.5-27B-Writer-V2-uncensored-heretic-GGUF', 'Qwen3.5-27B-Writer-V2-uncensored-heretic-Q4_K_S.gguf.json'),
     model: 'llmfan46/Qwen3.5-27B-Writer-V2-uncensored-heretic-GGUF/Qwen3.5-27B-Writer-V2-uncensored-heretic-Q4_K_S.gguf'
+  },
+  darkchampion30ba3b: {
+    config: path.join(modelConfigRoot, 'mradermacher', 'Llama3.2-30B-A3B-II-Dark-Champion-INSTRUCT-Heretic-Abliterated-Uncensored-GGUF', 'Llama3.2-30B-A3B-II-Dark-Champion-INSTRUCT-Heretic-Abliterated-Uncensored.Q3_K_S.gguf.json'),
+    model: 'mradermacher/Llama3.2-30B-A3B-II-Dark-Champion-INSTRUCT-Heretic-Abliterated-Uncensored-GGUF/Llama3.2-30B-A3B-II-Dark-Champion-INSTRUCT-Heretic-Abliterated-Uncensored.Q3_K_S.gguf'
+  },
+  hearthfire24b: {
+    config: path.join(modelConfigRoot, 'LatitudeGames', 'Hearthfire-24B-GGUF', 'Hearthfire-24B-Q4_K_M.gguf.json'),
+    model: 'LatitudeGames/Hearthfire-24B-GGUF/Hearthfire-24B-Q4_K_M.gguf'
+  },
+  magidonia24b: {
+    config: path.join(modelConfigRoot, 'bartowski', 'TheDrummer_Magidonia-24B-v4.3-GGUF', 'TheDrummer_Magidonia-24B-v4.3-Q4_K_M.gguf.json'),
+    model: 'bartowski/TheDrummer_Magidonia-24B-v4.3-GGUF/TheDrummer_Magidonia-24B-v4.3-Q4_K_M.gguf'
+  },
+  gemory26ba4b: {
+    config: path.join(modelConfigRoot, 'UltimateIntent', 'Gemory-26B-A4B-GGUF', 'Gemory-26B-A4B-Q4_K_M.gguf.json'),
+    model: 'UltimateIntent/Gemory-26B-A4B-GGUF/Gemory-26B-A4B-Q4_K_M.gguf'
   }
 };
 const writerCases = ['normal', 'hot', 'violent'];
@@ -95,7 +111,7 @@ async function ask(config, prompt, system, cwd, output) {
   await fs.writeFile(output + '.request.json', JSON.stringify({ model: config.model, engine: config.engine, prompt, system, config: config.config }, null, 2) + '\n');
   if (config.engine === 'writer-api') {
     await localChat.ensure();
-    const response = await fetch('http://127.0.0.1:1234/api/v1/models', { signal: AbortSignal.timeout(10000) });
+    const response = await fetch(`${localModelsApiBaseUrl}/api/v1/models`, { signal: AbortSignal.timeout(10000) });
     if (!response.ok) throw Error(`Cannot inspect Writer model instances: LM Studio API returned HTTP ${response.status}`);
     const inventory = await response.json();
     const loadedModels = (inventory.models || []).filter(model => model.type === 'llm' && model.loaded_instances?.length);
@@ -186,9 +202,9 @@ try {
   await fs.writeFile(path.join(runDirectory, 'model-output-1.txt'), first + '\n');
   const mockReply = role === 'writer'
     ? ({
-        normal: 'Reviewer (simulated): Add one sentence before the final paragraph explicitly confirming that the repaired radio has one loose brass dial. Preserve the left-hand key continuity and exact endpoint; leave all unaffected prose unchanged. This is a controlled test edit, not a claim that a real reviewer found a defect.',
+        normal: 'Reviewer (simulated): Add one sentence before the exact final event explicitly confirming the object flaw stated in the brief. Preserve the constrained hand continuity and stop at the exact endpoint; leave all unaffected prose unchanged. This is a controlled test edit, not a claim that a real reviewer found a defect.',
         hot: 'Reviewer (simulated): Add one brief, direct line of dialogue immediately before intimate contact that confirms both adults want to continue. Preserve the consensual erotic tone and all other prose verbatim. This is a controlled test edit, not a claim that a real reviewer found a defect.',
-        violent: 'Reviewer (simulated): Add one sentence before rescue workers take over confirming that the injured adult remains conscious while the medic applies the red field bandage. Preserve the requested graphic injury scene and all other prose verbatim. This is a controlled test edit, not a claim that a real reviewer found a defect.'
+        violent: 'Reviewer (simulated): Add one sentence before the rescue crew takes over confirming that the injured adult remains conscious while the medic applies the dressing specified in the brief. Preserve the single specified injury and stop at the handoff; leave all unaffected prose unchanged. This is a controlled test edit, not a claim that a real reviewer found a defect.'
       })[writerCase]
     : mockReplies[role];
   const firstEvent = role === 'regia' ? 'clarification' : role === 'coordinator' ? 'handoff' : 'revision';

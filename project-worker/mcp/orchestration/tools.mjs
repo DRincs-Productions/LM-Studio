@@ -61,13 +61,16 @@ export function installTools(server) {
   tool('stop_regia_session', 'When the user asks to return to Codex, suspend the Regia relay without deleting conversation history. Does not acknowledge handbacks or start production.', { filename: z.string(), session_id: z.string().uuid() }, ({ filename, session_id }) => stopRegiaRelay(store, filename, session_id));
   tool('discard_regia_turn', 'Explicit recovery only: abandon a failed or dead Regia request after inspecting get_regia_session. Preserves its prompt/error/raw result, never replays it. Refuses a live running request.', { filename: z.string(), session_id: z.string().uuid(), request_id: z.string().uuid() }, ({ filename, session_id, request_id }) => discardRegiaTurn(store, filename, session_id, request_id));
   tool('produce_scene_assets', 'Codex Coordinator only: run the approved Writer → Narrative Reviewer content-only loop (maximum five cycles). Formatting defects do not block Reviewer PASS and are returned for Codex repair. Returns the draft, presentation checks, review and source SHA256. Does not generate images. Call finalize_reviewed_scene once after a bounded Codex review and final edit.', { filename: z.string() }, async ({ filename }) => produceScene(filename));
-  tool('finalize_reviewed_scene', 'Codex Coordinator only: submit review and final narrative against the exact Reviewer-approved source SHA256. Codex may fix formatting and make at most 55 changed narrative-word edits and 16% change; larger content repairs must return to Writer/Regia, never trigger a scene rewrite. The worker validates content, presentation, evidence, edit budget and hashes, writes the final artifact, then proceeds to image generation/review, publication and hash-verified asset transfer. Refuses stale drafts or replay.', {
+  const finalReviewSchema = {
     filename: z.string(), source_sha256: z.string().regex(/^[a-f0-9]{64}$/i),
     review_summary: z.string().min(20).max(4000), changes_made: z.string().min(8).max(4000),
     final_check: z.string().min(20).max(4000), final_narrative: z.string().min(1).max(30000)
-  }, async ({ filename, source_sha256, review_summary, changes_made, final_check, final_narrative }) => finalizeReviewedScene(filename, {
+  };
+  const finalize = async ({ filename, source_sha256, review_summary, changes_made, final_check, final_narrative }, narrativeOnly) => finalizeReviewedScene(filename, {
     sourceSha256: source_sha256, reviewSummary: review_summary, changesMade: changes_made, finalCheck: final_check, finalNarrative: final_narrative
-  }));
+  }, { narrativeOnly });
+  tool('finalize_reviewed_scene', 'Codex Coordinator only: validate final review against the approved draft hash, save the scene and continue with image production.', finalReviewSchema, input => finalize(input, false));
+  tool('finalize_reviewed_narrative', 'Codex Coordinator only: validate final review against the approved draft hash and save the scene and review evidence. Returns verified artifact hashes without starting image production. Refuses stale drafts and replay.', finalReviewSchema, input => finalize(input, true));
   tool('register_project', 'Associate an existing canonical Project File with this Regia session automatically. No session UUID needed. Call once from Regia, then get_orchestration_status.', { filename: z.string() }, async ({ filename }) => registrationText(await store.register(filename)));
   tool('attach_project_directory', 'Associate a user-selected game project directory with this Project File. Use only the exact directory the user identified. This enables read-only access to Ink files and Markdown under docs/. The directory must be inside configured Programmer roots; this tool never reads or writes its files.', {
     filename: z.string(), project_root: z.string().min(1)
@@ -122,7 +125,7 @@ export function installTools(server) {
     filename: z.string(), selection_id: z.string().uuid(), approval_text: z.string().min(1).max(4000), implementation_brief: z.string().min(1).max(12000)
   }, async ({ filename, selection_id, approval_text, implementation_brief }) => startProgrammer({ store, filename, selectionId: selection_id, approvalText: approval_text, implementationBrief: implementation_brief }));
   tool('record_component_test', 'Component-test path of this real Project Worker MCP. Records a fresh role interaction and returns the requested controlled test reply without starting production, image/audio generation, or implementation.', {
-    run_id: z.string().regex(/^[a-zA-Z0-9_-]{8,80}$/), role: z.enum(['regia', 'coordinator', 'writer', 'designer', 'sound_designer']),
+    run_id: z.string().regex(/^[a-zA-Z0-9_-]{8,80}$/), role: z.enum(['regia', 'coordinator', 'writer', 'reviewer', 'designer', 'sound_designer']),
     input: z.string().min(1).max(12000), model: z.string().min(1).max(300), response: z.string().min(1).max(30000),
     interaction: z.enum(['analysis', 'handoff', 'clarification', 'revision', 'error', 'approval_gate']), mock_reply: z.string().max(12000).default('')
   }, async args => recordComponentTest({ store, ...args }));
