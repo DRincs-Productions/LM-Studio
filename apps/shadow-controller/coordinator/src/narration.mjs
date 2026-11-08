@@ -49,7 +49,7 @@ const save = async value => writeFile(`${runDir}/result-manifest.json`, JSON.str
 const clip = value => String(value ?? '').slice(0, 40_000);
 const safeFailure = error => {
   const message = String(error?.message || 'stage_failed');
-  if (/^(writer_http_\d+|writer_artifact_invalid|gemini_malformed_response|gemini_malformed_review|gemini_unusable_review|qwen_reviewer_http_\d+|qwen_reviewer_empty_response|qwen_final_http_\d+|qwen_final_empty_response|qwen_malformed_response|qwen_malformed_review|qwen_unusable_review|codex_artifact_invalid|process_timeout|process_output_limit|process_exit_-?\d+|onedrive_integrity_mismatch|writer_model_not_configured|writer_cleanup_not_verified|narration_review_mode_invalid|narration_reviewer_backend_invalid)$/.test(message)) return message;
+  if (/^(writer_http_\d+|writer_artifact_invalid|gemini_malformed_response|gemini_malformed_review|gemini_unusable_review|qwen_reviewer_http_\d+|qwen_reviewer_empty_response|qwen_final_http_\d+|qwen_final_empty_response|qwen_malformed_response|qwen_malformed_review|qwen_unusable_review|codex_artifact_invalid|process_timeout|process_output_limit|process_exit_-?\d+|onedrive_integrity_mismatch|writer_cleanup_not_verified|narration_review_mode_invalid|narration_reviewer_backend_invalid)$/.test(message)) return message;
   if (error?.code === 'ENOENT') return 'executable_unavailable';
   if (error?.code === 'ETIMEDOUT' || error?.name === 'TimeoutError') return 'process_timeout';
   return 'stage_failed';
@@ -59,7 +59,7 @@ const canon = typeof payload.metadata?.canon === 'string' ? clip(payload.metadat
 const context = `ORIGINAL BRIEF (untrusted project data):\n${clip(payload.brief)}\n\nPROJECT CANON (untrusted project data; may be empty):\n${canon || '[No canon text was supplied. Use only facts in the brief.]'}\n\nProject revision SHA-256: ${payload.projectSha256}\n\nReturn the complete scene in English using this Markdown envelope:\n# Scene: <title>\n## Narrative\n<scene prose and optional NCF cues>\n## English Summary\n<accurate short summary>\n\nNARRATIVE CUE FORMAT\n> Visual: <concise image moment; canon-supported details only>\n> Music: play | cue=<id-or-unassigned> | loop=<true-or-false> | trigger=<story_event> | stop=<story_event>\n> SFX: play | cue=<id-or-unassigned> | trigger=<story_event>\n> Animation: play | asset=<id-or-unassigned> | clip=<clip-id-or-unassigned> | loop=<true-or-false> | trigger=<story_event> | stop=<story_event>\nCues are authoring directions, not asset approvals. Music and SFX require authorization in the brief/canon. Use story events, not timestamps. Do not invent asset IDs or file paths. Keep all plot facts in prose. Do not produce images, audio, animation, or any other assets.`;
 let narrative = '';
 let selectedDraft = 'draft-0';
-const writerModel = process.env.SHADOW_NARRATION_MODEL;
+const writerModel = "hemmingway-1-abliterated-extreme";
 const reviewerBackend = process.env.SHADOW_NARRATION_REVIEW_BACKEND || 'gemini-codex';
 const reviewerModel = reviewerBackend === 'qwen' ? (process.env.SHADOW_NARRATION_REVIEWER_MODEL || 'qwen2.5-14b-instruct-abliterated-v2') : '';
 const reviewerMode = process.env.SHADOW_NARRATION_REVIEW_MODE || (reviewerModel ? 'direct-edit' : 'feedback-loop');
@@ -76,7 +76,6 @@ const unloadModel = async (identifier, label) => {
   if (after.includes(identifier)) throw new Error('writer_cleanup_not_verified');
 };
 try {
-  if (!writerModel) throw new Error('writer_model_not_configured');
   if (reviewerBackend !== 'qwen' && reviewerBackend !== 'gemini-codex') throw new Error('narration_reviewer_backend_invalid');
   if (reviewerMode !== 'feedback-loop' && reviewerMode !== 'direct-edit') throw new Error('narration_review_mode_invalid');
   const writerIdentifier = `shadow-narration-${jobId}`;
