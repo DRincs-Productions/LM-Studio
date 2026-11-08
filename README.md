@@ -126,7 +126,9 @@ flowchart TD
         W -. next draft · up to 5 cycles .-> Q
     end
     C -->|richiesta originale e canon disponibile| W
-    X --> C
+    X -->|Valid final edit| C
+    X -->|Refusal, error, or invalid output| V[Venice final edit fallback]
+    V -->|Valid edit or latest usable draft| C
 ```
 
 The diagram above describes the remote Shadow narration path. It passes the submitted brief and any supplied canon directly to the Writer; this path does not create a Codex plan or SceneContract before drafting.
@@ -137,7 +139,7 @@ The matched 5 November NCF comparison selected Hemmingway as the Writer: it had 
 
 The installable [narration skill](skills/narration/SKILL.md) defines the scene artifact and Narrative Cue Format (NCF), combining Story Skills' medium-specific craft conventions with project cues for visual, audio, and animated assets. Bionic's model-specific Writer system prompts embed the applicable NCF schema because local inference models cannot read agent skill files directly. The existing image pipeline consumes `> Visual:`. Inline music, SFX, and animation execution still requires worker/runtime integration; their documented syntax is not evidence that an asset was produced.
 
-The remote Shadow default runs the Writer → Gemini feedback loop (up to five calls) → Codex final check. Errors, refusals, malformed replies or exhaustion are recorded and passed to Codex with the latest usable draft. Codex runs as a read-only, ephemeral review without the user's MCP configuration. The independent Bionic production workflow retains its own Reviewer gate.
+The remote Shadow default runs the Writer, the Gemini feedback loop, and the Codex final check. Venice attempts the final edit once if Codex refuses, fails, or returns an invalid artifact. Errors, refusals, malformed replies or exhaustion are recorded and passed to Codex with the latest usable draft. Codex runs as a read-only, ephemeral review without the user's MCP configuration. The independent Bionic production workflow retains its own Reviewer gate.
 
 Qwen2.5 14B Instruct Abliterated v2 Q4_K_M is available as an opt-in local backend by setting `SHADOW_NARRATION_REVIEW_BACKEND=qwen`; absent an explicit mode, it uses one direct edit after Writer generation. `SHADOW_NARRATION_REVIEW_MODE=feedback-loop` instead asks Qwen for evidence-based feedback, returns requested revisions to the Writer for up to five cycles, then asks Qwen for a final bounded edit. The models are loaded one at a time and unloaded before delivery. A 6 November 2026 normal-scene comparison found that the feedback reviewer returned an unsupported PASS on a clear key-placement order violation, while the final Qwen response was byte-identical to the Writer draft. In two direct-edit runs, Qwen also returned the Writer draft unchanged and left unauthorized cue lines in place. The Qwen backend is therefore not promoted as a replacement for Gemini and Codex; the existing default remains active pending stronger evidence. The direct-worker test bypassed Cloudflare, relay authentication, and the MCP/SQLite queue, and verified the Writer/Qwen stages, OneDrive publication, local download hashes, and model cleanup. See the [Qwen reviewer mode test report](production-tests/shadow-narration/20261106_qwen-reviewer-mode-comparison/report.md).
 
@@ -562,13 +564,15 @@ flowchart LR
     W --> G[Gemini review]
     G -->|Actionable feedback within five calls| W
     G -->|Pass, exhaustion or error| C[Codex review and optional edit]
-    C -->|Latest usable draft and stage outcomes| S
+    C -->|Valid final edit and stage outcomes| S
+    C -->|Refusal, error, or invalid output| V[Venice final edit fallback]
+    V -->|Valid edit or latest usable draft| S
     S -->|Publish verified scene| O[OneDrive]
     S -->|JSON result with file reference| A
     O -->|Download and verify via MCP| A
 ```
 
-Gemini and Codex receive the original prompt. Shadow Controller keeps the latest usable draft when either reviewer fails and records each outcome and reason. A missing canonical text is recorded as a limitation: `projectSha256` identifies the revision but does not itself let the server read or validate project contents. The narration worker selects Hemmingway directly. Configure `SHADOW_LM_API_BASE_URL`, `lms`, Gemini CLI, Codex CLI, and `rclone` on the server. The writer instance is unloaded after the full review cycle; cleanup failures appear in the result. The JSON references the English scene on OneDrive only after upload and byte verification. The client uses MCP to download and verify the file before analysis. Asset production is separate. See [Handoff 08](handoffs/08-server-narration.md) and the client [Shadow Requests skill](apps/shadow-client/skills/shadow-requests/SKILL.md).
+Gemini and Codex receive the original prompt. If Codex fails, Venice receives the original brief, available canon, and latest usable draft for one final edit. Shadow Controller records each outcome and keeps the latest usable draft if the fallback fails. A missing canonical text is recorded as a limitation: `projectSha256` identifies the revision but does not itself let the server read or validate project contents. The narration worker selects Hemmingway directly. Configure `SHADOW_LM_API_BASE_URL`, `lms`, Gemini CLI, Codex CLI, and `rclone` on the server. The writer instance is unloaded after the full review cycle; cleanup failures appear in the result. The JSON references the English scene on OneDrive only after upload and byte verification. The client uses MCP to download and verify the file before analysis. Asset production is separate. See [Handoff 08](handoffs/08-server-narration.md) and the client [Shadow Requests skill](apps/shadow-client/skills/shadow-requests/SKILL.md).
 
 The three fixed client-driven narration test prompts are [normal](test/normal_narration.txt), [hot](test/hot_narration.txt), and [cyberpunk](test/cyperpunk_narration.txt). Codex submits each file through Shadow Controller MCP, waits for completion, retrieves the verified OneDrive result, and returns the scene as a file. The exact run, recovery, and read-only server/OneDrive diagnostic procedure is in [AGENTS.md](AGENTS.md#test-workflow).
 
