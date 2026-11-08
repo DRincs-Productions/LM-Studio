@@ -29,6 +29,7 @@ function request(url: string, token?: string, websocket = false): Request {
 }
 
 function mockFirebase(options: {
+  userId?: string;
   verified?: boolean;
   google?: boolean;
   accountServerId?: string;
@@ -36,21 +37,22 @@ function mockFirebase(options: {
   publicKeyPem?: string;
 } = {}) {
   const calls: string[] = [];
+  const userId = options.userId ?? uid;
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const url = new URL(typeof input === "string" || input instanceof URL ? input.toString() : input.url);
     calls.push(url.href);
     if (url.hostname === "identitytoolkit.googleapis.com") {
       return Response.json({ users: [{
-        localId: uid,
+        localId: userId,
         emailVerified: options.verified ?? true,
         providerUserInfo: options.google === false ? [{ providerId: "password" }] : [{ providerId: "google.com" }],
       }] });
     }
     if (url.hostname === "firestore.googleapis.com") {
-      if (url.pathname.endsWith(`/accounts/${uid}`)) {
+      if (url.pathname.endsWith(`/accounts/${userId}`)) {
         return Response.json({ fields: { serverId: { stringValue: options.accountServerId ?? serverId } } });
       }
-      if (url.pathname.endsWith(`/accounts/${uid}/authorizedClients/${clientId}`) && options.authorizedClient !== false) {
+      if (url.pathname.endsWith(`/accounts/${userId}/authorizedClients/${clientId}`) && options.authorizedClient !== false) {
         return Response.json({ fields: { publicKey: { stringValue: options.publicKeyPem ?? publicKey } } });
       }
       return new Response("not found", { status: 404 });
@@ -234,6 +236,45 @@ describe("relay fail-closed behavior", () => {
       error: { code: "server_offline" },
     });
     socket!.close();
+  });
+
+  it("isolates authenticated accounts even when their server IDs match", async () => {
+    const key = await enrolledKey();
+    mockFirebase({ userId: "isolation-server-account" });
+    const serverResponse = await worker.fetch(
+      request(`https://relay.test/connect?role=server&serverId=${serverId}`, "server-token", true),
+      makeEnv("active"),
+      createExecutionContext(),
+    );
+    expect(serverResponse.status).toBe(101);
+    const serverSocket = serverResponse.webSocket!;
+    serverSocket.accept();
+    expect(await receiveJson(serverSocket)).toMatchObject({ type: "relay.ready" });
+
+    mockFirebase({ userId: "isolation-client-account", publicKeyPem: key.pem });
+    const clientResponse = await worker.fetch(
+      request(`https://relay.test/connect?role=client&clientId=${clientId}`, "client-token", true),
+      makeEnv("active"),
+      createExecutionContext(),
+    );
+    expect(clientResponse.status).toBe(101);
+    const socket = clientResponse.webSocket!;
+    socket.accept();
+    try {
+      const { challenge } = await receiveJson(socket);
+      expect(typeof challenge).toBe("string");
+      const nonce = String(challenge);
+      const signature = await crypto.subtle.sign({ name: "Ed25519" }, key.privateKey, decodeBase64Url(nonce));
+      socket.send(JSON.stringify({ version: 1, type: "auth.proof", challenge: nonce, signature: encodeBase64Url(signature) }));
+      expect(await receiveJson(socket)).toMatchObject({ type: "relay.ready", serverOnline: false });
+      const messageId = crypto.randomUUID();
+      const reply = receiveJson(socket);
+      socket.send(JSON.stringify({ version: 1, type: "job.list", messageId, limit: 1 }));
+      expect(await reply).toMatchObject({ type: "error", replyTo: messageId, error: { code: "server_offline" } });
+    } finally {
+      socket.close();
+      serverSocket.close();
+    }
   });
 
   it("closes an enrolled client's socket when its Ed25519 proof is invalid", async () => {
