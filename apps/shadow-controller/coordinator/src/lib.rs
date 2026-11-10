@@ -796,7 +796,7 @@ impl JobStore {
             });
         }
         transaction.execute(
-            "UPDATE jobs SET state = 'queued', finished_at = NULL, error_code = NULL WHERE job_id = ?1",
+            "UPDATE jobs SET state = 'queued', finished_at = NULL, error_code = NULL, result_manifest = NULL WHERE job_id = ?1",
             [job_id],
         )?;
         append_event(
