@@ -65,7 +65,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          sparse-checkout: apps/shadow-controller
+          sparse-checkout: |
+            apps/shadow-controller
+            skills/narration
+            skills/expressive-sounds
 
       - if: runner.os == 'Linux'
         name: Install Linux desktop dependencies
