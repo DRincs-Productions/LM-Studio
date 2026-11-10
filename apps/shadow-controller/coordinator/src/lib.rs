@@ -740,21 +740,37 @@ impl JobStore {
         let now = timestamp();
         for job_id in &job_ids {
             let current = load_job(&transaction, job_id)?.ok_or(StoreError::JobNotFound)?;
+            let (next, error_code, event_type, message) =
+                if current.state == JobState::CancelRequested {
+                    (
+                        JobState::Cancelled,
+                        "cancelled_after_restart",
+                        "job.cancelled_after_restart",
+                        "A client cancellation request was preserved across Coordinator restart",
+                    )
+                } else {
+                    (
+                        JobState::Interrupted,
+                        "interrupted_after_restart",
+                        "job.interrupted_after_restart",
+                        "The previous process ended before job completion could be verified",
+                    )
+                };
             transaction.execute(
-                "UPDATE jobs SET state = 'interrupted', finished_at = ?2, error_code = 'interrupted_after_restart' WHERE job_id = ?1",
-                params![job_id, now],
+                "UPDATE jobs SET state = ?2, finished_at = ?3, error_code = ?4 WHERE job_id = ?1",
+                params![job_id, next.as_str(), now, error_code],
             )?;
             transaction.execute(
-                "UPDATE job_attempts SET finished_at = ?2, outcome = 'interrupted' WHERE job_id = ?1 AND finished_at IS NULL",
-                params![job_id, now],
+                "UPDATE job_attempts SET finished_at = ?2, outcome = ?3 WHERE job_id = ?1 AND finished_at IS NULL",
+                params![job_id, now, next.as_str()],
             )?;
             append_event(
                 &transaction,
                 job_id,
-                "job.interrupted_after_restart",
+                event_type,
                 Some(current.state),
-                Some(JobState::Interrupted),
-                "The previous process ended before job completion could be verified",
+                Some(next),
+                message,
             )?;
         }
         transaction.commit()?;
@@ -1284,5 +1300,13 @@ mod tests {
             JobState::CancelRequested
         );
         assert!(store.next_queued().unwrap().is_none());
+        store.mark_running_jobs_interrupted().unwrap();
+        let after_restart = store.get(&active.job.job_id).unwrap().unwrap();
+        assert_eq!(after_restart.state, JobState::Cancelled);
+        assert_eq!(
+            after_restart.error_code.as_deref(),
+            Some("cancelled_after_restart")
+        );
+        assert!(store.restart_recovery_candidates().unwrap().is_empty());
     }
 }
