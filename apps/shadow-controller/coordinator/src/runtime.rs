@@ -8,6 +8,7 @@ use std::{
 };
 
 use fs2::FileExt;
+use chrono::Utc;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -167,28 +168,26 @@ pub fn run_service_with_startup(
     };
     let store = JobStore::open(data_dir.join("coordinator.sqlite3"))?;
     store.mark_running_jobs_interrupted()?;
-    let mut recovery_blocked = has_unreconciled_child_process(data_dir);
-    if recovery_blocked {
-        append_runtime_log(
-            data_dir,
-            "Queue dispatch paused: an owned model or reviewer process from an interrupted run needs manual process verification",
-        );
-    }
     on_started();
+    let mut dispatch_blocked = false;
 
     loop {
         if lease.stop_requested()? {
             return Ok(());
         }
+        if let Err(error) = recover_interrupted_jobs(data_dir, &store) {
+            append_runtime_log(data_dir, &format!("Automatic job recovery deferred: {error}"));
+        }
+        reconcile_cleanup_markers(data_dir);
         let blocked_now = has_unreconciled_child_process(data_dir);
-        if blocked_now && !recovery_blocked {
+        if blocked_now && !dispatch_blocked {
             append_runtime_log(
                 data_dir,
-                "Queue dispatch paused: an owned model or reviewer process needs manual process verification",
+                "Queue dispatch paused while a tracked child process or model cleanup is still active",
             );
         }
-        recovery_blocked = blocked_now;
-        if recovery_blocked {
+        dispatch_blocked = blocked_now;
+        if blocked_now {
             thread::sleep(Duration::from_secs(1));
         } else {
             match store.run_next(|job, store| execute_codex_job(data_dir, job, store, &lease)) {
@@ -479,6 +478,17 @@ fn execute_narrative_job(
     if let Err(error) = fs::write(run_dir.join("narration.mjs"), include_str!("narration.mjs")) {
         return failed_outcome("worker_write_error", &error.to_string(), Some(run_dir));
     }
+    let skill_path = run_dir.join("narration-skill.md");
+    if let Err(error) = fs::write(
+        &skill_path,
+        concat!(
+            include_str!("../../../../skills/narration/SKILL.md"),
+            "\n",
+            include_str!("../../../../skills/expressive-sounds/SKILL.md"),
+        ),
+    ) {
+        return failed_outcome("worker_write_error", &error.to_string(), Some(run_dir));
+    }
     let stdout_path = run_dir.join("narration.stdout.txt");
     let stderr_path = run_dir.join("narration.stderr.txt");
     let node = std::env::var_os("SHADOW_NODE_EXECUTABLE").unwrap_or_else(|| "node".into());
@@ -486,6 +496,7 @@ fn execute_narrative_job(
         .arg(run_dir.join("narration.mjs"))
         .arg(&request_path)
         .arg(run_dir)
+        .arg(&skill_path)
         .current_dir(run_dir)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -820,6 +831,119 @@ fn append_manifest_stage(run_dir: &Path, stage: serde_json::Value) {
     );
 }
 
+fn recover_interrupted_jobs(data_dir: &Path, store: &JobStore) -> Result<(), RuntimeError> {
+    for job in store.restart_recovery_candidates()? {
+        let run_dir = data_dir.join("runs").join(&job.job_id);
+        if has_live_tracked_child(&run_dir) {
+            continue;
+        }
+        if run_dir.join("cleanup-required.json").exists() {
+            if cleanup_narration_model(&run_dir).is_err() {
+                continue;
+            }
+            let _ = fs::remove_file(run_dir.join("cleanup-required.json"));
+        }
+        if run_dir.exists() {
+            let recovered_root = data_dir.join("runs").join("recovered");
+            fs::create_dir_all(&recovered_root)?;
+            let stamp = Utc::now().format("%Y%m%dT%H%M%S%.3fZ");
+            let mut archived = recovered_root.join(format!("{}-{stamp}", job.job_id));
+            let mut suffix = 1_u32;
+            while archived.exists() {
+                archived = recovered_root.join(format!("{}-{stamp}-{suffix}", job.job_id));
+                suffix += 1;
+            }
+            fs::rename(&run_dir, archived)?;
+        }
+        let requeued = store.requeue_after_restart(&job.job_id)?;
+        append_runtime_log(
+            data_dir,
+            &format!(
+                "Automatically requeued interrupted job {} after preserving its previous attempt",
+                requeued.job_id
+            ),
+        );
+    }
+    Ok(())
+}
+
+fn reconcile_cleanup_markers(data_dir: &Path) {
+    let runs = data_dir.join("runs");
+    let Ok(entries) = fs::read_dir(runs) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let run_dir = entry.path();
+        if !run_dir.join("cleanup-required.json").exists() || has_live_tracked_child(&run_dir) {
+            continue;
+        }
+        if cleanup_narration_model(&run_dir).is_ok() {
+            let _ = fs::remove_file(run_dir.join("cleanup-required.json"));
+            append_runtime_log(
+                data_dir,
+                &format!("Verified interrupted narration model cleanup in {}", run_dir.display()),
+            );
+        }
+    }
+}
+
+fn has_live_tracked_child(run_dir: &Path) -> bool {
+    for marker in ["codex-process.json", "narration-process.json"] {
+        let marker_path = run_dir.join(marker);
+        if !marker_path.exists() {
+            continue;
+        }
+        let Ok(contents) = fs::read(&marker_path) else {
+            return true;
+        };
+        let Ok(value) = serde_json::from_slice::<serde_json::Value>(&contents) else {
+            return true;
+        };
+        let Some(pid) = value.get("pid").and_then(serde_json::Value::as_u64) else {
+            return true;
+        };
+        match tracked_pid_is_alive(pid) {
+            Some(true) | None => return true,
+            Some(false) => {}
+        }
+    }
+    false
+}
+
+fn tracked_pid_is_alive(pid: u64) -> Option<bool> {
+    if pid == 0 {
+        return None;
+    }
+    #[cfg(windows)]
+    {
+        let output = Command::new("tasklist")
+            .args(["/FI", &format!("PID eq {pid}"), "/FO", "CSV", "/NH"])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        let text = String::from_utf8_lossy(&output.stdout);
+        Some(text.lines().any(|line| {
+            line.split(',')
+                .nth(1)
+                .is_some_and(|field| field.trim().trim_matches('"') == pid.to_string())
+        }))
+    }
+    #[cfg(not(windows))]
+    {
+        let status = Command::new("kill")
+            .args(["-0", &pid.to_string()])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .ok()?;
+        Some(status.success())
+    }
+}
+
 fn has_unreconciled_child_process(data_dir: &Path) -> bool {
     let runs = data_dir.join("runs");
     let entries = match fs::read_dir(runs) {
@@ -831,9 +955,8 @@ fn has_unreconciled_child_process(data_dir: &Path) -> bool {
         let Ok(entry) = entry else {
             return true;
         };
-        if entry.path().join("codex-process.json").exists()
-            || entry.path().join("narration-process.json").exists()
-            || entry.path().join("cleanup-required.json").exists()
+        if entry.path().join("cleanup-required.json").exists()
+            || has_live_tracked_child(&entry.path())
         {
             return true;
         }

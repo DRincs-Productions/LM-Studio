@@ -1,0 +1,11 @@
+# Test Fixture: Three Strangers at a Bar
+
+Write an open-ended visual-novel scene in English. Three adult strangers meet by chance in a bar and begin talking about their lives. Let the conversation find its own direction; invent a plausible encounter and a satisfying stopping point without adding a major plot twist.
+
+The three characters:
+
+- Preston Hale, 43, an affluent American with a genuinely intellectual temperament. He is articulate and precise, but should sound like a person in conversation rather than a lecture or a string of name-drops.
+- Alfie Briggs, 51, an Englishman who arrived already drunk. He is poorly informed and blunt, with simple, sometimes wandering speech. Let the alcohol show through timing, repetition, or a fitting physical sound when useful; do not make every line a slur or a joke.
+- Luca Bianchi, 38, an Italian who struggles to speak Italian fluently and often has trouble finding the words he wants. Since the complete scene must be in English, carry this through natural pauses, restarts, and self-corrections in English dialogue. Do not insert Italian sentences, fake a phonetic accent, or invent a medical diagnosis.
+
+Give each man a distinct voice that fits his personality and the situation. Keep the dialogue, actions, and sounds natural rather than mechanically alternating. Use onomatopoeia only where it adds a character-specific reaction or makes the bar scene more vivid. Follow the project's visual-novel scene format and English-output rules.

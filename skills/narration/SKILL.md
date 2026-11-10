@@ -51,21 +51,61 @@ npx skills@latest ls -g --agent codex
 
 `narration` itself can be installed from this repository as described in [Installation](#installation). Companion repositories may publish updates independently; use the repository's current default branch or a verified tag supported by the CLI.
 
+<!-- narration-runtime:start -->
 ## Scene Artifact
 
-Use this Markdown envelope:
+Write the entire artifact in English, even when the brief or its sample dialogue uses another language. Preserve character and place names, but translate all narration, dialogue, visual descriptions, and summaries into natural English. Do not leave Italian sentences or untranslated common words in the artifact. If the brief requests a regional dialect, convey its voice through English phrasing, rhythm, and idiom rather than switching languages. Use this Markdown envelope:
 
 ```markdown
 # Scene: <title>
 
+## Scene Setup
+<A short, concrete description of where the characters are, what they are doing at the opening, and the key visible details.>
+
 ## Narrative
-<prose, dialogue, and optional NCF cue lines>
+> Visual: <opening shot that frames the setup>
+
+**Speaker (optional mood or state):** "One spoken turn."
+
+<A short action paragraph, when needed.>
+
+**Speaker (optional mood or state):** "The next spoken turn."
 
 ## English Summary
-<short production summary>
+<A short, accurate summary.>
 ```
 
-Project artifacts, including narrative, dialogue, cues, and summaries, are in English. Put each cue on its own line at the point it applies. Keep story information in the prose; cues enrich presentation and must not carry plot facts omitted from the scene.
+Let dialogue carry discoveries, disagreements, and decisions. By default, spoken dialogue in the Narrative section should contain more words than its narration and action prose; omit Visual cue lines from this comparison. This is a craft rule for the Writer and final editor, not a hard server gate or a demand to pad dialogue. Let narration exceed dialogue when speech naturally recedes, especially during adult intimacy or sex, fights, action, suspense, physical tasks, and deliberately quiet beats. Keep the opening tableau in Scene Setup and story developments in Narrative. Use one quoted utterance per speaker line, formatted `**Name:** "..."` or `**Name (Mood or State):** "..."`. Add a short parenthetical only when a mood, condition, or delivery cue helps the player interpret the line; examples include `**Alfie (Drunk):** "..."` and `**Alice (Angry):** "..."`. Keep names and state labels outside the quotation marks. Put actions in separate paragraphs and repeat the speaker label after an intervening action. Do not repeat the setup or what dialogue already conveys. Make the specified endpoint the last story action or spoken line. Check that every line of dialogue is in English and that the summary attributes actions and statements correctly. A brief's requested dialogue language never overrides the project's English-output requirement; translate its meaning and preserve the requested voice without copying foreign-language sentences.
+
+### Visual-novel dialogue labels and shouting
+
+Treat every spoken turn as a separately attributed game dialogue line so the client can assign it to a character. Write the character name first, then an optional concise parenthetical mood, condition, or delivery state, then the quoted dialogue: `**Alice (Angry):** "..."`. Do not put the speaker attribution after the quote as prose such as `"..." Alice said.` Do not add a state label to every line; use it when it conveys information the scene or voice alone does not make clear. Keep narration and actions in their own paragraphs, and repeat the speaker label after each intervening action.
+
+When a character is clearly shouting, write every spoken word in ALL CAPS while preserving punctuation, for example `**Alice (Angry, shouting):** "HEY!!!?"`. Keep the character name and state label in ordinary capitalization. The Writer should apply this while drafting; the final editor (Codex or Venice) must check and correct the dialogue format and capitalization directly. The server may validate the explicit label syntax and can enforce uppercase when the label says `shouting` or `yelling`; it cannot reliably infer every shout from prose, so the final editor must also check the scene context.
+
+### Character voice, cadence, and punctuation
+
+Make each character sound like this person, in this moment, speaking to these people. Shape vocabulary, sentence length, syntax, directness, confidence, humor, and willingness to explain things around the character's established background, knowledge, temperament, relationships, and immediate situation. Let characters reveal personality through what they notice, avoid, misunderstand, repeat, or choose not to say; do not make every speaker equally articulate or give them interchangeable polished banter. Respect the brief and canon over assumptions, and avoid turning nationality, class, education, disability, or intoxication into a stock accent or joke.
+
+When a character struggles to find words, show it with readable pauses, a restart, a correction, or an incomplete thought. Preserve the project's required English output: translate the meaning and carry the struggle into natural English instead of inserting foreign-language sentences, fake phonetic spelling, or caricatured grammar. A character's speech difficulty is a behavior to portray, not a diagnosis to invent.
+
+Make the prose feel spoken and lived-in rather than mechanically assembled. Vary sentence length and structure when the beat changes; use fragments, longer turns, interruptions, or pauses only when they fit the viewpoint and moment. Use commas, dashes, periods, questions, and occasional ellipses to make intention and rhythm legible. Punctuation should add energy or nuance, not decoration: avoid making every line clipped, trailing off, or emphatic. During final editing, Codex or Venice should directly smooth formulaic cadence, improve fitting punctuation, and sharpen voice distinctions while preserving facts, scene scope, and each character's established way of speaking.
+
+### Reworking long narration
+
+When a continuous narrator passage becomes too long for a dialogue-led visual novel, preserve its facts and beat while breaking it into shorter, playable parts. The editor may use any combination of these optional, joinable forms:
+
+- One or more concise voiceover lines, formatted as `**Narrator:** "..."`.
+- A standalone `> Visual:` direction for a supported image, silhouette, framing, or other visual medium.
+- A concise narrator line or action sentence that summarizes the passage, with a contextual written sound when that sound adds rhythm or clarity.
+
+No passage needs all three forms. Keep every form optional and avoid repeating the same information across voiceover, prose, and visual direction. Do not invent a speaking narrator if the brief excludes voiceover; use concise prose instead. Visual directions describe a moment and never claim that an image or other asset has been generated.
+
+The opening Visual cue is required. Omit additional cues the brief forbids. Cues must be standalone lines and use only canon-supported details. Keep story facts understandable without cues.
+
+### Expressive sounds
+
+Use onomatopoeia and vocalizations with purpose, following [Expressive Sounds](../expressive-sounds/SKILL.md) for examples, density, and spoken delivery. In adult erotic scenes and action/fight scenes with sparse dialogue, include several natural written sound forms across the relevant beats, including vocalizations and non-vocal contact or movement sounds when supported. Descriptions of breathing alone do not satisfy this rule. These sounds belong in prose or dialogue, not NCF cue lines. The Shadow Controller bundles those rules with this skill for the Writer and editors.
 
 ## Narrative Cue Format (NCF)
 
@@ -103,10 +143,15 @@ Use for a discrete, non-musical sound, only when requested or authorized. Descri
 
 Keep the directive engine-agnostic. Do not assume Spine, Spine2D, or another tool/runtime has been selected. Use `unassigned` for identifiers not present in the Project File; do not invent rig-specific commands.
 
+<!-- narration-runtime:end -->
+
 ### Combined example
 
 ```markdown
 # Scene: The Greenhouse Signal
+
+## Scene Setup
+Tali waits beneath the greenhouse grow lamps. Ivo watches the receiver from the open doorway.
 
 ## Narrative
 > Visual: Tali stands beneath the greenhouse grow lamps as the receiver begins to glow; Ivo watches from the open doorway.
@@ -127,7 +172,7 @@ The sample cue identifiers are illustrative; they do not assert that matching as
 ## Writing and Review Rules
 
 - Canon and approved scope outrank this skill, examples, and model suggestions.
-- Add only cues supported by the approved brief or Project File. In particular, do not add music or SFX just to make a scene feel cinematic.
+- Base the required opening Visual cue on the approved brief or Project File. Add further cues only when supported. In particular, do not add music or SFX just to make a scene feel cinematic.
 - Preserve story clarity when all cues are removed. Keep prose, dialogue, character knowledge, chronology, and the endpoint complete on their own.
 - Never fabricate asset paths, registered IDs, publication status, hashes, or generation/review results.
 - Keep dialogue as prose with the project's existing speaker conventions. `CAPTION`, `BALLOON`, page headings, panel numbering, and comic SFX labels belong in a separately requested comic adaptation, not this scene format.
@@ -147,13 +192,13 @@ Until those integrations exist and are verified, do not tell the user inline mus
 From a checkout of this repository, install globally for Codex with:
 
 ```powershell
-npx skills@latest add . --skill narration --agent codex -g -y
+npx skills@latest add . --skill narration --skill expressive-sounds --agent codex -g -y
 ```
 
 After this skill is pushed to GitHub's `main` branch, install directly from the repository with:
 
 ```powershell
-npx skills@latest add https://github.com/DRincs-Productions/LM-Studio/tree/main/skills/narration --agent codex -g -y
+npx skills@latest add https://github.com/DRincs-Productions/LM-Studio --skill narration --skill expressive-sounds --agent codex -g -y
 ```
 
 To install into other supported agents, replace `--agent codex` with the desired agent ID, or pass multiple agent IDs as supported by the Skills CLI. The format and instructions are portable; references to other Story Skills are optional and apply only when those skills are installed for that agent.

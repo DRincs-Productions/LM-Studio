@@ -87,6 +87,7 @@ impl JobState {
                 | (Self::CancelRequested, Self::Failed)
                 | (Self::CancelRequested, Self::Cancelled)
                 | (Self::CancelRequested, Self::Interrupted)
+                | (Self::Interrupted, Self::Queued)
         )
     }
 
@@ -488,18 +489,33 @@ impl JobStore {
             "UPDATE jobs SET state = 'running', started_at = COALESCE(started_at, ?2) WHERE job_id = ?1",
             params![job_id, now],
         )?;
+        let next_attempt: i64 = transaction.query_row(
+            "SELECT COALESCE(MAX(attempt_number), 0) + 1 FROM job_attempts WHERE job_id = ?1",
+            [&job_id],
+            |row| row.get(0),
+        )?;
+        let recovery: bool = transaction.query_row(
+            "SELECT EXISTS(SELECT 1 FROM job_events WHERE job_id = ?1 AND event_type = 'job.automatically_requeued_after_restart')",
+            [&job_id],
+            |row| row.get(0),
+        )?;
         transaction.execute(
             "INSERT INTO job_attempts (job_id, attempt_number, cause, approved_by, started_at)
-             VALUES (?1, 1, ?2, ?3, ?4)",
+             VALUES (?1, ?2, ?3, ?4, ?5)",
             params![
                 job_id,
+                next_attempt,
                 if current.retry_of_job_id.is_some() {
                     "manual_retry"
+                } else if recovery {
+                    "automatic_restart_recovery"
                 } else {
                     "initial_request"
                 },
                 if current.retry_of_job_id.is_some() {
                     "authorized_client"
+                } else if recovery {
+                    "coordinator_restart_recovery"
                 } else {
                     "client_request"
                 },
@@ -743,6 +759,57 @@ impl JobStore {
         }
         transaction.commit()?;
         Ok(job_ids.len())
+    }
+
+    /// Returns restart-interrupted jobs eligible for safe, automatic recovery.
+    pub fn restart_recovery_candidates(&self) -> Result<Vec<JobRecord>, StoreError> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| StoreError::LockPoisoned)?;
+        let mut statement = connection.prepare(
+            "SELECT job_id FROM jobs WHERE state = 'interrupted' AND error_code = 'interrupted_after_restart' ORDER BY fifo_sequence",
+        )?;
+        let job_ids = statement
+            .query_map([], |row| row.get::<_, String>(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        job_ids
+            .into_iter()
+            .map(|job_id| load_job(&connection, &job_id)?.ok_or(StoreError::JobNotFound))
+            .collect()
+    }
+
+    /// Requeues a restart-interrupted job once its previous process and artifacts are reconciled.
+    pub fn requeue_after_restart(&self, job_id: &str) -> Result<JobRecord, StoreError> {
+        let mut connection = self
+            .connection
+            .lock()
+            .map_err(|_| StoreError::LockPoisoned)?;
+        let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let current = load_job(&transaction, job_id)?.ok_or(StoreError::JobNotFound)?;
+        if current.state != JobState::Interrupted
+            || current.error_code.as_deref() != Some("interrupted_after_restart")
+        {
+            return Err(StoreError::InvalidTransition {
+                from: current.state,
+                to: JobState::Queued,
+            });
+        }
+        transaction.execute(
+            "UPDATE jobs SET state = 'queued', finished_at = NULL, error_code = NULL WHERE job_id = ?1",
+            [job_id],
+        )?;
+        append_event(
+            &transaction,
+            job_id,
+            "job.automatically_requeued_after_restart",
+            Some(JobState::Interrupted),
+            Some(JobState::Queued),
+            "The interrupted run was reconciled and queued automatically after restart",
+        )?;
+        let job = load_job(&transaction, job_id)?.ok_or(StoreError::JobNotFound)?;
+        transaction.commit()?;
+        Ok(job)
     }
 }
 
@@ -1157,27 +1224,31 @@ mod tests {
     }
 
     #[test]
-    fn state_changes_are_checked_and_restart_never_requeues_running_jobs() {
+    fn restart_recovery_requeues_jobs_as_a_new_attempt() {
         let store = JobStore::open_in_memory().unwrap();
         let accepted = store.submit(request("request-1", 1)).unwrap();
-        store
-            .transition(&accepted.job.job_id, JobState::Running, None, "Job started")
-            .unwrap();
+        store.claim_next_queued().unwrap().unwrap();
         let interrupted = store.mark_running_jobs_interrupted().unwrap();
         assert_eq!(interrupted, 1);
         assert_eq!(
             store.get(&accepted.job.job_id).unwrap().unwrap().state,
             JobState::Interrupted
         );
-        assert!(matches!(
-            store.transition(
-                &accepted.job.job_id,
-                JobState::Succeeded,
-                None,
-                "late result"
-            ),
-            Err(StoreError::InvalidTransition { .. })
-        ));
+        assert_eq!(store.restart_recovery_candidates().unwrap().len(), 1);
+        store.requeue_after_restart(&accepted.job.job_id).unwrap();
+        let rerun = store.claim_next_queued().unwrap().unwrap();
+        assert_eq!(rerun.state, JobState::Running);
+        let connection = store.connection.lock().unwrap();
+        let (attempt, cause, approved_by): (i64, String, String) = connection
+            .query_row(
+                "SELECT attempt_number, cause, approved_by FROM job_attempts WHERE job_id = ?1 ORDER BY attempt_number DESC LIMIT 1",
+                [&accepted.job.job_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(attempt, 2);
+        assert_eq!(cause, "automatic_restart_recovery");
+        assert_eq!(approved_by, "coordinator_restart_recovery");
     }
 
     #[test]
