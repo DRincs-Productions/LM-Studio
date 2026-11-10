@@ -7,8 +7,8 @@ use std::{
     time::{Duration, Instant},
 };
 
-use fs2::FileExt;
 use chrono::Utc;
+use fs2::FileExt;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -176,7 +176,10 @@ pub fn run_service_with_startup(
             return Ok(());
         }
         if let Err(error) = recover_interrupted_jobs(data_dir, &store) {
-            append_runtime_log(data_dir, &format!("Automatic job recovery deferred: {error}"));
+            append_runtime_log(
+                data_dir,
+                &format!("Automatic job recovery deferred: {error}"),
+            );
         }
         reconcile_cleanup_markers(data_dir);
         let blocked_now = has_unreconciled_child_process(data_dir);
@@ -881,7 +884,10 @@ fn reconcile_cleanup_markers(data_dir: &Path) {
             let _ = fs::remove_file(run_dir.join("cleanup-required.json"));
             append_runtime_log(
                 data_dir,
-                &format!("Verified interrupted narration model cleanup in {}", run_dir.display()),
+                &format!(
+                    "Verified interrupted narration model cleanup in {}",
+                    run_dir.display()
+                ),
             );
         }
     }
