@@ -84,6 +84,10 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
+      - name: Validate bundled narration worker syntax
+        working-directory: apps/shadow-controller
+        run: node --check coordinator/src/narration.mjs
+
       - name: Install desktop dependencies
         working-directory: apps/shadow-controller
         run: npm ci

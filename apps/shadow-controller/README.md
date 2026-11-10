@@ -17,4 +17,4 @@ npm install
 npm run dev
 ```
 
-Building or running the native Tauri application requires the platform prerequisites, including Rust. GitHub Actions will provide the release builds so end users do not need the Rust toolchain.
+Building or running the native Tauri application requires the platform prerequisites, including Rust. GitHub Actions will provide the release builds so end users do not need the Rust toolchain. The server release workflow runs `node --check coordinator/src/narration.mjs` before packaging to catch syntax errors in the bundled narration worker and its prompts.
