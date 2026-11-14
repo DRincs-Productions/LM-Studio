@@ -585,6 +585,8 @@ flowchart LR
     T -->|Cutout and review preview| S
     S -->|Candidate and brief| R[Visual reviewer]
     R -->|Verdict| S
+    S -->|Located background remnants| P[Raster editor]
+    P -->|Repaired cutout for review| S
     S -->|Verified PNG and manifest| O[OneDrive]
     O -->|Download and verify via MCP| A
 ```

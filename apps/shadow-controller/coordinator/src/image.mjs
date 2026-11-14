@@ -39,10 +39,10 @@ async function command(executable, args, timeout, maxBuffer = 1024 * 1024) {
   return run(executable, args, { cwd: runDir, timeout, maxBuffer, encoding: 'buffer', windowsHide: true });
 }
 
-async function call(name, args, timeout) {
+async function call(name, args, timeout, logName = name) {
   const response = await client.callTool({ name, arguments: args }, undefined, { timeout });
   const message = response.content.filter(item => item.type === 'text').map(item => item.text).join('\n');
-  await writeFile(path.join(runDir, `${name}.txt`), message, { flag: 'wx' });
+  await writeFile(path.join(runDir, `${logName}.txt`), message, { flag: 'wx' });
   if (response.isError) throw new Error(`Image Worker rejected ${name}`);
   return message;
 }
@@ -120,40 +120,94 @@ try {
   stage = 'postprocess';
   if (transparent) {
     preview = path.join(runDir, 'review-preview.png');
-    const model = profile === 'anime' ? 'isnet-anime' : 'isnet-general-use';
+    const model = profile === 'anime' ? 'isnet-anime' : process.env.SHADOW_REMBG_STANDARD_MODEL || 'isnet-general-use';
     await command(process.env.SHADOW_IMAGE_PYTHON || 'python',
       [path.join(path.dirname(worker), 'transparent.py'), source, final, preview, model], 300_000);
     manifest.postprocess = { tool: 'rembg', model };
   } else {
     await writeFile(final, sourceBytes, { flag: 'wx' });
   }
-  const png = await readFile(final);
-  verifyPng(png);
+  const initialPng = await readFile(final);
+  verifyPng(initialPng);
   manifest.stages.push({ stage, outcome: 'verified' });
   await save();
 
   stage = 'review';
-  const review = await call('review_with_opencode', {
-    image_path: preview,
-    original_request: transparent
-      ? `Requested subject: ${brief}\nThe checkerboard represents transparency. A damaged silhouette, missing subject elements, severe halos or background remnants are major errors.`
-      : brief,
-  }, 960_000);
-  const scoreText = field(review, 'SCORE');
-  const score = /^\d{1,3}$/.test(scoreText ?? '') ? Number(scoreText) : null;
-  const majorError = field(review, 'MAJOR_ERROR');
-  if (!/^REVIEW_SUCCESS\r?$/m.test(review) || score === null || score > 100 || !['YES', 'NO'].includes(majorError)) {
-    throw new Error('The visual reviewer did not return a verifiable verdict');
+  const inspect = async (imagePath, logName, candidatePath) => {
+    let evidence = '';
+    if (transparent) {
+      const { stdout } = await command(process.env.SHADOW_IMAGE_PYTHON || 'python',
+        [path.join(path.dirname(worker), 'transparent.py'), '--inspect', source, candidatePath], 30_000);
+      evidence = `\nInspect these candidate boxes [left,top,right,bottom] in normalized 0..1000 coordinates: ${stdout.toString().trim()}. They contain opaque pixels resembling the original background color. Use the image to distinguish residue from the foreground.`;
+    }
+    const review = await call('review_with_opencode', {
+      image_path: imagePath, original_request: brief + evidence, inspect_alpha: transparent,
+    }, 960_000, logName);
+    const scoreText = field(review, 'SCORE');
+    const score = /^\d{1,3}$/.test(scoreText ?? '') ? Number(scoreText) : null;
+    const majorError = field(review, 'MAJOR_ERROR');
+    if (!/^REVIEW_SUCCESS\r?$/m.test(review) || score === null || score > 100 || !['YES', 'NO'].includes(majorError)) {
+      throw new Error('The visual reviewer did not return a verifiable verdict');
+    }
+    const residue = transparent ? JSON.parse(field(review, 'BACKGROUND_RESIDUE') ?? 'null') : [];
+    if (!Array.isArray(residue) || residue.length > 4 || residue.some(polygon =>
+      !Array.isArray(polygon) || polygon.length < 3 || polygon.length > 32
+      || polygon.some(point => !Array.isArray(point) || point.length !== 2
+        || point.some(n => !Number.isInteger(n) || n < 0 || n > 1000)))) {
+      throw new Error('The reviewer could not verify or localize the background residue');
+    }
+    return { score, majorError: majorError === 'YES', residue };
+  };
+  let verdict = await inspect(preview, 'review_with_opencode', final);
+  let delivery = final;
+  if (verdict.residue.length) {
+    stage = 'background_repair';
+    const executable = process.env.SHADOW_PHOTOCRAFT_EXECUTABLE;
+    if (!executable) throw new Error('PhotoCraft is not configured for background repair');
+    const editor = new Client({ name: 'shadow-alpha-repair', version: '1.0.0' });
+    try {
+      await editor.connect(new StdioClientTransport({
+        command: executable,
+        args: ['mcp', '--automation-read-root', runDir, '--automation-write-root', runDir],
+        env: { ...process.env, PHOTOCRAFT_CONTROL_PORT: '' },
+        stderr: 'inherit',
+      }));
+      const edit = async (name, args) => {
+        const result = await editor.callTool({ name, arguments: args }, undefined, { timeout: 60_000 });
+        await writeFile(path.join(runDir, 'photocraft-repair.jsonl'), JSON.stringify({ name, args, result }) + '\n', { flag: 'a' });
+        if (result.isError) throw new Error(`PhotoCraft failed ${name}`);
+      };
+      await edit('doc_open', { path: 'image.png' });
+      for (const polygon of verdict.residue) {
+        const points = polygon.map(([x, y]) => [Math.round(x * (width - 1) / 1000), Math.round(y * (height - 1) / 1000)]);
+        await edit('command_run', { id: 'select.lasso', params: { points } });
+        await edit('command_run', { id: 'edit.clear', params: {} });
+      }
+      await edit('doc_export', { path: 'image-repaired.png' });
+    } finally {
+      await editor.close();
+    }
+    delivery = path.join(runDir, 'image-repaired.png');
+    preview = path.join(runDir, 'review-repaired.png');
+    await command(process.env.SHADOW_IMAGE_PYTHON || 'python',
+      [path.join(path.dirname(worker), 'transparent.py'), '--preview', delivery, preview], 300_000);
+    manifest.stages.push({ stage, outcome: 'edited', editor: 'PhotoCraft', regions: verdict.residue });
+    await save();
+    stage = 'review';
+    verdict = await inspect(preview, 'review_repaired', delivery);
   }
-  manifest.review = { score, majorError: majorError === 'YES' };
-  manifest.stages.push({ stage, outcome: score >= 80 && majorError === 'NO' ? 'accepted' : 'rejected' });
-  if (score < 80 || majorError !== 'NO') throw new Error('The candidate did not pass visual review');
+  manifest.review = verdict;
+  const accepted = verdict.score >= 80 && !verdict.majorError && verdict.residue.length === 0;
+  manifest.stages.push({ stage, outcome: accepted ? 'accepted' : 'rejected' });
+  if (!accepted) throw new Error('The candidate did not pass visual review');
+  const png = await readFile(delivery);
+  verifyPng(png);
   await save();
 
   stage = 'publication';
   const imageRemotePath = remoteDir + '/image.png';
   const imageSha256 = hash(png);
-  await publish(final, imageRemotePath, png, maxImageBytes);
+  await publish(delivery, imageRemotePath, png, maxImageBytes);
   const completed = {
     ...manifest, status: 'succeeded', imageRemotePath, imageSha256, imageBytes: png.length,
     elapsedMs: Date.now() - started,
