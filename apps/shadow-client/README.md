@@ -6,7 +6,7 @@ The package also contains an authenticated WebSocket relay client and MCP tools 
 
 For `codex.execute` v1, the client accepts only `{ "task": "..." }`. For `narrative.generate` v1, it validates `projectId`, `projectSha256`, and `brief`, with optional object-valued `metadata`. File submissions are limited to 12,000 UTF-8 bytes. Pass canon text in `metadata.canon` only when it is available and authorized; the hash alone does not let the server read or verify a project revision. A returned `completed_with_warnings` manifest still contains a usable scene when its OneDrive path and hash are present, but reviewer errors are never approval.
 
-For images, `shadow_submit_image` queues an `image.generate` job with a prepared prompt, optional negative prompt, profile, mode, dimensions and registered LoRA selections. Codex drafts for the normal profile. For NSFW and anime, `shadow_prepare_image_prompt` uses the client computer’s authenticated OpenCode Venice provider for a text-only plan. Set `SHADOW_IMAGE_DRAFT_VENICE_MODEL` to override its Venice model. Use the same job status and wait tools, then call `get_image_result` to download and verify the published PNG. `shadow-client install-skill` installs the bundled `shadow-image-requests` skill alongside the narration skill.
+For images, `shadow_submit_image` queues an `image.generate` job with an English visual brief and optional profile, mode and dimensions. The paired server prepares the model-specific prompt, LoRAs and sampling settings. Use the same job status and wait tools, then call `get_image_result` to download and verify the published PNG. `shadow-client install-skill` installs the bundled `shadow-image-requests` skill alongside the narration skill.
 
 
 ## Commands

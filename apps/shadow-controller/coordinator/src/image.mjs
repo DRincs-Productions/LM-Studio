@@ -1,24 +1,25 @@
 import { execFile } from 'node:child_process';
 import { createHash, randomInt } from 'node:crypto';
-import { readFile, rename, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { pathToFileURL } from 'node:url';
 
-const [requestPath, runDir] = process.argv.slice(2);
+const [requestPath, runDir, skillPath] = process.argv.slice(2);
 const { jobId, requestId, payload } = JSON.parse(await readFile(requestPath, 'utf8'));
-const { brief, prompt: preparedPrompt, negativePrompt, profile = 'normal', mode = 'standard', width = 1920, height = 1080, loras = [] } = payload;
+const { brief, prompt: legacyPrompt, negativePrompt: requestedNegativePrompt, profile = 'normal', mode = 'standard', width = 1920, height = 1080, loras: requestedLoras = [] } = payload;
 const seed = randomInt(1, 2147483647);
 const routes = {
-  normal: { generator: 'normal', style: 'standard', id: 'krea2_turbo', reviewer: 'openai/gpt-6-luna' },
-  nsfw: { generator: 'adult', style: 'standard', id: 'redcraft_redmix_hybrid', reviewer: 'venice/venice-uncensored-1-2' },
-  anime: { generator: 'normal', style: 'anime', id: 'krea2_anime_v20', reviewer: 'venice/venice-uncensored-1-2' },
+  normal: { generator: 'normal', style: 'standard', id: 'krea2_turbo', stepRange: [8, 8], reviewer: 'openai/gpt-6-luna' },
+  nsfw: { generator: 'adult', style: 'standard', id: 'redcraft_redmix_hybrid', stepRange: [8, 12], reviewer: 'venice/venice-uncensored-1-2' },
+  anime: { generator: 'normal', style: 'anime', id: 'krea2_anime_v20', stepRange: [8, 20], reviewer: 'venice/venice-uncensored-1-2' },
 };
 const route = routes[profile];
 const reviewer = profile === 'normal' ? route.reviewer : process.env.SHADOW_IMAGE_VENICE_MODEL || route.reviewer;
-const manifest = { schemaVersion: 1, runId: jobId, requestId, status: 'running', profile, mode, width, height, seed, checkpoint: route.id, reviewer, loras, stages: [] };
+const planner = profile === 'normal' ? (process.env.SHADOW_OPENCODE_MODEL || 'openai/gpt-6-luna') : reviewer;
+const manifest = { schemaVersion: 1, runId: jobId, requestId, status: 'running', profile, mode, width, height, seed, checkpoint: route.id, planner, reviewer, stages: [] };
 const manifestPath = path.join(runDir, 'result-manifest.json');
 const save = async () => {
   const temp = manifestPath + '.tmp';
@@ -37,6 +38,68 @@ const started = Date.now();
 
 async function command(executable, args, timeout, maxBuffer = 1024 * 1024) {
   return run(executable, args, { cwd: runDir, timeout, maxBuffer, encoding: 'buffer', windowsHide: true });
+}
+
+async function prepareImage(checkpoint, catalog) {
+  const skill = await readFile(skillPath || new URL('../../../../skills/image-preparation/SKILL.md', import.meta.url), 'utf8');
+  const [minSteps, maxSteps] = route.stepRange;
+  const limits = {
+    checkpoint: route.id, width, height, minSteps, maxSteps,
+    defaults: { steps: checkpoint.steps, cfgScale: checkpoint.cfgScale },
+    sampler: 'euler', scheduler: 'simple', readyLoras: catalog,
+  };
+  const request = {
+    brief: brief ?? legacyPrompt, mode, negativePromptPreference: requestedNegativePrompt,
+    requestedLoras,
+  };
+  const input = `${skill}\n\nSupported settings:\n${JSON.stringify(limits)}\n\nImage request:\n${JSON.stringify(request)}`;
+  await writeFile(path.join(runDir, 'image-planner-input.txt'), input, { flag: 'wx' });
+  const plannerDir = path.join(runDir, 'planner');
+  await mkdir(plannerDir);
+  const deny = [{ action: '*', resource: '*', effect: 'deny' }];
+  await writeFile(path.join(plannerDir, 'opencode.json'), JSON.stringify({
+    model: planner, mcp: { servers: {} }, permissions: deny,
+    agents: { 'image-planner': { description: 'Prepare image prompt JSON.', mode: 'primary', model: planner, permissions: deny } },
+  }), { flag: 'wx' });
+  const executable = process.env.OPENCODE_EXECUTABLE || (process.platform === 'win32' && process.env.APPDATA
+    ? path.join(process.env.APPDATA, 'npm', 'node_modules', '@opencode', 'cli', 'bin', 'opencode.exe') : 'opencode');
+  const plan = run(executable, ['--standalone', 'run', '--model', planner, '--agent', 'image-planner',
+    '--format', 'json', 'Prepare the image generation JSON from the supplied skill and request.'],
+  { cwd: plannerDir, timeout: 120_000, maxBuffer: 1024 * 1024, windowsHide: true });
+  plan.child.stdin?.end(input);
+  let stdout;
+  try {
+    ({ stdout } = await plan);
+  } catch (error) {
+    await writeFile(path.join(runDir, 'image-planner.stderr.txt'), String(error.stderr ?? error.message));
+    throw new Error('OpenCode image preparation failed');
+  }
+  await writeFile(path.join(runDir, 'image-planner.jsonl'), stdout, { flag: 'wx' });
+  const response = stdout.split(/\r?\n/).flatMap(line => {
+    try {
+      const event = JSON.parse(line);
+      return event?.type === 'text' && typeof event.part?.text === 'string' ? [event.part.text] : [];
+    } catch { return []; }
+  }).join('').trim().replace(/^```(?:json)?\s*|\s*```$/gi, '');
+  const draft = JSON.parse(response);
+  const validPrompt = text => typeof text === 'string' && text.trim() && Buffer.byteLength(text) <= 12000
+    && !text.includes('\0') && !/<\s*lora\s*:/i.test(text);
+  const negativePrompt = draft?.negativePrompt === '' || draft?.negativePrompt === null ? undefined : draft?.negativePrompt;
+  if (!validPrompt(draft?.prompt) || (negativePrompt !== undefined && !validPrompt(negativePrompt))
+      || !Number.isInteger(draft.steps) || draft.steps < minSteps || draft.steps > maxSteps
+      || draft.cfgScale !== checkpoint.cfgScale || !Array.isArray(draft.loras) || draft.loras.length > 4) {
+    throw new Error('Image planner returned unsupported prompts or sampling settings');
+  }
+  const loras = draft.loras.map(selection => {
+    const adapter = catalog.find(item => item.id === selection?.id);
+    const weight = selection?.weight;
+    if (!adapter || !Number.isFinite(weight) || weight === 0 || weight < adapter.minWeight || weight > adapter.maxWeight) {
+      throw new Error('Image planner returned an unavailable or incompatible LoRA');
+    }
+    return { id: adapter.id, weight };
+  });
+  if (new Set(loras.map(item => item.id)).size !== loras.length) throw new Error('Image planner returned duplicate LoRAs');
+  return { prompt: draft.prompt.trim(), negativePrompt, steps: draft.steps, cfgScale: draft.cfgScale, loras };
 }
 
 async function call(name, args, timeout, logName = name) {
@@ -84,39 +147,33 @@ try {
   manifest.modelPath = checkpoint.path;
   manifest.encoderPath = status.encoder.path;
   manifest.vaePath = status.vae.path;
-  manifest.steps = checkpoint.steps;
-  manifest.cfgScale = checkpoint.cfgScale;
-  manifest.loraPaths = loras.map(({ id, weight }) => {
-    const registration = Object.hasOwn(status.loras, id) && status.loras[id];
-    if (!registration?.available || registration.validationStatus !== 'ready'
-        || !registration.profiles.includes(route.id)
-        || weight < registration.minWeight || weight > registration.maxWeight) {
-      throw new Error(`LoRA ${id} is unavailable, unvalidated or incompatible with the selected profile and weight`);
-    }
-    return registration.path;
-  });
+  stage = 'preparation';
+  const registered = status.loras ?? {};
+  const catalog = Object.entries(registered).filter(([, item]) =>
+    item.available && item.validationStatus === 'ready' && item.profiles.includes(route.id))
+    .map(([id, { minWeight, maxWeight, effect, preferredWeight, trigger }]) =>
+      ({ id, minWeight, maxWeight, effect, preferredWeight, trigger }));
+  const { prompt, negativePrompt, steps, cfgScale, loras } = await prepareImage(checkpoint, catalog);
+  Object.assign(manifest, { steps, cfgScale, loras, loraPaths: loras.map(({ id }) => registered[id].path) });
+  manifest.stages.push({ stage, outcome: 'verified', model: planner });
+  await save();
 
   stage = 'generation';
   const transparent = mode === 'transparent';
   const sourceName = 'source.png';
   const source = path.join(runDir, sourceName);
   const final = path.join(runDir, 'image.png');
-  // Legacy briefs are sanitized before they reach the diffusion command.
-  const prompt = preparedPrompt ?? brief.replace(/<\s*lora\s*:[^>]*(?:>|$)/gi, '');
-  if (!prompt.trim() || [prompt, negativePrompt].some(text => /<\s*lora\s*:/i.test(text ?? ''))) {
-    throw new Error('An image prompt is required and adapters must be declared separately');
-  }
   const effectivePrompt = transparent
     ? `${prompt}\nIsolate the entire subject with space around it, against a uniform solid color that contrasts with its edges. No ground shadows, background objects, texture or gradients.`
     : prompt;
   const generationSettings = {
-    checkpoint: route.id, seed, width, height, steps: checkpoint.steps, cfgScale: checkpoint.cfgScale,
+    checkpoint: route.id, seed, width, height, steps, cfgScale,
     sampler: 'euler', scheduler: 'simple', loras,
   };
   const generated = await call('generate_image', {
     generator: route.generator, style: route.style,
     width, height, seed, filename: sourceName, loras,
-    prompt: effectivePrompt, negative_prompt: negativePrompt,
+    prompt: effectivePrompt, negative_prompt: negativePrompt, steps, cfg_scale: cfgScale,
   }, 3_660_000);
   if (!/^SUCCESS\r?$/m.test(generated)) throw new Error('Image Worker failed generation; see the preserved tool output');
   manifest.loraApplication = field(generated, 'LORA_TENSORS_APPLIED');
@@ -156,7 +213,7 @@ try {
       evidence = `\nInspect these candidate boxes [left,top,right,bottom] in normalized 0..1000 coordinates: ${stdout.toString().trim()}. They contain opaque pixels resembling the original background color. Use the image to distinguish residue from the foreground.`;
     }
     const review = await call('review_with_opencode', {
-      image_path: imagePath, original_request: `Prepared prompt:\n${prompt}\n\nEffective generation prompt:\n${effectivePrompt}\n\nGeneration settings:\n${JSON.stringify({ ...generationSettings, loraApplication: manifest.loraApplication })}${evidence}`, inspect_alpha: transparent, evidence_path: evidencePath,
+      image_path: imagePath, original_request: `Original visual brief:\n${brief ?? legacyPrompt}\n\nPrepared prompt:\n${prompt}\n\nEffective generation prompt:\n${effectivePrompt}\n\nGeneration settings:\n${JSON.stringify({ ...generationSettings, loraApplication: manifest.loraApplication })}${evidence}`, inspect_alpha: transparent, evidence_path: evidencePath,
     }, 960_000, logName);
     const scoreText = field(review, 'SCORE');
     const score = /^\d{1,3}$/.test(scoreText ?? '') ? Number(scoreText) : null;

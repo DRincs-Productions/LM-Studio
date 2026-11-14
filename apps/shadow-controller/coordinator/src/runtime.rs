@@ -515,7 +515,18 @@ fn execute_media_job(
     if let Err(error) = fs::write(&worker_path, source) {
         return failed_outcome("worker_write_error", &error.to_string(), Some(run_dir));
     }
-    let skill_path = run_dir.join("narration-skill.md");
+    let skill_path = if worker == "image" {
+        let path = run_dir.join("image-preparation-skill.md");
+        if let Err(error) = fs::write(
+            &path,
+            include_str!("../../../../skills/image-preparation/SKILL.md"),
+        ) {
+            return failed_outcome("worker_write_error", &error.to_string(), Some(run_dir));
+        }
+        path
+    } else {
+        run_dir.join("narration-skill.md")
+    };
     if worker == "narration" {
         if let Err(error) = fs::write(
             &skill_path,

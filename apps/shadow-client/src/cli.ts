@@ -37,8 +37,6 @@ async function main(): Promise<void> {
     const files = [
       ["shadow-requests", "SKILL.md"],
       ["shadow-image-requests", "SKILL.md"],
-      ["shadow-image-requests", "references", "redcraft-v3.md"],
-      ["shadow-image-requests", "references", "loras.md"],
     ];
     const selectedSkill = process.argv[3];
     if (selectedSkill && !files.some(([skill]) => skill === selectedSkill)) {

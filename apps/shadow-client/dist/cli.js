@@ -42,9 +42,7 @@ async function main() {
     const codexHome = process.env.CODEX_HOME || join(homedir(), ".codex");
     const files = [
       ["shadow-requests", "SKILL.md"],
-      ["shadow-image-requests", "SKILL.md"],
-      ["shadow-image-requests", "references", "redcraft-v3.md"],
-      ["shadow-image-requests", "references", "loras.md"]
+      ["shadow-image-requests", "SKILL.md"]
     ];
     const selectedSkill = process.argv[3];
     if (selectedSkill && !files.some(([skill]) => skill === selectedSkill)) {

@@ -243,7 +243,7 @@ server.tool(
       profiles: Object.fromEntries(await Promise.all(Object.entries(PROFILE_PATHS).map(async ([id, modelPath]) => [id, { path: modelPath, available: await exists(modelPath), ...PROFILES[id] }]))),
       encoder: { path: ENCODER, available: await exists(ENCODER) },
       vae: { path: VAE, available: await exists(VAE) },
-      loras: Object.fromEntries(await Promise.all(Object.entries(LORA_CATALOG).map(async ([id, item]) => [id, { path: path.join(LORAS, item.file), available: await exists(path.join(LORAS, item.file)), minWeight: item.minWeight, maxWeight: item.maxWeight, profiles: item.profiles, validationStatus: item.validationStatus }]))),
+      loras: Object.fromEntries(await Promise.all(Object.entries(LORA_CATALOG).map(async ([id, item]) => [id, { path: path.join(LORAS, item.file), available: await exists(path.join(LORAS, item.file)), minWeight: item.minWeight, maxWeight: item.maxWeight, profiles: item.profiles, validationStatus: item.validationStatus, effect: item.effect, preferredWeight: item.preferredWeight, trigger: item.trigger }]))),
 
       work_directory: WORK,
       final_directory: FINAL,
