@@ -22,6 +22,10 @@ const openCodeText = output => {
   }
   return text.join('').trim();
 };
+const unwrapSceneMarkdown = value => {
+  const fenced = /^(`{3,})(?:markdown|md)?[ \t]*\r?\n([\s\S]*?)\r?\n\1[ \t]*$/i.exec(value);
+  return fenced ? fenced[2].trim() : value;
+};
 const record = async value => {
   stages.push(value);
   await writeFile(`${runDir}/stages.json`, JSON.stringify(stages, null, 2));
@@ -175,7 +179,7 @@ const editWithVenice = async (prompt, { freeOnly = false } = {}) => {
   } catch {
     throw new Error('venice_opencode_failed');
   }
-  const edited = openCodeText(result.stdout);
+  const edited = unwrapSceneMarkdown(openCodeText(result.stdout));
   if (!edited) throw new Error('venice_empty_response');
   if (!artifactValid(edited) || sceneIssues(edited).length) throw new Error('venice_artifact_invalid');
   return edited;
