@@ -481,6 +481,7 @@ PATH: ${outputPath}
 SEED: ${seed}
 STEPS: ${steps ?? profile.steps}
 CFG_SCALE: ${cfg_scale ?? profile.cfgScale}
+NEGATIVE_PROMPT: ${JSON.stringify(negative_prompt)}
 LORAS: ${selectedLoras.map(item => `${item.id}@${item.weight}`).join(",") || "none"}
 LORA_TENSORS_APPLIED: ${selectedLoras.length ? loraEvidence : "not requested"}
 FILE_SIZE_BYTES: ${stats.size}`

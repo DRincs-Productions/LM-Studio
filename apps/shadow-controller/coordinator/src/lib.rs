@@ -106,11 +106,38 @@ pub fn valid_image_payload(payload: &serde_json::Value) -> bool {
     if !fields.keys().all(|key| {
         matches!(
             key.as_str(),
-            "brief" | "profile" | "mode" | "width" | "height" | "loras"
+            "brief"
+                | "prompt"
+                | "negativePrompt"
+                | "profile"
+                | "mode"
+                | "width"
+                | "height"
+                | "loras"
         )
-    }) || !payload["brief"].as_str().is_some_and(|brief| {
-        !brief.trim().is_empty() && brief.len() <= 12_000 && !brief.contains('\0')
-    }) {
+    }) || fields.contains_key("prompt") == fields.contains_key("brief")
+    {
+        return false;
+    }
+    let valid_text = |value: &serde_json::Value| {
+        value.as_str().is_some_and(|text| {
+            !text.trim().is_empty() && text.len() <= 12_000 && !text.contains('\0')
+        })
+    };
+    if !valid_text(fields.get("prompt").unwrap_or(&payload["brief"]))
+        || fields
+            .get("negativePrompt")
+            .is_some_and(|value| !valid_text(value))
+        || ["prompt", "negativePrompt"].iter().any(|key| {
+            payload[*key].as_str().is_some_and(|text| {
+                text.to_ascii_lowercase().split('<').skip(1).any(|part| {
+                    part.trim_start()
+                        .strip_prefix("lora")
+                        .is_some_and(|suffix| suffix.trim_start().starts_with(':'))
+                })
+            })
+        })
+    {
         return false;
     }
     for (key, allowed) in [
@@ -1033,7 +1060,13 @@ mod tests {
             "brief": "A lantern", "profile": "anime", "mode": "transparent",
             "width": 768, "height": 1024, "loras": [{ "id": "test-lora", "weight": -0.5 }]
         })));
+        assert!(valid_image_payload(&serde_json::json!({
+            "prompt": "A brass lantern", "negativePrompt": "lettering"
+        })));
         for invalid in [
+            serde_json::json!({"prompt":"A lantern < LoRA : untrusted:1>"}),
+            serde_json::json!({"prompt":"A lantern", "negativePrompt":"<lora:untrusted:1>"}),
+            serde_json::json!({"prompt":"A lantern", "brief":"Two lanterns"}),
             serde_json::json!({"brief":"A lantern", "width":1920}),
             serde_json::json!({"brief":"A lantern", "width":1921, "height":1080}),
             serde_json::json!({"brief":"A lantern", "mode":"sprite"}),

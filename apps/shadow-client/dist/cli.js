@@ -40,9 +40,20 @@ async function main() {
   }
   if (command === "install-skill") {
     const codexHome = process.env.CODEX_HOME || join(homedir(), ".codex");
-    for (const skill of ["shadow-requests", "shadow-image-requests"]) {
-      const destination = join(codexHome, "skills", skill, "SKILL.md");
-      const source = join(dirname(fileURLToPath(import.meta.url)), "..", "skills", skill, "SKILL.md");
+    const files = [
+      ["shadow-requests", "SKILL.md"],
+      ["shadow-image-requests", "SKILL.md"],
+      ["shadow-image-requests", "references", "redcraft-v3.md"],
+      ["shadow-image-requests", "references", "loras.md"]
+    ];
+    const selectedSkill = process.argv[3];
+    if (selectedSkill && !files.some(([skill]) => skill === selectedSkill)) {
+      throw new Error(`Unknown bundled skill: ${selectedSkill}`);
+    }
+    for (const [skill, ...file] of files) {
+      if (selectedSkill && selectedSkill !== skill) continue;
+      const destination = join(codexHome, "skills", skill, ...file);
+      const source = join(dirname(fileURLToPath(import.meta.url)), "..", "skills", skill, ...file);
       await mkdir(dirname(destination), { recursive: true });
       try {
         const installed = await readFile(destination, "utf8");
@@ -57,7 +68,7 @@ async function main() {
     }
     return;
   }
-  console.log("Shadow Controller client commands:\n  shadow-client install-skill\n  shadow-client login\n  shadow-client register\n  shadow-client status\n  shadow-client logout");
+  console.log("Shadow Controller client commands:\n  shadow-client install-skill [skill-name]\n  shadow-client login\n  shadow-client register\n  shadow-client status\n  shadow-client logout");
 }
 main().catch((error) => {
   console.error(error instanceof Error ? error.message : "Shadow client command failed.");

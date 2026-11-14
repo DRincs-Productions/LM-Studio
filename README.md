@@ -574,16 +574,17 @@ The three fixed client-driven narration test prompts are [normal](test/normal_na
 
 ### Remote image generation
 
-The client submits an image brief and output options through Shadow Controller. The Coordinator runs Image Worker, checks the result and publishes the approved PNG. The client downloads and verifies the delivered file.
+The client prepares a model-specific image prompt and selects compatible adapters, then submits the prompt and output options through Shadow Controller. The Coordinator validates those inputs before generation. The Coordinator runs Image Worker, checks the result and publishes the approved PNG. The client downloads and verifies the delivered file.
 
 ```mermaid
 flowchart LR
-    A[Codex client] -->|Image request via relay| S[Shadow Controller queue and Coordinator]
+    A[Codex client] --> D[Client prompt and adapter selection]
+    D -->|Prepared request via relay| S[Shadow Controller queue and Coordinator]
     S --> I[Image Worker]
     I -->|Candidate PNG| S
     S -->|Transparent output| T[Background removal]
     T -->|Cutout and review preview| S
-    S -->|Candidate and brief| R[Visual reviewer]
+    S -->|Candidate, effective prompt and settings| R[Visual reviewer]
     R -->|Verdict| S
     S -->|Located background remnants| P[Raster editor]
     P -->|Repaired cutout for review| S

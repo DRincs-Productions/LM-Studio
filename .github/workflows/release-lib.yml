@@ -58,7 +58,9 @@ jobs:
             'dist/cli.js',
             'dist/server.js',
             'skills/shadow-requests/SKILL.md',
-            'skills/shadow-image-requests/SKILL.md'
+            'skills/shadow-image-requests/SKILL.md',
+            'skills/shadow-image-requests/references/redcraft-v3.md',
+            'skills/shadow-image-requests/references/loras.md'
           ];
           const missing = required.filter(file => !files.has(file));
           if (missing.length) {

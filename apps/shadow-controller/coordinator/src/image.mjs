@@ -9,7 +9,7 @@ import { pathToFileURL } from 'node:url';
 
 const [requestPath, runDir] = process.argv.slice(2);
 const { jobId, requestId, payload } = JSON.parse(await readFile(requestPath, 'utf8'));
-const { brief, profile = 'normal', mode = 'standard', width = 1920, height = 1080, loras = [] } = payload;
+const { brief, prompt: preparedPrompt, negativePrompt, profile = 'normal', mode = 'standard', width = 1920, height = 1080, loras = [] } = payload;
 const seed = randomInt(1, 2147483647);
 const routes = {
   normal: { generator: 'normal', style: 'standard', id: 'krea2_turbo', reviewer: 'openai/gpt-6-luna' },
@@ -101,13 +101,22 @@ try {
   const sourceName = 'source.png';
   const source = path.join(runDir, sourceName);
   const final = path.join(runDir, 'image.png');
-  // LoRA directives in user text would bypass the registered adapter selection.
-  const prompt = brief.replace(/<\s*lora\s*:[^>]*(?:>|$)/gi, '');
-  if (!prompt.trim()) throw new Error('The brief must describe an image');
+  // Legacy briefs are sanitized before they reach the diffusion command.
+  const prompt = preparedPrompt ?? brief.replace(/<\s*lora\s*:[^>]*(?:>|$)/gi, '');
+  if (!prompt.trim() || [prompt, negativePrompt].some(text => /<\s*lora\s*:/i.test(text ?? ''))) {
+    throw new Error('An image prompt is required and adapters must be declared separately');
+  }
+  const effectivePrompt = transparent
+    ? `${prompt}\nIsolate the entire subject with space around it, against a uniform solid color that contrasts with its edges. No ground shadows, background objects, texture or gradients.`
+    : prompt;
+  const generationSettings = {
+    checkpoint: route.id, seed, width, height, steps: checkpoint.steps, cfgScale: checkpoint.cfgScale,
+    sampler: 'euler', scheduler: 'simple', loras,
+  };
   const generated = await call('generate_image', {
     generator: route.generator, style: route.style,
     width, height, seed, filename: sourceName, loras,
-    prompt: transparent ? `${prompt}\nIsolate the entire subject with space around it, against a uniform solid color that contrasts with its edges. No ground shadows, background objects, texture or gradients.` : prompt,
+    prompt: effectivePrompt, negative_prompt: negativePrompt,
   }, 3_660_000);
   if (!/^SUCCESS\r?$/m.test(generated)) throw new Error('Image Worker failed generation; see the preserved tool output');
   manifest.loraApplication = field(generated, 'LORA_TENSORS_APPLIED');
@@ -144,7 +153,7 @@ try {
       evidence = `\nInspect these candidate boxes [left,top,right,bottom] in normalized 0..1000 coordinates: ${stdout.toString().trim()}. They contain opaque pixels resembling the original background color. Use the image to distinguish residue from the foreground.`;
     }
     const review = await call('review_with_opencode', {
-      image_path: imagePath, original_request: brief + evidence, inspect_alpha: transparent, evidence_path: evidencePath,
+      image_path: imagePath, original_request: `Prepared prompt:\n${prompt}\n\nEffective generation prompt:\n${effectivePrompt}\n\nGeneration settings:\n${JSON.stringify({ ...generationSettings, negativePrompt: field(generated, 'NEGATIVE_PROMPT') ?? negativePrompt, loraApplication: manifest.loraApplication })}${evidence}`, inspect_alpha: transparent, evidence_path: evidencePath,
     }, 960_000, logName);
     const scoreText = field(review, 'SCORE');
     const score = /^\d{1,3}$/.test(scoreText ?? '') ? Number(scoreText) : null;
