@@ -75,3 +75,4 @@ node_modules
 # Firebase CLI local deployment cache and TypeScript build metadata
 .firebase/
 *.tsbuildinfo
+/investigation.cany/journal/2026-11-14.jsonl
