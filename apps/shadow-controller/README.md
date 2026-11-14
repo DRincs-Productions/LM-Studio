@@ -18,3 +18,5 @@ npm run dev
 ```
 
 Building or running the native Tauri application requires the platform prerequisites, including Rust. GitHub Actions will provide the release builds so end users do not need the Rust toolchain. The server release workflow runs `node --check coordinator/src/narration.mjs` before packaging to catch syntax errors in the bundled narration worker and its prompts.
+
+Before loading the Writer, the Coordinator checks `GET /v1/models`. If a local HTTP endpoint is unavailable, it starts LM Studio with `lms server start` on the configured port, binds it to loopback, and waits for the models endpoint to respond. The default endpoint is `http://127.0.0.1:1234`. Remote endpoints must already be reachable. The API stays running for later jobs.

@@ -55,6 +55,7 @@ const save = async value => writeFile(`${runDir}/result-manifest.json`, JSON.str
 const clip = value => String(value ?? '').slice(0, 40_000);
 const safeFailure = error => {
   const message = String(error?.message || 'stage_failed');
+  if (['writer_api_start_failed', 'writer_api_unavailable', 'writer_empty_response'].includes(message)) return message;
   if (/^(writer_http_\d+|scene_validation_failed|writer_artifact_invalid|gemini_malformed_response|gemini_malformed_review|gemini_unusable_review|qwen_reviewer_http_\d+|qwen_reviewer_empty_response|qwen_final_http_\d+|qwen_final_empty_response|qwen_malformed_response|qwen_malformed_review|qwen_unusable_review|codex_artifact_invalid|process_timeout|process_output_limit|process_exit_-?\d+|onedrive_integrity_mismatch|writer_cleanup_not_verified|narration_review_mode_invalid|narration_reviewer_backend_invalid)$/.test(message)) return message;
   if (/^(codex_refusal|venice_(?:credentials_missing|free_access_unavailable|access_check_failed|artifact_invalid|http_\d+))$/.test(message)) return message;
   if (error?.code === 'ENOENT') return 'executable_unavailable';
@@ -168,6 +169,35 @@ const reviewerModel = reviewerBackend === 'qwen' ? (process.env.SHADOW_NARRATION
 const reviewerMode = process.env.SHADOW_NARRATION_REVIEW_MODE || (reviewerModel ? 'direct-edit' : 'feedback-loop');
 const apiBase = (process.env.SHADOW_LM_API_BASE_URL || 'http://127.0.0.1:1234').replace(/\/$/, '');
 const lmsExecutable = process.env.SHADOW_LMS_EXECUTABLE || 'lms';
+const writerApiReady = async () => {
+  try {
+    const response = await fetch(`${apiBase}/v1/models`, { signal: AbortSignal.timeout(2_000) });
+    return response.ok && Array.isArray((await response.json()).data);
+  } catch {
+    return false;
+  }
+};
+const ensureWriterApi = async () => {
+  if (await writerApiReady()) return;
+  const endpoint = new URL(apiBase);
+  if (endpoint.protocol !== 'http:' || !['localhost', '127.0.0.1'].includes(endpoint.hostname)) {
+    throw new Error('writer_api_unavailable');
+  }
+  let startFailed = false;
+  try {
+    await run(lmsExecutable, ['server', 'start', '--port', endpoint.port || '80', '--bind', '127.0.0.1'], {
+      timeout: 30_000, label: 'writer-api-start',
+    });
+  } catch {
+    startFailed = true;
+  }
+  const deadline = Date.now() + 30_000;
+  do {
+    if (await writerApiReady()) return;
+    await new Promise(resolve => setTimeout(resolve, 500));
+  } while (Date.now() < deadline);
+  throw new Error(startFailed ? 'writer_api_start_failed' : 'writer_api_unavailable');
+};
 const modelIdentifiers = new Set();
 let activeModelIdentifier = null;
 let modelLoadAttempted = false;
@@ -212,6 +242,7 @@ try {
     if (!text.trim()) throw new Error('writer_artifact_invalid');
     return text;
   };
+  await ensureWriterApi();
   await writeFile(`${runDir}/writer-load-attempted`, jobId, { flag: 'wx' });
   await loadModel(writerModel, writerIdentifier, 'writer-load');
   await writeFile(`${runDir}/writer-initial-prompt.md`, context, { flag: 'wx' });
