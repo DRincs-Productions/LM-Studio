@@ -120,6 +120,9 @@ try {
   }, 3_660_000);
   if (!/^SUCCESS\r?$/m.test(generated)) throw new Error('Image Worker failed generation; see the preserved tool output');
   manifest.loraApplication = field(generated, 'LORA_TENSORS_APPLIED');
+  const reportedNegativePrompt = field(generated, 'NEGATIVE_PROMPT');
+  generationSettings.negativePrompt = reportedNegativePrompt
+    ? JSON.parse(reportedNegativePrompt) : negativePrompt;
   const sourceBytes = await readFile(source);
   verifyPng(sourceBytes);
   manifest.stages.push({ stage, outcome: 'verified', sha256: hash(sourceBytes), bytes: sourceBytes.length });
@@ -153,7 +156,7 @@ try {
       evidence = `\nInspect these candidate boxes [left,top,right,bottom] in normalized 0..1000 coordinates: ${stdout.toString().trim()}. They contain opaque pixels resembling the original background color. Use the image to distinguish residue from the foreground.`;
     }
     const review = await call('review_with_opencode', {
-      image_path: imagePath, original_request: `Prepared prompt:\n${prompt}\n\nEffective generation prompt:\n${effectivePrompt}\n\nGeneration settings:\n${JSON.stringify({ ...generationSettings, negativePrompt: field(generated, 'NEGATIVE_PROMPT') ?? negativePrompt, loraApplication: manifest.loraApplication })}${evidence}`, inspect_alpha: transparent, evidence_path: evidencePath,
+      image_path: imagePath, original_request: `Prepared prompt:\n${prompt}\n\nEffective generation prompt:\n${effectivePrompt}\n\nGeneration settings:\n${JSON.stringify({ ...generationSettings, loraApplication: manifest.loraApplication })}${evidence}`, inspect_alpha: transparent, evidence_path: evidencePath,
     }, 960_000, logName);
     const scoreText = field(review, 'SCORE');
     const score = /^\d{1,3}$/.test(scoreText ?? '') ? Number(scoreText) : null;
