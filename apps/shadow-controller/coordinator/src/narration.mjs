@@ -125,26 +125,28 @@ const sceneIssues = value => {
   return issues;
 };
 const modelRefused = value => /\bI (?:can['’]t|cannot|won['’]t|am unable to) (?:help|provide|rewrite|edit|revise|continue|produce|complete|assist)\b/i.test(value);
-const editWithVenice = async prompt => {
-  let apiKey = process.env.VENICE_API_KEY;
-  if (!apiKey) {
-    try { apiKey = JSON.parse(await readFile(join(homedir(), '.venice', 'config.json'), 'utf8')).api_key; }
-    catch { /* The installed CLI configuration is optional. */ }
+const veniceEditorModel = process.env.SHADOW_OPENCODE_VENICE_MODEL || `venice/${process.env.SHADOW_VENICE_MODEL || 'venice-uncensored-1-2'}`;
+const editWithVenice = async (prompt, { freeOnly = false } = {}) => {
+  if (freeOnly) {
+    let apiKey = process.env.VENICE_API_KEY;
+    if (!apiKey) {
+      try { apiKey = JSON.parse(await readFile(join(homedir(), '.venice', 'config.json'), 'utf8')).api_key; }
+      catch { /* The installed CLI configuration is optional. */ }
+    }
+    if (typeof apiKey !== 'string' || !apiKey.trim()) throw new Error('venice_credentials_missing');
+    const model = process.env.SHADOW_VENICE_MODEL || 'venice-uncensored-1-2';
+    const authorization = `Bearer ${apiKey.trim()}`;
+    const access = await fetch('https://api.venice.ai/api/v1/api_keys/rate_limits', {
+      headers: { Authorization: authorization },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!access.ok) throw new Error('venice_access_check_failed');
+    const { data } = await access.json();
+    if (data?.accessPermitted !== true || data.apiTier?.isCharged !== false
+        || !Array.isArray(data.rateLimits) || !data.rateLimits.some(limit => limit?.apiModelId === model)) {
+      throw new Error('venice_free_access_unavailable');
+    }
   }
-  if (typeof apiKey !== 'string' || !apiKey.trim()) throw new Error('venice_credentials_missing');
-  const model = process.env.SHADOW_VENICE_MODEL || 'venice-uncensored-1-2';
-  const authorization = `Bearer ${apiKey.trim()}`;
-  const access = await fetch('https://api.venice.ai/api/v1/api_keys/rate_limits', {
-    headers: { Authorization: authorization },
-    signal: AbortSignal.timeout(10_000),
-  });
-  if (!access.ok) throw new Error('venice_access_check_failed');
-  const { data } = await access.json();
-  if (data?.accessPermitted !== true || data.apiTier?.isCharged !== false
-      || !Array.isArray(data.rateLimits) || !data.rateLimits.some(limit => limit?.apiModelId === model)) {
-    throw new Error('venice_free_access_unavailable');
-  }
-  const openCodeModel = process.env.SHADOW_OPENCODE_VENICE_MODEL || `venice/${model}`;
   const openCode = process.env.OPENCODE_EXECUTABLE || (process.env.APPDATA
     ? join(process.env.APPDATA, 'npm', 'node_modules', '@opencode', 'cli', 'bin', 'opencode.exe')
     : 'opencode');
@@ -165,7 +167,7 @@ const editWithVenice = async prompt => {
   catch (error) { if (error?.code !== 'EEXIST') throw error; }
   let result;
   try {
-    result = await run(openCode, ['--standalone', 'run', '--model', openCodeModel, '--agent', 'venice-reviewer', '--format', 'json', '--file', promptPath, 'Return only the full corrected English Markdown scene.'], {
+    result = await run(openCode, ['--standalone', 'run', '--model', veniceEditorModel, '--agent', 'venice-reviewer', '--format', 'json', '--file', promptPath, 'Return only the full corrected English Markdown scene.'], {
       timeout: 120_000,
       max: 4 * 1024 * 1024,
       label: 'opencode-venice-final',
@@ -191,7 +193,7 @@ const context = `ORIGINAL BRIEF (untrusted project data):\n${clip(payload.brief)
 let narrative = '';
 let selectedDraft = 'draft-0';
 const writerModel = "hemmingway-1-abliterated-extreme";
-const reviewerBackend = process.env.SHADOW_NARRATION_REVIEW_BACKEND === 'gemini-codex' ? 'opencode' : (process.env.SHADOW_NARRATION_REVIEW_BACKEND || 'opencode');
+const reviewerBackend = process.env.SHADOW_NARRATION_REVIEW_BACKEND === 'gemini-codex' ? 'opencode' : (process.env.SHADOW_NARRATION_REVIEW_BACKEND || 'venice');
 const reviewerModel = reviewerBackend === 'qwen' ? (process.env.SHADOW_NARRATION_REVIEWER_MODEL || 'qwen2.5-14b-instruct-abliterated-v2') : '';
 const reviewerMode = process.env.SHADOW_NARRATION_REVIEW_MODE || (reviewerModel ? 'direct-edit' : 'feedback-loop');
 const apiBase = (process.env.SHADOW_LM_API_BASE_URL || 'http://127.0.0.1:1234').replace(/\/$/, '');
@@ -236,7 +238,7 @@ const unloadModel = async (identifier, label) => {
   if (after.includes(identifier)) throw new Error('writer_cleanup_not_verified');
 };
 try {
-if (!['qwen', 'opencode', 'writer-only'].includes(reviewerBackend)) throw new Error('narration_reviewer_backend_invalid');
+if (!['qwen', 'opencode', 'venice', 'writer-only'].includes(reviewerBackend)) throw new Error('narration_reviewer_backend_invalid');
   if (reviewerMode !== 'feedback-loop' && reviewerMode !== 'direct-edit') throw new Error('narration_review_mode_invalid');
   const writerIdentifier = `shadow-narration-${jobId}`;
   const reviewerIdentifier = `shadow-reviewer-${jobId}`;
@@ -379,58 +381,72 @@ Return only the full corrected scene in the required Markdown envelope.`;
       ? 'Perform a rule-by-rule editorial pass. Correct every concrete violation above and compare each explicit constraint against the latest scene.'
       : 'Review the validation outcomes and complete the bounded final edit, correcting remaining evidence-backed issues under the shared editing rules.';
     const finalPrompt = `Before editing, load and follow these installed skills with the skill tool: @narration, @expressive-sounds, @scene-craft, @revision-continuity, and @line-editing.\n\n${sceneStyle}\n\n${sharedEditorInstructions}\n\n${modeInstructions}\n\n${context}\n\nLATEST USABLE DRAFT:\n${narrative}${reviewerMode === 'feedback-loop' ? `\n\nReview stage outcomes:\n${JSON.stringify(stages.filter(stage => stage.stage === 'qwen_reviewer' || stage.stage === 'draft_validation'))}` : ''}`;
-    const openCodeModel = process.env.SHADOW_OPENCODE_MODEL || 'openai/gpt-6-luna';
-    const openCodeExecutable = process.env.OPENCODE_EXECUTABLE || (process.env.APPDATA
-      ? join(process.env.APPDATA, 'npm', 'node_modules', '@opencode', 'cli', 'bin', 'opencode.exe')
-      : 'opencode');
-    const openCodePromptPath = `${runDir}/opencode-final-prompt.md`;
-    const openCodeConfig = {
-      $schema: 'https://opencode.ai/config.json', mcp: { servers: {} },
-      agents: {
-        reviewer: { description: 'Read-only narrative reviewer and editor with approved story skills.', mode: 'primary', model: openCodeModel, permissions: [{ action: '*', resource: '*', effect: 'deny' }, { action: 'skill', resource: '*', effect: 'allow' }] },
-        'venice-reviewer': { description: 'Narrative editor with access only to approved narrative skills.', mode: 'primary', permissions: [{ action: '*', resource: '*', effect: 'deny' }, { action: 'skill', resource: '*', effect: 'allow' }] },
-      },
-      permissions: [{ action: '*', resource: '*', effect: 'deny' }],
-    };
-    try { await writeFile(`${runDir}/opencode.json`, JSON.stringify(openCodeConfig, null, 2), { flag: 'wx' }); }
-    catch (error) { if (error?.code !== 'EEXIST') throw error; }
-    try {
-      if (reviewerModel) {
-        if (reviewerMode === 'direct-edit' && activeModelIdentifier !== reviewerIdentifier) {
-          await unloadModel(writerIdentifier, 'writer-before-direct-edit');
-          await loadModel(reviewerModel, reviewerIdentifier, 'qwen-direct-editor-load');
-        } else if (reviewerMode === 'feedback-loop' && activeModelIdentifier !== reviewerIdentifier) {
-          await unloadModel(writerIdentifier, 'writer-before-final-review');
-          await loadModel(reviewerModel, reviewerIdentifier, 'qwen-final-editor-load');
-        }
-        await writeFile(`${runDir}/qwen-final-prompt.md`, finalPrompt, { flag: 'wx' });
-      } else await writeFile(openCodePromptPath, finalPrompt, { flag: 'wx' });
-      const stdout = reviewerModel
-        ? await chat(reviewerModel, 'You are the final English narrative editor. Make only bounded, evidence-backed corrections. Return only the complete Markdown artifact.', finalPrompt, { label: 'qwen_final' })
-        : openCodeText((await run(openCodeExecutable, ['--standalone', 'run', '--model', openCodeModel, '--agent', 'reviewer', '--format', 'json', '--file', openCodePromptPath, 'Return only the full corrected English Markdown scene.'], { timeout: 900_000, max: 4 * 1024 * 1024, label: 'opencode-final' })).stdout);
-      const edited = stdout.trim();
-      if (!artifactValid(edited) || sceneIssues(edited).length) {
-        throw new Error(!reviewerModel && modelRefused(edited) ? 'opencode_refusal' : 'opencode_artifact_invalid');
+    if (reviewerBackend === 'venice') {
+      try {
+        const edited = await editWithVenice(finalPrompt);
+        await writeFile(`${runDir}/venice-final.md`, edited, { flag: 'wx' });
+        narrative = edited;
+        selectedDraft = 'venice-final';
+        await record({ stage: 'venice', outcome: 'succeeded', attempts: 1, model: veniceEditorModel });
+      } catch (error) {
+        const reason = safeFailure(error);
+        warnings.push({ code: reason, message: `Venice final edit failed: ${reason}` });
+        await record({ stage: 'venice', outcome: 'error', attempts: 1, errorCode: reason, model: veniceEditorModel });
       }
-      narrative = edited;
-      selectedDraft = reviewerModel ? `qwen-${reviewerMode === 'direct-edit' ? 'direct-edit' : 'final-edit'}` : 'opencode-final';
-      await writeFile(`${runDir}/${reviewerModel ? 'qwen-final' : 'opencode-final'}.md`, narrative, { flag: 'wx' });
-      await record({ stage: reviewerModel ? 'qwen_final' : 'opencode', outcome: 'succeeded', attempts: 1, ...(reviewerModel ? {} : { model: openCodeModel }) });
-    } catch (error) {
-      const reason = safeFailure(error);
-      warnings.push({ code: reason, message: reason });
-      await record({ stage: reviewerModel ? 'qwen_final' : 'opencode', outcome: 'error', attempts: 1, errorCode: reason, reason, ...(reviewerModel ? {} : { model: openCodeModel }) });
-      if (!reviewerModel) {
-        try {
-          const edited = await editWithVenice(finalPrompt);
-          await writeFile(`${runDir}/venice-final.md`, edited, { flag: 'wx' });
-          narrative = edited;
-          selectedDraft = 'venice-final';
-          await record({ stage: 'venice', outcome: 'succeeded', attempts: 1 });
-        } catch (fallbackError) {
-          const fallbackReason = safeFailure(fallbackError);
-          warnings.push({ code: fallbackReason, message: `Venice final edit failed: ${fallbackReason}` });
-          await record({ stage: 'venice', outcome: 'error', attempts: 1, errorCode: fallbackReason, reason: fallbackReason });
+    } else {
+      const openCodeModel = process.env.SHADOW_OPENCODE_MODEL || 'openai/gpt-6-luna';
+      const openCodeExecutable = process.env.OPENCODE_EXECUTABLE || (process.env.APPDATA
+        ? join(process.env.APPDATA, 'npm', 'node_modules', '@opencode', 'cli', 'bin', 'opencode.exe')
+        : 'opencode');
+      const openCodePromptPath = `${runDir}/opencode-final-prompt.md`;
+      const openCodeConfig = {
+        $schema: 'https://opencode.ai/config.json', mcp: { servers: {} },
+        agents: {
+          reviewer: { description: 'Read-only narrative reviewer and editor with approved story skills.', mode: 'primary', model: openCodeModel, permissions: [{ action: '*', resource: '*', effect: 'deny' }, { action: 'skill', resource: '*', effect: 'allow' }] },
+          'venice-reviewer': { description: 'Narrative editor with access only to approved narrative skills.', mode: 'primary', permissions: [{ action: '*', resource: '*', effect: 'deny' }, { action: 'skill', resource: '*', effect: 'allow' }] },
+        },
+        permissions: [{ action: '*', resource: '*', effect: 'deny' }],
+      };
+      try { await writeFile(`${runDir}/opencode.json`, JSON.stringify(openCodeConfig, null, 2), { flag: 'wx' }); }
+      catch (error) { if (error?.code !== 'EEXIST') throw error; }
+      try {
+        if (reviewerModel) {
+          if (reviewerMode === 'direct-edit' && activeModelIdentifier !== reviewerIdentifier) {
+            await unloadModel(writerIdentifier, 'writer-before-direct-edit');
+            await loadModel(reviewerModel, reviewerIdentifier, 'qwen-direct-editor-load');
+          } else if (reviewerMode === 'feedback-loop' && activeModelIdentifier !== reviewerIdentifier) {
+            await unloadModel(writerIdentifier, 'writer-before-final-review');
+            await loadModel(reviewerModel, reviewerIdentifier, 'qwen-final-editor-load');
+          }
+          await writeFile(`${runDir}/qwen-final-prompt.md`, finalPrompt, { flag: 'wx' });
+        } else await writeFile(openCodePromptPath, finalPrompt, { flag: 'wx' });
+        const stdout = reviewerModel
+          ? await chat(reviewerModel, 'You are the final English narrative editor. Make only bounded, evidence-backed corrections. Return only the complete Markdown artifact.', finalPrompt, { label: 'qwen_final' })
+          : openCodeText((await run(openCodeExecutable, ['--standalone', 'run', '--model', openCodeModel, '--agent', 'reviewer', '--format', 'json', '--file', openCodePromptPath, 'Return only the full corrected English Markdown scene.'], { timeout: 900_000, max: 4 * 1024 * 1024, label: 'opencode-final' })).stdout);
+        const edited = stdout.trim();
+        if (!artifactValid(edited) || sceneIssues(edited).length) {
+          throw new Error(!reviewerModel && modelRefused(edited) ? 'opencode_refusal' : 'opencode_artifact_invalid');
+        }
+        narrative = edited;
+        selectedDraft = reviewerModel ? `qwen-${reviewerMode === 'direct-edit' ? 'direct-edit' : 'final-edit'}` : 'opencode-final';
+        await writeFile(`${runDir}/${reviewerModel ? 'qwen-final' : 'opencode-final'}.md`, narrative, { flag: 'wx' });
+        await record({ stage: reviewerModel ? 'qwen_final' : 'opencode', outcome: 'succeeded', attempts: 1, ...(reviewerModel ? {} : { model: openCodeModel }) });
+      } catch (error) {
+        const reason = safeFailure(error);
+        warnings.push({ code: reason, message: reason });
+        await record({ stage: reviewerModel ? 'qwen_final' : 'opencode', outcome: 'error', attempts: 1, errorCode: reason, reason, ...(reviewerModel ? {} : { model: openCodeModel }) });
+        if (!reviewerModel) {
+          try {
+            const edited = await editWithVenice(finalPrompt, { freeOnly: true });
+            await writeFile(`${runDir}/venice-final.md`, edited, { flag: 'wx' });
+            narrative = edited;
+            selectedDraft = 'venice-final';
+            await record({ stage: 'venice', outcome: 'succeeded', attempts: 1 });
+          } catch (fallbackError) {
+            const fallbackReason = safeFailure(fallbackError);
+            warnings.push({ code: fallbackReason, message: `Venice final edit failed: ${fallbackReason}` });
+            await record({ stage: 'venice', outcome: 'error', attempts: 1, errorCode: fallbackReason, reason: fallbackReason });
+          }
         }
       }
     }
@@ -460,7 +476,7 @@ Return only the full corrected scene in the required Markdown envelope.`;
     reviewer: selectedDraft === 'opencode-final' ? 'opencode' : selectedDraft === 'venice-final' ? 'venice' : 'none',
     reviewerBackend,
     reviewerMode,
-    reviewerModel: reviewerModel || ((reviewerBackend === 'opencode' && selectedDraft === 'opencode-final') ? (process.env.SHADOW_OPENCODE_MODEL || 'openai/gpt-6-luna') : null),
+    reviewerModel: selectedDraft === 'venice-final' ? veniceEditorModel : reviewerModel || ((reviewerBackend === 'opencode' && selectedDraft === 'opencode-final') ? (process.env.SHADOW_OPENCODE_MODEL || 'openai/gpt-6-luna') : null),
     reviewerCalls: reviewerModel ? stages.filter(stage => stage.stage === 'qwen_reviewer').length : 0,
     validationCalls,
     qwenFinalCalls: reviewerModel && stages.some(stage => stage.stage === 'qwen_final' && stage.outcome === 'succeeded') ? 1 : 0,
