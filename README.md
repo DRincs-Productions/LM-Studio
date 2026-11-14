@@ -572,6 +572,25 @@ The default final editor is Venice via OpenCode using `venice/venice-uncensored-
 
 The three fixed client-driven narration test prompts are [normal](test/normal_narration.txt), [hot](test/hot_narration.txt), and [cyberpunk](test/cyperpunk_narration.txt). Codex submits each file through Shadow Controller MCP as the client, waits for completion, retrieves the verified OneDrive result, and returns the scene as a file; the server-side model work runs through OpenCode GPT-6 Luna. The exact run, recovery, and read-only server/OneDrive diagnostic procedure is in [AGENTS.md](AGENTS.md#test-workflow).
 
+### Remote image generation
+
+The client submits an image brief and output options through Shadow Controller. The Coordinator runs Image Worker, checks the result and publishes the approved PNG. The client downloads and verifies the delivered file.
+
+```mermaid
+flowchart LR
+    A[Codex client] -->|Image request via relay| S[Shadow Controller queue and Coordinator]
+    S --> I[Image Worker]
+    I -->|Candidate PNG| S
+    S -->|Transparent output| T[Background removal]
+    T -->|Cutout and review preview| S
+    S -->|Candidate and brief| R[Visual reviewer]
+    R -->|Verdict| S
+    S -->|Verified PNG and manifest| O[OneDrive]
+    O -->|Download and verify via MCP| A
+```
+
+Use [Shadow Image Requests](apps/shadow-client/skills/shadow-image-requests/SKILL.md) for the client workflow and the [server setup](apps/shadow-controller/README.md#image-generation) for configuration.
+
 #### Signing in a Shadow client
 
 Before a Codex client can reach its paired Shadow Controller server, install the published package with `npm install --global shadow-controller-mcp-client`, then run `shadow-client login`. This opens the hosted HTTPS Firebase sign-in page in the system browser and returns the temporary sign-in to the client over a one-time localhost callback. It then enrolls the client's public key with the signed-in account. Verify with `shadow-client status`, then use the `shadow-controller` MCP tool `shadow_relay_status` to confirm the paired server is online. The MCP `shadow_login` tool performs the same sign-in and enrollment from Codex. If enrollment was interrupted, run `shadow-client register` or `shadow_register_client` and check status again. Do not change relay URLs or credentials to resolve a sign-in failure; use `shadow_auth_token_status` and the documented recovery flow first. Publish package updates by pushing a `lib-v<version>` tag that matches both client package manifests; the GitHub Actions workflow and required npm secret are documented in the [client package guide](apps/shadow-client/README.md#publishing-a-release).

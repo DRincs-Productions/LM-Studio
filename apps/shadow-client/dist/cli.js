@@ -40,18 +40,20 @@ async function main() {
   }
   if (command === "install-skill") {
     const codexHome = process.env.CODEX_HOME || join(homedir(), ".codex");
-    const destination = join(codexHome, "skills", "shadow-requests", "SKILL.md");
-    const source = join(dirname(fileURLToPath(import.meta.url)), "..", "skills", "shadow-requests", "SKILL.md");
-    await mkdir(dirname(destination), { recursive: true });
-    try {
-      const installed = await readFile(destination, "utf8");
-      const bundled = await readFile(source, "utf8");
-      if (installed !== bundled) throw new Error(`An existing Shadow Requests skill differs and was preserved: ${destination}`);
-      console.log(`Shadow Requests is already installed at ${destination}`);
-    } catch (error) {
-      if (error instanceof Error && error.message.startsWith("An existing Shadow Requests skill")) throw error;
-      await copyFile(source, destination, constants.COPYFILE_EXCL);
-      console.log(`Installed Shadow Requests at ${destination}`);
+    for (const skill of ["shadow-requests", "shadow-image-requests"]) {
+      const destination = join(codexHome, "skills", skill, "SKILL.md");
+      const source = join(dirname(fileURLToPath(import.meta.url)), "..", "skills", skill, "SKILL.md");
+      await mkdir(dirname(destination), { recursive: true });
+      try {
+        const installed = await readFile(destination, "utf8");
+        const bundled = await readFile(source, "utf8");
+        if (installed !== bundled) throw new Error(`An existing bundled skill differs and was preserved: ${destination}`);
+        console.log(`${skill} is already installed at ${destination}`);
+      } catch (error) {
+        if (error.code !== "ENOENT") throw error;
+        await copyFile(source, destination, constants.COPYFILE_EXCL);
+        console.log(`Installed ${skill} at ${destination}`);
+      }
     }
     return;
   }

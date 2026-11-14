@@ -10,6 +10,17 @@ Narration requests run in the Coordinator queue. The Writer runs in LM Studio, f
 
 An experimental local Qwen path can be selected with `SHADOW_NARRATION_REVIEW_BACKEND=qwen`; it uses `qwen2.5-14b-instruct-abliterated-v2` by default and unloads the Writer before loading Qwen. The default mode is `direct-edit`; `SHADOW_NARRATION_REVIEW_MODE=feedback-loop` enables up to five Qwen review/Writer-revision cycles followed by a Qwen final edit. The Qwen option is not the production default: a 6 November 2026 normal-scene test found an unsupported PASS on an explicit event-order defect, and direct-edit runs returned the Writer draft unchanged. The production default is deterministic checks and Writer revisions followed by an OpenCode `openai/gpt-6-luna` final edit, with Venice available only under the existing free-tier gate. OpenCode's final editor has all tools denied except access to installed skills. The comparison report is `production-tests/shadow-narration/20261106_qwen-reviewer-mode-comparison/report.md`.
 
+## Image generation
+
+Install the Image Worker MCP dependencies with `npm ci` in `image-worker/mcp` and install the verified `sd-cli.exe` build and all three model profiles on the server. Set `SHADOW_IMAGE_WORKER_ENTRY` to the absolute path of `image-worker/mcp/server.mjs` if the checkout is outside the server account's `.lmstudio` directory. Set `IMAGE_WORKER_ROOT` and `IMAGE_WORKER_SHARED_MODELS` if the model directories differ from the worker defaults.
+
+The server account needs OpenCode authenticated for OpenAI and Venice. The normal profile uses GPT-6 Luna. The NSFW and anime profiles use Venice Uncensored via OpenCode, with `SHADOW_IMAGE_VENICE_MODEL` available to select a vision-capable Venice deployment. Review sends the candidate image and brief to the assigned provider. The approved score is at least 80 with zero major errors.
+
+For cutouts, set `SHADOW_IMAGE_PYTHON` to a Python 3.12 environment with `rembg[cpu]` installed. Preload `isnet-general-use` and `isnet-anime` for that account, or allow Rembg to fetch them on first use. The server preserves the source PNG and reviews a checkerboard preview of the final alpha PNG.
+
+The default image size is 1920 × 1080. Custom width and height must both be multiples of 8 between 512 and 2048. LoRAs are selected by registered ID and weight. The server validates availability, status and compatibility against the selected checkpoint. Approved jobs publish immutable `image.png` and `manifest.json` objects under `imagecloud:ImageWorker/final/<jobId>/` and verify both by SHA-256. Failed or interrupted runs retain staging evidence. Interrupted image jobs are kept for diagnosis across Coordinator restarts.
+
+
 ## Development
 
 ```powershell

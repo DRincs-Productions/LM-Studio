@@ -179,6 +179,65 @@ function createServer(): McpServer {
     }
   });
 
+  const dimension = z.number().int().min(512).max(2048).multipleOf(8).optional();
+  server.registerTool("shadow_submit_image", {
+    description: "Queue one image on the paired server. Defaults to normal, standard output and 1920 × 1080. Use shadow_wait_job and get_image_result.",
+    inputSchema: z.strictObject({
+      brief: z.string().trim().min(1).refine((brief) => Buffer.byteLength(brief) <= 12000 && !brief.includes("\0")),
+      profile: z.enum(["normal", "nsfw", "anime"]).optional(),
+      mode: z.enum(["standard", "transparent"]).optional(),
+      width: dimension,
+      height: dimension,
+      loras: z.array(z.strictObject({
+        id: z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/),
+        weight: z.number().finite().refine((weight) => weight !== 0),
+      })).max(4).optional(),
+      requestId: z.string().uuid().optional(),
+    }).refine(({ width, height }) => (width === undefined) === (height === undefined), "Provide both dimensions.")
+      .refine(({ loras = [] }) => new Set(loras.map(({ id }) => id)).size === loras.length, "LoRA IDs must be unique."),
+  }, async ({ requestId = randomUUID(), ...params }) => {
+    try {
+      const response = await callRelay({
+        version: 1, type: "job.submit", messageId: randomUUID(), requestId,
+        payloadVersion: 1, payload: { operation: "image.generate", params },
+      });
+      if (response.type === "error") return errorResult(new Error(errorMessage(response.error)));
+      return jsonResult({ requestId, response });
+    } catch (error) {
+      return errorResult(new Error(`${errorMessage(error)} Request ID: ${requestId}. Query this ID before submitting again.`));
+    }
+  });
+
+  server.registerTool("get_image_result", {
+    description: "Download a published PNG for an authenticated image job and verify its SHA-256 before returning its local path.",
+    inputSchema: z.object({ jobId: z.string().uuid() }),
+  }, async ({ jobId }) => {
+    try {
+      const response = await callRelay({ version: 1, type: "asset.get", messageId: randomUUID(), assetId: `image:${jobId}` });
+      if (response.type === "error") return errorResult(new Error(errorMessage(response.error)));
+      const source = `imagecloud:ImageWorker/final/${jobId}/image.png`;
+      const maxBytes = 32 * 1024 * 1024;
+      const asset = z.object({
+        jobId: z.literal(jobId), kind: z.literal("image"), remotePath: z.literal(source),
+        sha256: z.string().regex(/^[a-f0-9]{64}$/), sizeBytes: z.number().int().min(1).max(maxBytes),
+      }).parse(response.asset);
+      const { stdout } = await promisify(execFile)("rclone", ["cat", source], {
+        encoding: "buffer", timeout: 120_000, maxBuffer: maxBytes, windowsHide: true,
+      });
+      const sha256 = createHash("sha256").update(stdout).digest("hex");
+      if (stdout.length !== asset.sizeBytes || sha256 !== asset.sha256) {
+        return errorResult(new Error("Image download failed integrity verification."));
+      }
+      const root = join(homedir(), ".shadow-controller", "images");
+      await mkdir(root, { recursive: true });
+      const localPath = join(await mkdtemp(join(root, `${jobId}-`)), "image.png");
+      await writeFile(localPath, stdout, { flag: "wx" });
+      return jsonResult({ jobId, localPath, sha256, bytes: stdout.length });
+    } catch {
+      return errorResult(new Error("No downloadable image could be verified for this job."));
+    }
+  });
+
   server.registerTool("shadow_job_status", {
     description: "Query a job by jobId or stable requestId after a submit, disconnect or client restart.",
     inputSchema: z.object({

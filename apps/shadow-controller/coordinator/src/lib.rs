@@ -99,6 +99,68 @@ impl JobState {
     }
 }
 
+pub fn valid_image_payload(payload: &serde_json::Value) -> bool {
+    let Some(fields) = payload.as_object() else {
+        return false;
+    };
+    if !fields.keys().all(|key| {
+        matches!(
+            key.as_str(),
+            "brief" | "profile" | "mode" | "width" | "height" | "loras"
+        )
+    }) || !payload["brief"].as_str().is_some_and(|brief| {
+        !brief.trim().is_empty() && brief.len() <= 12_000 && !brief.contains('\0')
+    }) {
+        return false;
+    }
+    for (key, allowed) in [
+        ("profile", &["normal", "nsfw", "anime"][..]),
+        ("mode", &["standard", "transparent"][..]),
+    ] {
+        if fields
+            .get(key)
+            .is_some_and(|value| !value.as_str().is_some_and(|value| allowed.contains(&value)))
+        {
+            return false;
+        }
+    }
+    match (fields.get("width"), fields.get("height")) {
+        (None, None) => {}
+        (Some(width), Some(height))
+            if [width, height].iter().all(|value| {
+                value
+                    .as_u64()
+                    .is_some_and(|n| (512..=2048).contains(&n) && n % 8 == 0)
+            }) => {}
+        _ => return false,
+    }
+    if let Some(value) = fields.get("loras") {
+        let Some(loras) = value.as_array().filter(|loras| loras.len() <= 4) else {
+            return false;
+        };
+        let mut ids = std::collections::HashSet::new();
+        for lora in loras {
+            let Some(id) = lora["id"].as_str() else {
+                return false;
+            };
+            if !lora.as_object().is_some_and(|fields| fields.len() == 2)
+                || id.is_empty()
+                || id.len() > 100
+                || !id
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || b"_-".contains(&byte))
+                || !ids.insert(id)
+                || !lora["weight"]
+                    .as_f64()
+                    .is_some_and(|weight| weight.is_finite() && weight != 0.0)
+            {
+                return false;
+            }
+        }
+    }
+    true
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SubmitRequest {
@@ -960,6 +1022,26 @@ mod tests {
             payload_version: 1,
             payload: serde_json::json!({ "seed": value }),
             retry_of_job_id: None,
+        }
+    }
+
+    #[test]
+    fn image_payload_validates_dimensions_and_loras() {
+        let brief = serde_json::json!({ "brief": "A lantern" });
+        assert!(valid_image_payload(&brief));
+        assert!(valid_image_payload(&serde_json::json!({
+            "brief": "A lantern", "profile": "anime", "mode": "transparent",
+            "width": 768, "height": 1024, "loras": [{ "id": "test-lora", "weight": -0.5 }]
+        })));
+        for invalid in [
+            serde_json::json!({"brief":"A lantern", "width":1920}),
+            serde_json::json!({"brief":"A lantern", "width":1921, "height":1080}),
+            serde_json::json!({"brief":"A lantern", "mode":"sprite"}),
+            serde_json::json!({"brief":"A lantern", "loras":[{"id":"../../local", "weight":1}]}),
+            serde_json::json!({"brief":"A lantern", "loras":[{"id":"test", "weight":0}]}),
+            serde_json::json!({"brief":"A lantern", "loras":[{"id":"test", "weight":1},{"id":"test", "weight":2}]}),
+        ] {
+            assert!(!valid_image_payload(&invalid), "{invalid}");
         }
     }
 

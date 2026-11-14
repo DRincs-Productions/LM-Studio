@@ -252,30 +252,38 @@ fn submit_job(store: &JobStore, uid: &str, client_id: &str, message_id: &str, me
     let Some(params) = message.pointer("/payload/params").filter(|value| value.is_object()) else {
         return error_reply(Some(message_id.to_owned()), "invalid_payload", "Operation parameters must be an object.", false);
     };
-    if operation != "narrative.generate" {
+    if !matches!(operation, "narrative.generate" | "image.generate") {
         if operation == "codex.execute" {
             return submit_codex_job(store, uid, client_id, message_id, request_id.unwrap(), payload_version as u32, params);
         }
         return error_reply(Some(message_id.to_owned()), "operation_unavailable", "This server does not support the requested operation.", false);
     }
-    if payload_version != 1 || !valid_narrative_payload(params) {
-        return error_reply(Some(message_id.to_owned()), "invalid_payload", "Narration requires projectId, projectSha256, and a non-empty brief; metadata, when provided, must be an object.", false);
-    }
-    let mut sanitized = serde_json::Map::new();
-    for key in ["projectId", "projectSha256", "brief", "metadata"] {
-        if let Some(value) = params.get(key) {
-            sanitized.insert(key.to_owned(), value.clone());
+    let sanitized_payload = if operation == "image.generate" {
+        if !shadow_coordinator::valid_image_payload(params) {
+            return error_reply(Some(message_id.to_owned()), "invalid_payload", "Invalid image brief, profile, output mode, dimensions or LoRAs.", false);
         }
-    }
-    let sanitized_payload = Value::Object(sanitized);
-    if serde_json::to_vec(&sanitized_payload).is_ok_and(|encoded| encoded.len() > 48 * 1024) {
-        return error_reply(Some(message_id.to_owned()), "invalid_payload", "Narration fields exceed the supported size limit.", false);
-    }
+        params.clone()
+    } else {
+        if !valid_narrative_payload(params) {
+            return error_reply(Some(message_id.to_owned()), "invalid_payload", "Narration requires projectId, projectSha256, and a non-empty brief; metadata, when provided, must be an object.", false);
+        }
+        let mut sanitized = serde_json::Map::new();
+        for key in ["projectId", "projectSha256", "brief", "metadata"] {
+            if let Some(value) = params.get(key) {
+                sanitized.insert(key.to_owned(), value.clone());
+            }
+        }
+        let payload = Value::Object(sanitized);
+        if serde_json::to_vec(&payload).is_ok_and(|encoded| encoded.len() > 48 * 1024) {
+            return error_reply(Some(message_id.to_owned()), "invalid_payload", "Narration fields exceed the supported size limit.", false);
+        }
+        payload
+    };
     match store.submit(SubmitRequest {
         uid: uid.to_owned(),
         client_id: client_id.to_owned(),
         request_id: request_id.unwrap().to_owned(),
-        operation: "narrative.generate".to_owned(),
+        operation: operation.to_owned(),
         payload_version: 1,
         payload: sanitized_payload,
         retry_of_job_id: None,
@@ -289,7 +297,7 @@ fn submit_job(store: &JobStore, uid: &str, client_id: &str, message_id: &str, me
             "job": accepted
         }),
         Err(shadow_coordinator::StoreError::IdempotencyConflict) => error_reply(Some(message_id.to_owned()), "idempotency_conflict", "requestId was already used with a different payload.", false),
-        Err(_) => error_reply(Some(message_id.to_owned()), "invalid_payload", "The narration request was rejected.", false),
+        Err(_) => error_reply(Some(message_id.to_owned()), "invalid_payload", "The job request was rejected.", false),
     }
 }
 
@@ -458,7 +466,7 @@ fn list_assets(store: &JobStore, uid: &str, client_id: &str, message_id: &str, m
             Err(_) => return error_reply(Some(message_id.to_owned()), "internal_error", "Could not list assets.", false),
         }
     };
-    let assets = jobs.iter().filter_map(narrative_asset).collect::<Vec<_>>();
+    let assets = jobs.iter().filter_map(|job| narrative_asset(job).or_else(|| image_asset(job))).collect::<Vec<_>>();
     json!({ "version": 1, "type": "asset.list", "messageId": Uuid::new_v4().to_string(), "replyTo": message_id, "assets": assets })
 }
 
@@ -466,20 +474,46 @@ fn get_asset(store: &JobStore, uid: &str, client_id: &str, message_id: &str, mes
     let Some(asset_id) = message.get("assetId").and_then(Value::as_str) else {
         return error_reply(Some(message_id.to_owned()), "invalid_payload", "assetId is required.", false);
     };
-    let Some(job_id) = asset_id.strip_prefix("narrative:") else {
+    let Some((kind, job_id)) = asset_id.split_once(':').filter(|(kind, _)| matches!(*kind, "narrative" | "image")) else {
         return error_reply(Some(message_id.to_owned()), "artifact_unavailable", "Asset was not found.", false);
     };
     if Uuid::parse_str(job_id).is_err() {
         return error_reply(Some(message_id.to_owned()), "invalid_payload", "assetId is invalid.", false);
     }
     match store.get(job_id) {
-        Ok(Some(job)) if job.uid == uid && job.client_id == client_id => match narrative_asset(&job) {
+        Ok(Some(job)) if job.uid == uid && job.client_id == client_id => match if kind == "image" { image_asset(&job) } else { narrative_asset(&job) } {
             Some(asset) => json!({ "version": 1, "type": "asset.available", "messageId": Uuid::new_v4().to_string(), "replyTo": message_id, "asset": asset }),
-            None => error_reply(Some(message_id.to_owned()), "artifact_unavailable", "No verified narrative artifact is available for this job.", false),
+            None => error_reply(Some(message_id.to_owned()), "artifact_unavailable", "No verified artifact is available for this job.", false),
         },
         Ok(_) => error_reply(Some(message_id.to_owned()), "artifact_unavailable", "Asset was not found.", false),
         Err(_) => error_reply(Some(message_id.to_owned()), "internal_error", "Could not read asset metadata.", false),
     }
+}
+
+fn image_asset(job: &shadow_coordinator::JobRecord) -> Option<Value> {
+    if job.state != shadow_coordinator::JobState::Succeeded {
+        return None;
+    }
+    let manifest = job.result_manifest.as_ref()?;
+    let remote_path = manifest["imageRemotePath"].as_str()?;
+    if remote_path != format!("imagecloud:ImageWorker/final/{}/image.png", job.job_id) {
+        return None;
+    }
+    let hash = manifest["imageSha256"].as_str()?;
+    if hash.len() != 64 || !hash.bytes().all(|byte| b"0123456789abcdef".contains(&byte)) {
+        return None;
+    }
+    let bytes = manifest["imageBytes"].as_u64().filter(|bytes| (1..=32 * 1024 * 1024).contains(bytes))?;
+    Some(json!({
+        "assetId": format!("image:{}", job.job_id),
+        "jobId": job.job_id,
+        "kind": "image",
+        "name": "image.png",
+        "remotePath": remote_path,
+        "sha256": hash,
+        "sizeBytes": bytes,
+        "downloadTool": "get_image_result"
+    }))
 }
 
 fn narrative_asset(job: &shadow_coordinator::JobRecord) -> Option<Value> {

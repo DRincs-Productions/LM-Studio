@@ -239,7 +239,10 @@ fn execute_opencode_job(
         .and_then(serde_json::Value::as_str)
     {
         Some("narrative.generate") => {
-            return execute_narrative_job(data_dir, job, store, lease, &run_dir, &request_context);
+            return execute_media_job(job, store, lease, &run_dir, &request_context, "narration");
+        }
+        Some("image.generate") => {
+            return execute_media_job(job, store, lease, &run_dir, &request_context, "image");
         }
         Some("codex.execute") => {}
         _ => {
@@ -481,13 +484,13 @@ fn execute_opencode_job(
     }
 }
 
-fn execute_narrative_job(
-    _data_dir: &Path,
+fn execute_media_job(
     job: &JobRecord,
     store: &JobStore,
     lease: &CoordinatorLease,
     run_dir: &Path,
     request_context: &serde_json::Value,
+    worker: &str,
 ) -> JobExecutionOutcome {
     let mut request_envelope = request_context.clone();
     request_envelope["jobId"] = serde_json::Value::String(job.job_id.clone());
@@ -498,29 +501,38 @@ fn execute_narrative_job(
             return failed_outcome("job_payload_error", &error.to_string(), Some(run_dir));
         }
     };
-    let request_path = run_dir.join("narration-request.json");
+    let request_path = run_dir.join(format!("{worker}-request.json"));
+    let worker_path = run_dir.join(format!("{worker}.mjs"));
+    let process_marker = run_dir.join(format!("{worker}-process.json"));
     if let Err(error) = fs::write(&request_path, payload) {
         return failed_outcome("request_write_error", &error.to_string(), Some(run_dir));
     }
-    if let Err(error) = fs::write(run_dir.join("narration.mjs"), include_str!("narration.mjs")) {
+    let source = if worker == "image" {
+        include_str!("image.mjs")
+    } else {
+        include_str!("narration.mjs")
+    };
+    if let Err(error) = fs::write(&worker_path, source) {
         return failed_outcome("worker_write_error", &error.to_string(), Some(run_dir));
     }
     let skill_path = run_dir.join("narration-skill.md");
-    if let Err(error) = fs::write(
-        &skill_path,
-        concat!(
-            include_str!("../../../../skills/narration/SKILL.md"),
-            "\n",
-            include_str!("../../../../skills/expressive-sounds/SKILL.md"),
-        ),
-    ) {
-        return failed_outcome("worker_write_error", &error.to_string(), Some(run_dir));
+    if worker == "narration" {
+        if let Err(error) = fs::write(
+            &skill_path,
+            concat!(
+                include_str!("../../../../skills/narration/SKILL.md"),
+                "\n",
+                include_str!("../../../../skills/expressive-sounds/SKILL.md"),
+            ),
+        ) {
+            return failed_outcome("worker_write_error", &error.to_string(), Some(run_dir));
+        }
     }
-    let stdout_path = run_dir.join("narration.stdout.txt");
-    let stderr_path = run_dir.join("narration.stderr.txt");
+    let stdout_path = run_dir.join(format!("{worker}.stdout.txt"));
+    let stderr_path = run_dir.join(format!("{worker}.stderr.txt"));
     let node = std::env::var_os("SHADOW_NODE_EXECUTABLE").unwrap_or_else(|| "node".into());
     let mut child = match Command::new(node)
-        .arg(run_dir.join("narration.mjs"))
+        .arg(worker_path)
         .arg(&request_path)
         .arg(run_dir)
         .arg(&skill_path)
@@ -533,20 +545,17 @@ fn execute_narrative_job(
         Ok(child) => child,
         Err(error) => {
             return failed_outcome(
-                "narration_worker_start_error",
+                &format!("{worker}_worker_start_error"),
                 &error.to_string(),
                 Some(run_dir),
             );
         }
     };
     let child_id = child.id();
-    if let Err(error) = fs::write(
-        run_dir.join("narration-process.json"),
-        format!("{{\"pid\":{child_id}}}\n"),
-    ) {
-        stop_narration_child(&mut child, run_dir);
+    if let Err(error) = fs::write(&process_marker, format!("{{\"pid\":{child_id}}}\n")) {
+        stop_media_child(&mut child, run_dir, worker);
         return failed_outcome(
-            "narration_process_tracking_error",
+            &format!("{worker}_process_tracking_error"),
             &error.to_string(),
             Some(run_dir),
         );
@@ -562,36 +571,36 @@ fn execute_narrative_job(
     let started = Instant::now();
     let status = loop {
         if lease.stop_requested().unwrap_or(true) {
-            stop_narration_child(&mut child, run_dir);
+            stop_media_child(&mut child, run_dir, worker);
             join_capture(stdout_capture);
             join_capture(stderr_capture);
             return interrupted_outcome(
                 run_dir,
-                "Coordinator shutdown interrupted the narration workflow.",
+                "Coordinator shutdown interrupted the media workflow.",
             );
         }
         match store.get(&job.job_id) {
             Ok(Some(current)) if current.state == JobState::CancelRequested => {
-                stop_narration_child(&mut child, run_dir);
+                stop_media_child(&mut child, run_dir, worker);
                 join_capture(stdout_capture);
                 join_capture(stderr_capture);
                 return cancelled_outcome(
                     run_dir,
-                    "Client cancellation stopped the narration workflow.",
+                    "Client cancellation stopped the media workflow.",
                 );
             }
             Ok(Some(current)) if current.state == JobState::Running => {}
             Ok(_) => {
-                stop_narration_child(&mut child, run_dir);
+                stop_media_child(&mut child, run_dir, worker);
                 join_capture(stdout_capture);
                 join_capture(stderr_capture);
                 return interrupted_outcome(
                     run_dir,
-                    "The persisted job state changed during narration.",
+                    "The persisted job state changed during media generation.",
                 );
             }
             Err(error) => {
-                stop_narration_child(&mut child, run_dir);
+                stop_media_child(&mut child, run_dir, worker);
                 join_capture(stdout_capture);
                 join_capture(stderr_capture);
                 return failed_outcome("job_state_read_error", &error.to_string(), Some(run_dir));
@@ -601,31 +610,35 @@ fn execute_narrative_job(
             Ok(Some(status)) => break status,
             Ok(None) => {}
             Err(error) => {
-                stop_narration_child(&mut child, run_dir);
+                stop_media_child(&mut child, run_dir, worker);
                 join_capture(stdout_capture);
                 join_capture(stderr_capture);
-                return failed_outcome("narration_wait_error", &error.to_string(), Some(run_dir));
+                return failed_outcome(
+                    &format!("{worker}_wait_error"),
+                    &error.to_string(),
+                    Some(run_dir),
+                );
             }
         }
         if started.elapsed() >= NARRATION_TIMEOUT {
-            stop_narration_child(&mut child, run_dir);
+            stop_media_child(&mut child, run_dir, worker);
             join_capture(stdout_capture);
             join_capture(stderr_capture);
             return failed_outcome(
-                "narration_timeout",
-                "Narration exceeded the 90 minute execution limit.",
+                &format!("{worker}_timeout"),
+                "The media workflow exceeded the 90 minute execution limit.",
                 Some(run_dir),
             );
         }
         thread::sleep(Duration::from_millis(200));
     };
-    let _ = fs::remove_file(run_dir.join("narration-process.json"));
+    let _ = fs::remove_file(&process_marker);
     let stdout_captured = join_capture(stdout_capture).is_some();
     let stderr_captured = join_capture(stderr_capture).is_some();
     if !stdout_captured || !stderr_captured {
         return failed_outcome(
-            "narration_log_capture_error",
-            "Could not preserve narration worker output.",
+            &format!("{worker}_log_capture_error"),
+            "Could not preserve media worker output.",
             Some(run_dir),
         );
     }
@@ -637,25 +650,30 @@ fn execute_narrative_job(
         Some(value) => value,
         None => {
             return failed_outcome(
-                "narration_manifest_missing",
-                "Narration worker returned no valid result manifest.",
+                &format!("{worker}_manifest_missing"),
+                "The media worker returned no valid result manifest.",
                 Some(run_dir),
             );
         }
     };
-    let has_published_scene = manifest
-        .get("narrativeRemotePath")
+    let (path_field, hash_field) = if worker == "image" {
+        ("imageRemotePath", "imageSha256")
+    } else {
+        ("narrativeRemotePath", "narrativeSha256")
+    };
+    let has_published_result = manifest
+        .get(path_field)
         .and_then(serde_json::Value::as_str)
         .is_some()
         && manifest
-            .get("narrativeSha256")
+            .get(hash_field)
             .and_then(serde_json::Value::as_str)
             .is_some();
     let _ = fs::write(
         run_dir.join("worker-exit.json"),
         serde_json::json!({ "success": status.success(), "code": status.code() }).to_string(),
     );
-    if has_published_scene {
+    if has_published_result && (worker == "narration" || status.success()) {
         JobExecutionOutcome::Succeeded {
             result_manifest: Some(manifest),
         }
@@ -663,11 +681,11 @@ fn execute_narrative_job(
         let code = manifest
             .get("errorCode")
             .and_then(serde_json::Value::as_str)
-            .unwrap_or("narration_failed");
+            .unwrap_or("media_worker_failed");
         let reason = manifest
             .get("error")
             .and_then(serde_json::Value::as_str)
-            .unwrap_or("Narration workflow failed; run evidence was preserved.");
+            .unwrap_or("The media workflow failed; run evidence was preserved.");
         JobExecutionOutcome::Failed {
             error_code: code.to_owned(),
             message_redacted: reason.chars().take(500).collect(),
@@ -727,9 +745,15 @@ fn extract_opencode_text(path: &Path) -> Option<String> {
             continue;
         };
         if event.get("type").and_then(serde_json::Value::as_str) == Some("text")
-            && event.pointer("/part/type").and_then(serde_json::Value::as_str) == Some("text")
+            && event
+                .pointer("/part/type")
+                .and_then(serde_json::Value::as_str)
+                == Some("text")
         {
-            if let Some(part) = event.pointer("/part/text").and_then(serde_json::Value::as_str) {
+            if let Some(part) = event
+                .pointer("/part/text")
+                .and_then(serde_json::Value::as_str)
+            {
                 text.push_str(part);
             }
         }
@@ -745,7 +769,7 @@ fn stop_child(child: &mut std::process::Child, run_dir: &Path) {
     }
 }
 
-fn stop_narration_child(child: &mut std::process::Child, run_dir: &Path) {
+fn stop_media_child(child: &mut std::process::Child, run_dir: &Path, worker: &str) {
     #[cfg(windows)]
     {
         let _ = Command::new("taskkill")
@@ -759,7 +783,10 @@ fn stop_narration_child(child: &mut std::process::Child, run_dir: &Path) {
         let _ = child.kill();
     }
     let _ = child.wait();
-    let _ = fs::remove_file(run_dir.join("narration-process.json"));
+    let _ = fs::remove_file(run_dir.join(format!("{worker}-process.json")));
+    if worker == "image" {
+        return;
+    }
     let cleanup = cleanup_narration_model(run_dir);
     let stage = match cleanup {
         Ok(()) => {
@@ -889,6 +916,12 @@ fn recover_interrupted_jobs(data_dir: &Path, store: &JobStore) -> Result<(), Run
             }
             let _ = fs::remove_file(run_dir.join("cleanup-required.json"));
         }
+        if store
+            .request_context(&job.job_id)?
+            .is_some_and(|context| context["operation"] == "image.generate")
+        {
+            continue;
+        }
         if run_dir.exists() {
             let recovered_root = data_dir.join("runs").join("recovered");
             fs::create_dir_all(&recovered_root)?;
@@ -937,7 +970,12 @@ fn reconcile_cleanup_markers(data_dir: &Path) {
 }
 
 fn has_live_tracked_child(run_dir: &Path) -> bool {
-    for marker in ["opencode-process.json", "codex-process.json", "narration-process.json"] {
+    for marker in [
+        "opencode-process.json",
+        "codex-process.json",
+        "narration-process.json",
+        "image-process.json",
+    ] {
         let marker_path = run_dir.join(marker);
         if !marker_path.exists() {
             continue;
