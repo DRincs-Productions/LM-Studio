@@ -96,7 +96,7 @@ A fine produzione, il Coordinatore restituisce un handback persistente con risul
 
 ### Scrittore
 
-The paired server Coordinator claims queued jobs and dispatches `codex.execute` to server-side Codex and `narrative.generate` to the narration pipeline. A narration run writes stage evidence and a result manifest in its owned directory, publishes the selected English scene to the configured `imagecloud:` OneDrive remote, and verifies the remote bytes before completing. The authenticated relay returns the file reference and SHA-256; the client MCP downloads and verifies it before the client analyses it. See [Server narration handoff](handoffs/08-server-narration.md).
+The paired server Coordinator claims queued jobs and dispatches `codex.execute` through OpenCode and `narrative.generate` to the narration pipeline. A narration run writes stage evidence and a result manifest in its owned directory, publishes the selected English scene to the configured `imagecloud:` OneDrive remote, and verifies the remote bytes before completing. The authenticated relay returns the file reference and SHA-256; the client MCP downloads and verifies it before the client analyses it. See [Server narration handoff](handoffs/08-server-narration.md).
 
 ```mermaid
 flowchart LR
