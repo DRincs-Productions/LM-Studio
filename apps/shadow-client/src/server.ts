@@ -96,7 +96,7 @@ function createServer(): McpServer {
   });
 
   server.registerTool("shadow_submit_job", {
-    description: "Submit a generic task to server-side Codex, or a narrative.generate v1 request to the server narration queue. Then use shadow_wait_job or shadow_job_status with the returned requestId. Never resubmits automatically.",
+    description: "Submit a generic task for server-side OpenCode GPT-6 Luna, or a narrative.generate v1 request to the server narration queue. Then use shadow_wait_job or shadow_job_status with the returned requestId. Never resubmits automatically.",
     inputSchema: z.object({
       operation: z.string().min(1).max(100),
       payload: z.record(z.string(), z.json()),
@@ -160,7 +160,7 @@ function createServer(): McpServer {
   };
 
   server.registerTool("shadow_submit_narration", {
-    description: "Queue an English scene request for the paired Shadow server. The server runs the Writer, Gemini review, Codex final check, then publishes the result to OneDrive. Use shadow_wait_job, then get_narration_result before analysing the returned scene.",
+    description: "Queue an English scene request for the paired Shadow server. The server runs the Writer, deterministic revisions and OpenCode GPT-6 Luna final edit, then publishes the result to OneDrive. Use shadow_wait_job, then get_narration_result before analysing the returned scene.",
     inputSchema: narrationInput.extend({ brief: z.string().trim().min(1).max(12000) }),
   }, async ({ brief, ...values }) => submitNarration(brief, values));
 

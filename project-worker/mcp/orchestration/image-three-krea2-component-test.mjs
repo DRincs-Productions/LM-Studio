@@ -23,7 +23,7 @@ const candidates = [
 const manifest = {
   runId, inputSeed: seed, createdAt: new Date().toISOString(), mode: 'component', role: 'designer_image_worker',
   status: 'preflight', premise: prompt, negativePrompt, resolution: { width: 1024, height: 1024 },
-  testScope: 'Compare Krea2 Turbo, RedCraft RedMix Hybrid, and Krea2 Anime v2.0 with the exact same prompt and seed; no LoRAs; generation and Codex review only. No finalization or publication.',
+  testScope: 'Compare Krea2 Turbo, RedCraft RedMix Hybrid, and Krea2 Anime v2.0 with the exact same prompt and seed; no LoRAs; generation and OpenCode GPT-6 Luna review only. No finalization or publication.',
   inferenceEngine: path.join(root, 'image-worker', 'bin', 'sd-cli.exe'), candidates,
   loras: [], mcpCalls: [], outputs: [], authorization: 'component generation and review only'
 };
@@ -116,7 +116,7 @@ try {
     manifest.outputs.push(output);
     await save();
 
-    const review = await call(imageClient, imageLog, 'review_with_codex', {
+    const review = await call(imageClient, imageLog, 'review_with_opencode', {
       image_path: workerPath,
       original_request: `${prompt}\n\nThis is a non-explicit model-comparison candidate. Expected profile style: ${candidate.style}. Judge the two clearly adult characters, requested clothing, kiss, readable composition, faces, and absence of other people or severe anatomy errors. This candidate remains in staging.`
     }, 15 * 60 * 1000);

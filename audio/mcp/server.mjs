@@ -169,7 +169,7 @@ server.tool("system_status", "Show Audio Worker backends, installed model files,
   return text({ worker: "audio-worker-mcp", backend: "audio.cpp v0.9.0 Vulkan", models, audio_cpp_cli: AUDIOCPP_CLI, audio_cpp_models: AUDIOCPP_MODELS, audio_perception: { cli: PERCEPTION_CLI, model: PERCEPTION_MODEL, projector: PERCEPTION_PROJECTOR, installed: await exists(PERCEPTION_CLI) && await exists(PERCEPTION_MODEL) && await exists(PERCEPTION_PROJECTOR) }, legacy_stable_audio_tflite: await exists(PYTHON), staging_root: ROOT, generation_models_root: MODEL_ROOT, local_assets_root: ASSETS, remote, rclone_targets: { sound_effects: `${REMOTE_BASE}/SoundEffects/final`, music: `${REMOTE_BASE}/Music/final` }, gpu, devices });
 });
 
-server.tool("find_project_audio_assets", "Search only this project's existing audio assets and manifests before generating a new cue. Returns candidates for Codex to compare with the requested sound.", {
+server.tool("find_project_audio_assets", "Search only this project's existing audio assets and manifests before generating a new cue. Returns candidates for Coordinator to compare with the requested sound.", {
   project_id: z.string().min(1).max(80), category: z.enum(["music", "sound_effect"]).optional()
 }, async ({ project_id, category }) => {
   const project = safeId(project_id, "project_id"), base = path.join(ASSETS, project, "Audio");
@@ -189,15 +189,15 @@ server.tool("find_project_audio_assets", "Search only this project's existing au
       if (await exists(manifestPath)) { try { manifest = JSON.parse(await fs.readFile(manifestPath, "utf8")); } catch { manifest = { error: "manifest_invalid" }; } }
       candidates.push({ path: file, category: manifest?.category || inferred, bytes: stat.size, sha256: await hashFile(file), manifest_path: await exists(manifestPath) ? manifestPath : null,
         description: manifest?.description || null, prompt: manifest?.prompt || null, loop: typeof manifest?.loop === "boolean" ? manifest.loop : null,
-        status: manifest?.status || "unmanifested", codex_review_score: manifest?.codex_review?.score ?? null,
-        codex_major_error: manifest?.codex_review?.major_error ?? null, codex_review_decision: manifest?.codex_review?.decision ?? null });
+        status: manifest?.status || "unmanifested", coordinator_review_score: manifest?.coordinator_review?.score ?? manifest?.codex_review?.score ?? null,
+        coordinator_major_error: manifest?.coordinator_review?.major_error ?? manifest?.codex_review?.major_error ?? null, coordinator_review_decision: manifest?.coordinator_review?.decision ?? manifest?.codex_review?.decision ?? null });
     }
   }
   await walk(base);
   return text({ project_id: project, search_root: base, category_filter: category || null, candidates });
 });
 
-server.tool("review_audio", "Have the installed local Qwen audio model listen to a candidate or repeated-loop preview and return evidence only. Codex remains the approving reviewer.", {
+server.tool("review_audio", "Have the installed local Qwen audio model listen to a candidate or repeated-loop preview and return evidence only. Coordinator remains the approving reviewer.", {
   audio_path: z.string(), category: z.enum(["music", "sound_effect"]), description: z.string().min(5).max(3000), prompt: z.string().min(5).max(3000),
   loop: z.boolean(), loop_preview: z.boolean().default(false), trigger: z.string().min(2).max(500), stop_condition: z.string().min(2).max(500)
 }, async (a) => {
@@ -282,12 +282,12 @@ server.tool("generate_audio", "Generate one WAV cue from an explicit creative an
 
 server.tool("inspect_audio", "Inspect an audio file technically and calculate diagnostic boundary metrics. This does not replace listening or certify a seamless loop.", { audio_path: z.string() }, async ({ audio_path }) => text(await toolPython({ operation: "inspect", path: await checkAudioPath(audio_path) })));
 
-server.tool("record_codex_audio_review", "Persist Codex's score and retry decision beside a generated candidate. Approval requires at least 80 points and no major error.", {
+server.tool("record_coordinator_audio_review", "Persist Coordinator's score and retry decision beside a generated candidate. Approval requires at least 80 points and no major error.", {
   audio_path: z.string(), project_id: z.string().min(1).max(80), category: z.enum(["music", "sound_effect"]), perception_evidence_path: z.string(), loop_evidence_path: z.string().optional(),
   score: z.number().int().min(0).max(100), major_error: z.boolean(), summary: z.string().min(20).max(4000), retry_prompt: z.string().max(3000).optional()
 }, async (a) => {
   const project = safeId(a.project_id, "project_id"), candidate = await checkAudioPath(a.audio_path);
-  if (!isInside(candidate, path.join(ROOT, "work", "jobs"))) throw new Error("Codex reviews can only be recorded for generated candidates in the Audio Worker job staging area.");
+  if (!isInside(candidate, path.join(ROOT, "work", "jobs"))) throw new Error("Coordinator reviews can only be recorded for generated candidates in the Audio Worker job staging area.");
   const manifestPath = candidate + ".json";
   const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
   if (manifest.project_id !== project || manifest.category !== a.category) throw new Error("Project or category does not match the candidate manifest.");
@@ -305,10 +305,10 @@ server.tool("record_codex_audio_review", "Persist Codex's score and retry decisi
     if (!loopPath.includes((path.sep + "loop-previews" + path.sep).toLowerCase()) || loop.evidence.report.loop_assessment?.requested !== true || loop.evidence.report.loop_assessment?.can_assess !== true) throw new Error("Loop review evidence must come from an interpretable repeated-loop preview.");
   } else if (a.loop_evidence_path) throw new Error("A one-shot cue must not include a loop-preview report.");
   const decision = a.score >= 80 && !a.major_error ? "approved_for_finalization" : "revision_required";
-  const review = { reviewer: "Codex", score: a.score, major_error: a.major_error, summary: a.summary, retry_prompt: a.retry_prompt || null, decision, candidate_sha256: candidateHash,
+  const review = { reviewer: "Coordinator", score: a.score, major_error: a.major_error, summary: a.summary, retry_prompt: a.retry_prompt || null, decision, candidate_sha256: candidateHash,
     perception_evidence_path: perceived.evidencePath, loop_evidence_path: loop?.evidencePath || null, reviewed_at: new Date().toISOString() };
-  manifest.codex_reviews = [...(Array.isArray(manifest.codex_reviews) ? manifest.codex_reviews : []), review];
-  manifest.codex_review = review;
+  manifest.coordinator_reviews = [...(Array.isArray(manifest.coordinator_reviews) ? manifest.coordinator_reviews : []), review];
+  manifest.coordinator_review = review;
   await fs.writeFile(manifestPath, JSON.stringify(manifest, null, 2), "utf8");
   return text({ ...review, attempts_used: (await fs.readdir(path.dirname(candidate))).filter(name => /\.wav$/i.test(name)).length, maximum_attempts: 3 });
 });
@@ -327,7 +327,7 @@ server.tool("finalize_audio", "Copy a reviewed WAV candidate and its manifest in
   perception_evidence_path: z.string(), loop_evidence_path: z.string().optional(),
   perception_report: z.object({ status: z.enum(["analyzed", "audio_not_accessible"]), clip_duration_seconds: z.union([z.string().max(100), z.number()]), audible_summary: z.string().max(4000), perceived_category: z.enum(["music", "sound_effect", "speech", "mixed", "uncertain"]), brief_alignment: z.enum(["aligned", "partial", "mismatch", "uncertain"]), alignment_evidence: z.array(z.string().max(1000)).max(30), issues: z.array(z.object({ time_range: z.string().max(100), observation: z.string().max(1000), severity: z.enum(["minor", "major"]) })).max(30), loop_assessment: z.object({ requested: z.boolean(), can_assess: z.boolean(), observation: z.string().max(2000) }), uncertainties: z.array(z.string().max(1000)).max(30), confidence: z.number().int().min(0).max(100), audio_sha256: z.string().regex(/^[a-f0-9]{64}$/i) }),
   loop_review_report: z.object({ status: z.enum(["analyzed", "audio_not_accessible"]), clip_duration_seconds: z.union([z.string().max(100), z.number()]), audible_summary: z.string().max(4000), perceived_category: z.enum(["music", "sound_effect", "speech", "mixed", "uncertain"]), brief_alignment: z.enum(["aligned", "partial", "mismatch", "uncertain"]), alignment_evidence: z.array(z.string().max(1000)).max(30), issues: z.array(z.object({ time_range: z.string().max(100), observation: z.string().max(1000), severity: z.enum(["minor", "major"]) })).max(30), loop_assessment: z.object({ requested: z.boolean(), can_assess: z.boolean(), observation: z.string().max(2000) }), uncertainties: z.array(z.string().max(1000)).max(30), confidence: z.number().int().min(0).max(100), audio_sha256: z.string().regex(/^[a-f0-9]{64}$/i) }).optional(),
-  codex_review: z.object({ score: z.number().int().min(0).max(100), major_error: z.boolean(), summary: z.string().min(20).max(4000), retry_prompt: z.string().max(3000).optional() })
+  coordinator_review: z.object({ score: z.number().int().min(0).max(100), major_error: z.boolean(), summary: z.string().min(20).max(4000), retry_prompt: z.string().max(3000).optional() })
 }, async (a) => {
   const project = safeId(a.project_id, "project_id"), source = await checkAudioPath(a.audio_path), dirs = categoryDirs(a.category);
   if (!isInside(source, path.join(ROOT, "work", "jobs"))) throw new Error("Only generated job candidates under the Audio Worker work/jobs directory can be finalized.");
@@ -340,13 +340,13 @@ server.tool("finalize_audio", "Copy a reviewed WAV candidate and its manifest in
   if (!(await exists(manifestSource))) throw new Error("Candidate manifest is missing.");
   const manifest = JSON.parse(await fs.readFile(manifestSource, "utf8"));
   if (manifest.project_id !== project || manifest.category !== a.category) throw new Error("Project or category does not match the candidate manifest.");
-  if (a.codex_review.score < 80 || a.codex_review.major_error) throw new Error("Audio candidate cannot be finalized: Codex review requires at least 80 points and no major error.");
-  if (manifest.codex_review?.decision !== "approved_for_finalization" || manifest.codex_review?.candidate_sha256 !== await hashFile(source) || manifest.codex_review?.score !== a.codex_review.score || manifest.codex_review?.major_error !== a.codex_review.major_error || manifest.codex_review?.summary !== a.codex_review.summary) throw new Error("No matching passing Codex review is recorded for this candidate.");
+  if (a.coordinator_review.score < 80 || a.coordinator_review.major_error) throw new Error("Audio candidate cannot be finalized: Coordinator review requires at least 80 points and no major error.");
+  if (manifest.coordinator_review?.decision !== "approved_for_finalization" || manifest.coordinator_review?.candidate_sha256 !== await hashFile(source) || manifest.coordinator_review?.score !== a.coordinator_review.score || manifest.coordinator_review?.major_error !== a.coordinator_review.major_error || manifest.coordinator_review?.summary !== a.coordinator_review.summary) throw new Error("No matching passing Coordinator review is recorded for this candidate.");
   if (a.perception_report.status !== "analyzed" || a.perception_report.confidence < 25) throw new Error("Audio candidate cannot be finalized without an interpretable local listening report.");
   const candidateHash = await hashFile(source);
   if (a.perception_report.audio_sha256 !== candidateHash) throw new Error("Local perception report does not match this exact candidate audio.");
   const perceptionEvidence = await checkPerceptionEvidence(a.perception_evidence_path, candidateHash);
-  if (manifest.codex_review.perception_evidence_path !== perceptionEvidence.evidencePath) throw new Error("Finalizer perception evidence differs from the review recorded by Codex.");
+  if (manifest.coordinator_review.perception_evidence_path !== perceptionEvidence.evidencePath) throw new Error("Finalizer perception evidence differs from the review recorded by Coordinator.");
   if (JSON.stringify(perceptionEvidence.evidence.report) !== JSON.stringify(a.perception_report)) throw new Error("Submitted perception report differs from the saved local listening evidence.");
   if (a.perception_report.loop_assessment.requested !== manifest.loop) throw new Error("Listening report loop flag does not match the candidate manifest.");
   let loopEvidence = null;
@@ -357,7 +357,7 @@ server.tool("finalize_audio", "Copy a reviewed WAV candidate and its manifest in
   }
   if (!manifest.loop && a.loop_review_report) throw new Error("A loop preview report must not be attached to a one-shot cue.");
   await fs.copyFile(source, target, fs.constants.COPYFILE_EXCL);
-  const finalManifest = { ...manifest, output: target, audio_sha256: await hashFile(target), perception_review: { ...a.perception_report, evidence_path: perceptionEvidence.evidencePath }, loop_perception_review: a.loop_review_report ? { ...a.loop_review_report, evidence_path: loopEvidence.evidencePath } : null, codex_review: { ...a.codex_review, decision: "approved_for_finalization", reviewer: "Codex", approved_at: new Date().toISOString() }, finalized_at: new Date().toISOString(), status: "finalized" };
+  const finalManifest = { ...manifest, output: target, audio_sha256: await hashFile(target), perception_review: { ...a.perception_report, evidence_path: perceptionEvidence.evidencePath }, loop_perception_review: a.loop_review_report ? { ...a.loop_review_report, evidence_path: loopEvidence.evidencePath } : null, coordinator_review: { ...a.coordinator_review, decision: "approved_for_finalization", reviewer: "Coordinator", approved_at: new Date().toISOString() }, finalized_at: new Date().toISOString(), status: "finalized" };
   await fs.writeFile(`${target}.json`, JSON.stringify(finalManifest, null, 2), { encoding: "utf8", flag: "wx" });
   return text({ status: "finalized", audio_path: target, manifest_path: `${target}.json`, sha256: await hashFile(target), category_directory: dirs.local });
 });
@@ -369,7 +369,7 @@ server.tool("publish_audio", "Publish a finalized project audio asset to its cat
   const manifestPath = `${src}.json`;
   if (!(await exists(manifestPath))) throw new Error("Finalized audio manifest is missing.");
   const finalManifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
-  if (finalManifest.status !== "finalized" || finalManifest.codex_review?.score < 80 || finalManifest.codex_review?.major_error !== false) throw new Error("Only a Codex-approved finalized audio asset can be published.");
+  if (finalManifest.status !== "finalized" || finalManifest.coordinator_review?.score < 80 || finalManifest.coordinator_review?.major_error !== false) throw new Error("Only a Coordinator-approved finalized audio asset can be published.");
   if (finalManifest.audio_sha256 !== await hashFile(src)) throw new Error("Finalized WAV hash does not match its review manifest.");
   finalManifest.status = "published";
   finalManifest.remote_path = remote;

@@ -78,7 +78,7 @@ try {
   const fixture = await call(projectClient, projectLog, 'record_component_test', {
     run_id: runId, role: 'designer', model: 'Image Worker / RedCraft v3.0 with conditional LoRA comparison',
     input: `${prompt}\n\nUse the same seed ${seed} for a baseline and the registered LoRA at +3 and -3.`,
-    response: 'Run isolated Image Worker generation and Codex review for each candidate. Keep all outputs in staging; do not finalize or publish.',
+    response: 'Run isolated Image Worker generation and OpenCode GPT-6 Luna review for each candidate. Keep all outputs in staging; do not finalize or publish.',
     interaction: 'handoff', mock_reply: 'Controlled test fixture recorded; proceed only with the declared candidates.'
   });
   manifest.projectWorkerRecording = fixture.text;
@@ -125,7 +125,7 @@ try {
       status: 'generated'
     };
     manifest.outputs.push(output); await save();
-    const review = await call(imageClient, imageLog, 'review_with_codex', {
+    const review = await call(imageClient, imageLog, 'review_with_opencode', {
       image_path: workerPath,
       original_request: `${prompt}\n\nThis is an adult non-anime comparison candidate. Judge whether the subject appears clearly adult, is fully nude, has an erection angled upward and toward his left at about 35 degrees, and has readable natural anatomy. Note severe anatomical errors. This candidate remains in staging.`
     }, 15 * 60 * 1000);

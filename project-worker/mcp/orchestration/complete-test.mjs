@@ -118,7 +118,7 @@ try {
     filename: projectFile, production_approved: true,
     approval_text: 'APPROVO PRODUZIONE nel test completo terminale, sulla base della direzione creativa appena definita da Regia.',
     phase: 'single_scene_text_image',
-    summary: 'Produce the approved complete story using the configured Hemmingway Writer and Narrative Reviewer; Codex reviews and makes only bounded local corrections; generate and review every useful visual moment declared by the narrative, then publish and transfer all approved images. Preserve the Project File canon and do not set a word count or fixed image quantity.',
+    summary: 'Produce the approved complete story using the configured Hemmingway Writer and Narrative Reviewer; OpenCode GPT-6 Luna reviews and makes only bounded local corrections; generate and review every useful visual moment declared by the narrative, then publish and transfer all approved images. Preserve the Project File canon and do not set a word count or fixed image quantity.',
     expected_revision: state.revision, expected_sha256: currentHash, execution_mode: 'complete_test'
   });
   manifest.projectFile = projectFile;
@@ -159,7 +159,7 @@ try {
   canonical += `\n## Complete Test Implementation Target\n\nGame project: ${gameRoot}\n\nCopied verified production assets:\n${localAssets.map(item => `- ${item.destination} (SHA256 ${item.sha256})`).join('\n')}\n`;
   await call(client, 'update_project_file', { filename: projectFile, content: canonical, expected_sha256: sha(await fs.readFile(canonicalPath, 'utf8')) }, 60000);
 
-  const selection = await call(client, 'select_programmer', { filename: projectFile, provider: 'codex', project_root: gameRoot }, 60000);
+  const selection = await call(client, 'select_programmer', { filename: projectFile, provider: 'opencode', project_root: gameRoot }, 60000);
   await record('programmer_provider_selected', selection);
   if (selection.status !== 'awaiting_explicit_approval') throw Error('Programmer selection did not wait for a separate approval');
   const implementationBrief = `Implement the approved story in the existing Pixi'VN Visual Novel + Ink project at ${gameRoot}. Read the canonical Project File and test-assets-manifest.json. Populate the Ink story with the approved complete narrative and integrate the copied images and audio at their existing paths in the Ink/Pixi'VN project. Preserve story facts, adult character canon, tone, scene order, audio loop behavior and stops. Inspect the generated template, fix project errors necessary for a successful build, and run npm run build. Do not alter files outside this disposable game project.`;
@@ -175,7 +175,7 @@ try {
   await fs.writeFile(path.join(runRoot, 'final-build.log'), build.output + '\n');
   await record('final_build', build);
   for (let repair = 1; build.exitCode !== 0 && repair <= 2; repair++) {
-    const next = await call(client, 'select_programmer', { filename: projectFile, provider: 'codex', project_root: gameRoot }, 60000);
+    const next = await call(client, 'select_programmer', { filename: projectFile, provider: 'opencode', project_root: gameRoot }, 60000);
     const repaired = await call(client, 'start_programmer', { filename: projectFile, selection_id: next.selection_id, approval_text: 'APPROVO in modo separato il passaggio di riparazione del test: correggere gli errori di build registrati.', implementation_brief: `Fix only the current Pixi'VN build errors in ${gameRoot}. The latest build output is at ${path.join(runRoot, 'final-build.log')}. Keep the approved narrative, assets and architecture. Run npm run build and report the result.` }, 4 * 60 * 60 * 1000);
     await record('programmer_build_repair_' + repair, repaired);
     if (repaired.status !== 'completed') break;

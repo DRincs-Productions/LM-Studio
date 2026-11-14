@@ -13,9 +13,19 @@ import { runJob } from './runner.mjs';
 import { selectProgrammer, recordComponentTest } from './programmer.mjs';
 import { attachProjectRoot, listNarrativeSources, readNarrativeSource } from './project-sources.mjs';
 import { predictWithMcpTools } from './regia-tool-loop.mjs';
-import { narrativeContentChecks, narrativePresentationChecks, reviewPassEvidenceIssues, deterministicImagePlan, writerInstruction, reviewerInstruction, compactNarrativeCanon, readLmStudioChatStream, visualMomentPrompts, requiredTimelineChecks, writerRevisionScopeChecks, singlePlaybackChecks, narrativeCanonBoundaryChecks, validateSceneContract, createSceneContract, sourceSpecifiesPov } from './production.mjs';
+import { narrativeContentChecks, narrativePresentationChecks, reviewPassEvidenceIssues, deterministicImagePlan, writerInstruction, reviewerInstruction, compactNarrativeCanon, readLmStudioChatStream, visualMomentPrompts, requiredTimelineChecks, writerRevisionScopeChecks, singlePlaybackChecks, narrativeCanonBoundaryChecks, validateSceneContract, createSceneContract, sourceSpecifiesPov, extractOpenCodeText } from './production.mjs';
 
 const handback = { summary: 'Prototype complete. Alex remains blonde and wears a black leather jacket.', completedTasks: ['Created prototype'], assets: [], problems: [], decisions: ['Choose a mission'], questionForUser: 'Which mission should Alex take?' };
+test('OpenCode JSONL parser returns only text events and ignores status/tool events', () => {
+  const output = [
+    { type: 'step_start', part: {} },
+    { type: 'tool_use', part: { type: 'tool', name: 'grep' } },
+    { type: 'text', part: { type: 'text', text: 'FINDINGS: ' } },
+    { type: 'text', part: { type: 'text', text: 'one issue.' } },
+    { type: 'step_finish', part: {} },
+  ].map(event => JSON.stringify(event)).join('\n');
+  assert.equal(extractOpenCodeText(output), 'FINDINGS: one issue.');
+});
 async function fixture(t) {
   await fs.mkdir(path.resolve('work'), { recursive: true });
   const root = await fs.mkdtemp(path.resolve('work', 'bionic unit fixture '));
@@ -98,7 +108,7 @@ test('automatic association uses exact native tool result marker and fails on fo
 });
 test('dead runners return an interrupted handback without replaying production', async t => {
   const f = await fixture(t), queued = await enqueue(f);
-  await f.store.update('project.md', s => { s.status = 'running'; s.job.runnerPid = 99999999; s.job.codexPid = 99999998; });
+  await f.store.update('project.md', s => { s.status = 'running'; s.job.runnerPid = 99999999; s.job.openCodePid = 99999998; });
   const result = await waitHandback(f.store, 'project.md', queued.job.id, { timeoutMs: 2000 });
   assert.equal(result.handback.status, 'interrupted'); assert.equal((await f.store.read('project.md')).owner, 'regia');
 });
@@ -121,7 +131,7 @@ test('Programmer provider selection is recorded but does not launch implementati
   const oldRoots = process.env.BIONIC_PROGRAMMER_ROOTS;
   process.env.BIONIC_PROGRAMMER_ROOTS = f.root;
   try {
-    const selected = await selectProgrammer({ store: f.store, filename: 'project.md', provider: 'codex', projectRoot });
+    const selected = await selectProgrammer({ store: f.store, filename: 'project.md', provider: 'opencode', projectRoot });
     assert.match(selected.content[0].text, /awaiting_explicit_approval/);
     const state = JSON.parse(await fs.readFile(path.join(f.store.stateRoot, 'programmer', sha('project.md').toLowerCase() + '.json'), 'utf8'));
     assert.equal(state.status, 'awaiting_explicit_approval');
@@ -170,6 +180,12 @@ test('review evidence and fallback image prompt follow the current Project File 
   assert.doesNotMatch(instruction, /250.?400|300.?330|minibar|Alex Rossi/i);
   assert.match(instruction, /Treat explicit chronology and relationship facts as hard constraints/);
   assert.match(instruction, /Do not invent unspecified character appearance, relationship history, plant species, technical mechanisms, or chronology details/);
+  assert.match(instruction, /Put no prose, dialogue, or cue after it in the Narrative section/);
+  assert.match(instruction, /If neither prohibits Visual cues/);
+  const revision = writerInstruction('Canon.', 'Show the handoff.', 'The original scene.', 'Clarify the handoff.');
+  assert.match(revision, /Revise the supplied draft in English/);
+  assert.match(revision, /Preserve unaffected prose, cues, and summary verbatim/);
+  assert.doesNotMatch(revision, /Write the requested original narrative/);
   assert.match(reviewerInstruction('Canon.', 'Approved scope.', 'A scene.', []), /one sentence selected from the verbatim Narrative Evidence Candidates/);
 });
 test('image planner derives moments from distinct narrative sections when Visual directives are absent', () => {
@@ -251,18 +267,18 @@ test('SceneContract enforces mode, preserves unknown POV and requires a bounded 
   assert.ok(validateSceneContract({ ...contract, unexpected: true }, 'scene-test').some(issue => /exactly match/.test(issue)));
 });
 
-test('SceneContract uses Codex as sole planner and validates its merged contract before Writer', async t => {
+test('SceneContract uses the OpenCode planner and validates its merged contract before Writer', async t => {
   const root = await fs.mkdtemp(path.resolve('work', 'scene contract fixture '));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   const base = { scene_id: 'scene-contract-test', mode: 'normal', pov: null, location: 'repair shop', participants: ['Mara'], canon_facts: ['Mara carries a key in her left hand.'], known_by_character: { Mara: ['She carries the key.'] }, unknowns: ['The shop address is unspecified.'], required_beats: ['Mara places the key on the counter at the end.'], forbidden_changes: ['Do not add named characters.'], closing_condition: 'End immediately after the key is placed.', creative_permissions: { sensory_details: true, minor_gestures: true, dialogue_within_known_facts: true, new_plot_events: false } };
   let calls = 0;
-  const codexPlanner = async prompt => { calls++; assert.match(prompt, /SceneContract/); return JSON.stringify(base); };
-  const result = await createSceneContract({ sceneId: base.scene_id, canonical: '# Canon\nMara carries a key in her left hand.', summary: 'Mara closes the repair shop.', out: root, predict: async () => { throw Error('No local planner should be called'); }, codexPlanner });
+  const planner = async prompt => { calls++; assert.match(prompt, /SceneContract/); return JSON.stringify(base); };
+  const result = await createSceneContract({ sceneId: base.scene_id, canonical: '# Canon\nMara carries a key in her left hand.', summary: 'Mara closes the repair shop.', out: root, predict: async () => { throw Error('No local planner should be called'); }, planner });
   assert.equal(calls, 2);
   assert.deepEqual(result.contract, base);
   assert.equal((await fs.readFile(result.path, 'utf8')).includes('"mode": "normal"'), true);
   assert.equal(result.sha256.length, 64);
-  assert.equal(await fs.stat(path.join(root, 'scene-contract-codex-proposal.json')).then(stat => stat.isFile()), true);
+  assert.equal(await fs.stat(path.join(root, 'scene-contract-opencode-proposal.json')).then(stat => stat.isFile()), true);
   assert.equal(await fs.stat(path.join(root, 'scene-contract-qwen-proposal.json')).then(stat => stat.isFile()).catch(() => false), false);
 });
 test('Writer and Narrative Reviewer receive the SceneContract as advisory, below Project File and approved brief', () => {

@@ -1,9 +1,9 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { spawnSync } from 'node:child_process';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { runOpenCode, DEFAULT_OPENCODE_MODEL } from './opencode.mjs';
 
 const root = path.resolve(process.env.USERPROFILE || 'C:\\Users\\Shadow', '.lmstudio');
 const runSeed = crypto.randomBytes(8).toString('hex');
@@ -11,11 +11,7 @@ const runId = `${new Date().toISOString().replace(/[-:.TZ]/g, '')}_${runSeed}`;
 const runDirectory = path.join(root, 'production-tests', 'components', runId);
 const projectWorker = path.join(root, 'project-worker', 'mcp', 'server.mjs');
 const audioWorker = path.join(root, 'audio', 'mcp', 'server.mjs');
-const codexHome = process.env.CODEX_HOME || path.join(process.env.USERPROFILE || 'C:\\Users\\Shadow', '.codex');
-const codexConfigPath = path.join(codexHome, 'config.toml');
-const codexConfig = await fs.readFile(codexConfigPath, 'utf8');
-const coordinatorModel = codexConfig.match(/^model\s*=\s*"([^"]+)"/m)?.[1];
-if (!coordinatorModel) throw Error(`Could not resolve Codex coordinator model from ${codexConfigPath}`);
+const coordinatorModel = process.env.BIONIC_OPENCODE_MODEL || DEFAULT_OPENCODE_MODEL;
 
 await fs.mkdir(runDirectory, { recursive: true });
 const pick = values => values[crypto.randomInt(values.length)];
@@ -47,7 +43,7 @@ const approval = 'The user explicitly authorized the Sound Designer component te
 const manifestPath = path.join(runDirectory, 'manifest.json');
 const manifest = {
   runId, inputSeed: runSeed, role: 'sound_designer', componentUnderTest: 'Stable Audio 3 Small SFX Q8',
-  coordinator: 'Codex', coordinatorModel, mode: 'component', status: 'started', premise,
+  coordinator: 'OpenCode GPT-6 Luna', coordinatorModel, mode: 'component', status: 'started', premise,
   cue, testAuthorization: approval, productionStarted: false, testAssetGenerationStarted: false,
   finalizationStarted: false, publicationStarted: false, implementationStarted: false,
   commands: ['node project-worker/mcp/orchestration/audio-component-test.mjs'],
@@ -80,7 +76,7 @@ try {
   await projectClient.connect(projectTransport);
   await audioClient.connect(audioTransport);
 
-  const initialContent = `# Component Test Project\n\n## Fresh Test Premise\n\n${premise}\n\n## Audio Production Brief\n\n- Cue ID: ${cue.cue_id}\n- Category: sound_effect\n- Description: ${cue.description}\n- Prompt: ${cue.prompt}\n- Loop: false\n- Loop reason: ${cue.loop_reason}\n- Trigger: ${cue.trigger}\n- Stop condition: ${cue.stop_condition}\n- Duration: ${cue.duration_seconds} seconds\n- Generator: Stable Audio 3 Small SFX Q8\n\n## Test Scope\n\nCodex acts only as Coordinator. The cue above is a fresh test fixture, not a Sound Designer model response. Generate, review, finalize and publish one passing test asset under this run ID. Do not run game implementation.\n`;
+  const initialContent = `# Component Test Project\n\n## Fresh Test Premise\n\n${premise}\n\n## Audio Production Brief\n\n- Cue ID: ${cue.cue_id}\n- Category: sound_effect\n- Description: ${cue.description}\n- Prompt: ${cue.prompt}\n- Loop: false\n- Loop reason: ${cue.loop_reason}\n- Trigger: ${cue.trigger}\n- Stop condition: ${cue.stop_condition}\n- Duration: ${cue.duration_seconds} seconds\n- Generator: Stable Audio 3 Small SFX Q8\n\n## Test Scope\n\nOpenCode GPT-6 Luna acts only as Coordinator. The cue above is a fresh test fixture, not a Sound Designer model response. Generate, review, finalize and publish one passing test asset under this run ID. Do not run game implementation.\n`;
   const projectCreate = await call(projectClient, 'mcp-calls.jsonl', 'create_project_file', { project_name: `audio-component-${runId}`, initial_content: initialContent });
   const projectFile = projectCreate.match(/PROJECT_FILE:\s*(\S+\.md)/)?.[1];
   if (!projectFile) throw Error(`Project Worker did not return the test Project File name: ${projectCreate}`);
@@ -150,36 +146,39 @@ try {
   };
   await fs.writeFile(path.join(runDirectory, 'coordinator-review.request.json'), JSON.stringify(reviewInput, null, 2) + '\n');
   const reviewPath = path.join(runDirectory, 'coordinator-review.json');
-  const reviewRun = spawnSync('codex', ['exec', '--skip-git-repo-check', '--ephemeral', '--sandbox', 'read-only', '--color', 'never', '--output-last-message', reviewPath, '--cd', runDirectory, '-'], {
-    cwd: runDirectory, encoding: 'utf8', input: `${JSON.stringify(reviewInput, null, 2)}\n\nFollow the requested JSON schema exactly.`, windowsHide: true, timeout: 30 * 60 * 1000, maxBuffer: 8 * 1024 * 1024
+  await runOpenCode({
+    cwd: runDirectory, workspace: runDirectory, prompt: `${JSON.stringify(reviewInput, null, 2)}\n\nFollow the requested JSON schema exactly.`,
+    requestPath: path.join(runDirectory, 'coordinator-review.request.md'), responsePath: reviewPath,
+    model: coordinatorModel, agent: 'audio-coordinator', timeoutMs: 30 * 60 * 1000,
+    configPath: path.join(runDirectory, 'opencode-audio-review.json'), label: 'audio-coordinator-review',
+    config: { $schema: 'https://opencode.ai/config.json', model: coordinatorModel, mcp: { servers: {} }, agents: { 'audio-coordinator': { description: 'Evaluate only the supplied audio evidence and return the requested assessment.', mode: 'primary', model: coordinatorModel, permissions: [{ action: '*', resource: '*', effect: 'deny' }] } }, permissions: [{ action: '*', resource: '*', effect: 'deny' }] }
   });
-  if (reviewRun.error || reviewRun.status !== 0) throw Error(`Codex Coordinator assessment failed (${reviewRun.status ?? reviewRun.error?.message ?? 'unknown error'}): ${reviewRun.stderr || reviewRun.stdout}`);
   const reviewText = await fs.readFile(reviewPath, 'utf8');
   const reviewMatch = reviewText.match(/\{[\s\S]*\}/);
-  if (!reviewMatch) throw Error('Codex Coordinator returned no JSON assessment.');
-  const codexReview = JSON.parse(reviewMatch[0]);
-  if (!Number.isInteger(codexReview.score) || codexReview.score < 0 || codexReview.score > 100 || typeof codexReview.major_error !== 'boolean' || typeof codexReview.summary !== 'string' || codexReview.summary.length < 20) throw Error('Codex Coordinator assessment did not match the required schema.');
-  manifest.codexReview = codexReview;
+  if (!reviewMatch) throw Error('OpenCode GPT-6 Luna Coordinator returned no JSON assessment.');
+  const coordinatorReview = JSON.parse(reviewMatch[0]);
+  if (!Number.isInteger(coordinatorReview.score) || coordinatorReview.score < 0 || coordinatorReview.score > 100 || typeof coordinatorReview.major_error !== 'boolean' || typeof coordinatorReview.summary !== 'string' || coordinatorReview.summary.length < 20) throw Error('OpenCode GPT-6 Luna Coordinator assessment did not match the required schema.');
+  manifest.coordinatorReview = coordinatorReview;
   if (perception.report.brief_alignment !== 'aligned' || perception.report.confidence < 25 || perception.report.issues.some(issue => issue.severity === 'major') || perception.audio_sha256 !== inspection.sha256) {
-    codexReview.major_error = true;
-    codexReview.score = Math.min(codexReview.score, 79);
-    codexReview.summary += ' Coordinator gate: local listening/technical evidence failed a required acceptance check.';
+    coordinatorReview.major_error = true;
+    coordinatorReview.score = Math.min(coordinatorReview.score, 79);
+    coordinatorReview.summary += ' Coordinator gate: local listening/technical evidence failed a required acceptance check.';
   }
-  manifest.codexReview = codexReview;
-  const codexRecorded = JSON.parse(await call(audioClient, 'audio-mcp-calls.jsonl', 'record_codex_audio_review', {
+  manifest.coordinatorReview = coordinatorReview;
+  const coordinatorRecorded = JSON.parse(await call(audioClient, 'audio-mcp-calls.jsonl', 'record_coordinator_audio_review', {
     audio_path: generated.audio_path, project_id: runId, category: cue.category,
-    perception_evidence_path: perception.evidence_path, score: codexReview.score,
-    major_error: codexReview.major_error, summary: codexReview.summary
+    perception_evidence_path: perception.evidence_path, score: coordinatorReview.score,
+    major_error: coordinatorReview.major_error, summary: coordinatorReview.summary
   }));
-  manifest.codexRecordedReview = codexRecorded;
+  manifest.coordinatorRecordedReview = coordinatorRecorded;
   await fs.copyFile(generated.manifest_path, candidateManifestCopy);
-  audioProgress = { status: 'candidate_reviewed_by_coordinator', generated, inspection, perception, codexReview, codexRecorded };
+  audioProgress = { status: 'candidate_reviewed_by_coordinator', generated, inspection, perception, coordinatorReview, coordinatorRecorded };
   await fs.writeFile(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
 
-  if (codexReview.score < 80 || codexReview.major_error) {
+  if (coordinatorReview.score < 80 || coordinatorReview.major_error) {
     manifest.status = 'candidate_review_failed';
     await fs.writeFile(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
-    console.log(JSON.stringify({ runId, status: manifest.status, candidatePath: generated.audio_path, score: codexReview.score }, null, 2));
+    console.log(JSON.stringify({ runId, status: manifest.status, candidatePath: generated.audio_path, score: coordinatorReview.score }, null, 2));
     process.exitCode = 1;
   } else {
     manifest.finalizationStarted = true;
@@ -189,7 +188,7 @@ try {
     const finalized = JSON.parse(await call(audioClient, 'audio-mcp-calls.jsonl', 'finalize_audio', {
       audio_path: generated.audio_path, project_id: runId, category: cue.category, filename,
       perception_evidence_path: perception.evidence_path, perception_report: perception.report,
-      codex_review: { score: codexReview.score, major_error: false, summary: codexReview.summary }
+      coordinator_review: { score: coordinatorReview.score, major_error: false, summary: coordinatorReview.summary }
     }));
     if (finalized.status !== 'finalized' || !finalized.audio_path || !finalized.manifest_path) throw Error('Audio Worker did not finalize the passing candidate.');
     manifest.finalized = finalized;
@@ -212,7 +211,7 @@ try {
     manifest.remotePath = published.remote_path;
     manifest.outputs.push(finalized.audio_path, finalized.manifest_path);
     await fs.writeFile(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
-    console.log(JSON.stringify({ runId, status: manifest.status, candidatePath: generated.audio_path, finalizedPath: finalized.audio_path, remotePath: published.remote_path, sha256: inspection.sha256, score: codexReview.score }, null, 2));
+    console.log(JSON.stringify({ runId, status: manifest.status, candidatePath: generated.audio_path, finalizedPath: finalized.audio_path, remotePath: published.remote_path, sha256: inspection.sha256, score: coordinatorReview.score }, null, 2));
   }
 } catch (error) {
   manifest.status = 'failed';

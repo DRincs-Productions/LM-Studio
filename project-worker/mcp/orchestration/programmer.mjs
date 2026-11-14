@@ -3,6 +3,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { sha } from './core.mjs';
+import { runOpenCode, openCodeExecutable, DEFAULT_OPENCODE_MODEL } from './opencode.mjs';
 
 const userRoot = process.env.USERPROFILE || process.env.HOME || 'C:\\Users\\Shadow';
 const defaultRoots = [path.join(userRoot, '.lmstudio', 'production-tests'), 'C:\\AI\\projects'];
@@ -46,13 +47,17 @@ async function writeJson(file, value) {
 }
 
 export async function selectProgrammer({ store, filename, provider, projectRoot }) {
-  if (!['claude', 'codex'].includes(provider)) throw Error('Choose either Claude or Codex');
+  if (!['claude', 'opencode'].includes(provider)) throw Error('Choose either Claude or OpenCode');
   await fs.access(store.project(filename));
   const root = await allowedProjectRoot(projectRoot);
   const state = await store.read(filename);
   if (state.status !== 'regia_ready') throw Error('A completed and acknowledged creative/production handback is required before implementation');
-  const executable = commandAvailable(provider === 'claude' ? 'claude' : 'codex');
-  if (!executable) throw Error(`${provider} CLI is unavailable. No automatic provider fallback is allowed.`);
+  const executable = provider === 'claude' ? commandAvailable('claude') : openCodeExecutable();
+  if (!executable) throw Error(`${provider} runtime is unavailable. No automatic provider fallback is allowed.`);
+  if (provider === 'opencode') {
+    try { await fs.access(executable); }
+    catch { if (!commandAvailable('opencode')) throw Error('OpenCode CLI is unavailable. No automatic provider fallback is allowed.'); }
+  }
   return store.locked(`programmer-gate-${sha(filename.toLowerCase())}.md`, async () => {
     const directory = path.join(store.stateRoot, 'programmer');
     await fs.mkdir(directory, { recursive: true });
@@ -92,30 +97,56 @@ export async function startProgrammer({ store, filename, selectionId, approvalTe
   const runDirectory = path.join(store.stateRoot, 'runs', runId, 'programmer');
   await fs.mkdir(runDirectory, { recursive: true });
   const answerPath = path.join(runDirectory, 'last-message.txt');
-  const prompt = `Implement the approved work in this project directory only: ${root}\n\nCanonical Project File (${filename}):\n${canonical}\n\nImplementation brief:\n${implementationBrief}\n\nThe user selected ${selection.provider} and separately approved starting this implementation: ${approvalText}\n\nUse your configured default model. Preserve approved story facts and assets. Inspect the project first, make the implementation in this directory, run relevant project checks, and report the files changed and their verification. Do not modify Bionic, MCP configuration, model settings, credentials, or files outside the project directory.`;
-  let args;
-  if (selection.provider === 'codex') {
-    args = ['exec', '--skip-git-repo-check', '--sandbox', 'workspace-write', '--json', '--color', 'never', '--output-last-message', answerPath, '--cd', root, '-'];
-  } else {
-    args = ['-p', '--permission-mode', 'acceptEdits', '--output-format', 'text'];
-  }
+  const prompt = `Implement the approved work in this project directory only: ${root}\n\nCanonical Project File (${filename}):\n${canonical}\n\nImplementation brief:\n${implementationBrief}\n\nThe user selected ${selection.provider} and separately approved starting this implementation: ${approvalText}\n\nUse OpenCode with ${process.env.BIONIC_OPENCODE_MODEL || DEFAULT_OPENCODE_MODEL}. Preserve approved story facts and assets. Inspect the project first, make the implementation in this directory, run relevant project checks, and report the files changed and their verification. Do not modify Bionic, MCP configuration, model settings, credentials, or files outside the project directory.`;
   const timeoutMs = Number(process.env.BIONIC_PROGRAMMER_TIMEOUT_MS) || 4 * 60 * 60 * 1000;
-  const result = await new Promise(resolve => {
-    const child = spawn(selection.executable, args, { cwd: root, windowsHide: true, shell: false, stdio: ['pipe', 'ignore', 'ignore'] });
-    let settled = false;
-    const finish = value => { if (settled) return; settled = true; clearTimeout(timer); resolve(value); };
-    const timer = setTimeout(() => { child.kill(); finish({ code: -1, timedOut: true }); }, timeoutMs);
-    child.once('error', () => finish({ code: -1, unavailable: true }));
-    child.once('spawn', () => child.stdin.end(prompt));
-    child.once('close', code => finish({ code: code ?? -1 }));
-  });
-  const response = await fs.readFile(answerPath, 'utf8').catch(() => '');
+  let result = { code: -1, timedOut: false, unavailable: false };
+  let response = '';
+  if (selection.provider === 'opencode' || selection.provider === 'codex') {
+    try {
+      const model = process.env.BIONIC_OPENCODE_MODEL || DEFAULT_OPENCODE_MODEL;
+      const permissions = [
+        { action: '*', resource: '*', effect: 'deny' },
+        ...['read', 'glob', 'grep', 'edit'].map(action => ({ action, resource: '**', effect: 'allow' })),
+        ...['npm *', 'npx *', 'node *', 'git *', 'cargo *', 'dotnet *', 'python *', 'py *', 'flutter *', 'cmake *'].map(resource => ({ action: 'shell', resource, effect: 'allow' })),
+      ];
+      const configPath = path.join(runDirectory, 'opencode.json');
+      const generated = await runOpenCode({
+        cwd: runDirectory, workspace: root, prompt,
+        requestPath: path.join(runDirectory, 'programmer-request.md'), responsePath: answerPath,
+        configPath, model, agent: 'programmer', timeoutMs, maxOutputBytes: 32 * 1024 * 1024, auto: true,
+        label: 'programmer-opencode',
+        config: {
+          $schema: 'https://opencode.ai/config.json',
+          model,
+          agents: { programmer: { description: 'Implement only the explicitly approved project changes.', mode: 'primary', model, permissions } },
+          permissions: [{ action: '*', resource: '*', effect: 'deny' }],
+        },
+      });
+      response = generated.text;
+      result = { code: 0 };
+    } catch (error) {
+      result = { code: -1, timedOut: /timed out/i.test(error.message), unavailable: error?.code === 'ENOENT', error: error.message };
+      response = await fs.readFile(answerPath, 'utf8').catch(() => '');
+    }
+  } else {
+    const args = ['-p', '--permission-mode', 'acceptEdits', '--output-format', 'text'];
+    result = await new Promise(resolve => {
+      const child = spawn(selection.executable, args, { cwd: root, windowsHide: true, shell: false, stdio: ['pipe', 'ignore', 'ignore'] });
+      let settled = false;
+      const finish = value => { if (settled) return; settled = true; clearTimeout(timer); resolve(value); };
+      const timer = setTimeout(() => { child.kill(); finish({ code: -1, timedOut: true }); }, timeoutMs);
+      child.once('error', () => finish({ code: -1, unavailable: true }));
+      child.once('spawn', () => child.stdin.end(prompt));
+      child.once('close', code => finish({ code: code ?? -1 }));
+    });
+    response = await fs.readFile(answerPath, 'utf8').catch(() => '');
+  }
   selection.status = result.code === 0 && response.trim() ? 'completed' : 'error';
   selection.finishedAt = new Date().toISOString();
   selection.exitCode = result.code;
   selection.timedOut = !!result.timedOut;
   selection.resultPath = answerPath;
-  selection.error = result.timedOut ? 'Programmer deadline exceeded' : result.unavailable ? `${selection.provider} process could not be started` : result.code !== 0 ? `${selection.provider} exited with code ${result.code}` : response.trim() ? null : 'Provider returned no saved final response';
+  selection.error = result.timedOut ? 'Programmer deadline exceeded' : result.unavailable ? `${selection.provider === 'codex' ? 'OpenCode' : selection.provider} process could not be started` : result.code !== 0 ? `${selection.provider === 'codex' ? 'OpenCode' : selection.provider} exited with code ${result.code}` : response.trim() ? null : 'Provider returned no saved final response';
   await store.locked(`programmer-gate-${sha(filename.toLowerCase())}.md`, async () => writeJson(file, selection));
   return text({ status: selection.status, provider: selection.provider, project_root: root, run_id: runId, result_path: answerPath, summary: response.slice(0, 12000), error: selection.error });
 }

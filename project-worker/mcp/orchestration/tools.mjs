@@ -60,7 +60,7 @@ export function installTools(server) {
   tool('get_regia_session', 'Read the persisted local Regia relay mode, session ID, pending request and last response after a restart or uncertain tool result. Does not call a model.', { filename: z.string() }, ({ filename }) => regiaRelayStatus(store, filename));
   tool('stop_regia_session', 'When the user asks to return to Codex, suspend the Regia relay without deleting conversation history. Does not acknowledge handbacks or start production.', { filename: z.string(), session_id: z.string().uuid() }, ({ filename, session_id }) => stopRegiaRelay(store, filename, session_id));
   tool('discard_regia_turn', 'Explicit recovery only: abandon a failed or dead Regia request after inspecting get_regia_session. Preserves its prompt/error/raw result, never replays it. Refuses a live running request.', { filename: z.string(), session_id: z.string().uuid(), request_id: z.string().uuid() }, ({ filename, session_id, request_id }) => discardRegiaTurn(store, filename, session_id, request_id));
-  tool('produce_scene_assets', 'Codex Coordinator only: run the approved Writer → Narrative Reviewer content-only loop (maximum five cycles). Formatting defects do not block Reviewer PASS and are returned for Codex repair. Returns the draft, presentation checks, review and source SHA256. Does not generate images. Call finalize_reviewed_scene once after a bounded Codex review and final edit.', { filename: z.string() }, async ({ filename }) => produceScene(filename));
+  tool('produce_scene_assets', 'OpenCode GPT-6 Luna Coordinator only: run the approved Writer → Narrative Reviewer content-only loop (maximum five cycles). Formatting defects do not block Reviewer PASS and are returned for OpenCode repair. Returns the draft, presentation checks, review and source SHA256. Does not generate images. Call finalize_reviewed_scene once after a bounded OpenCode review and final edit.', { filename: z.string() }, async ({ filename }) => produceScene(filename));
   const finalReviewSchema = {
     filename: z.string(), source_sha256: z.string().regex(/^[a-f0-9]{64}$/i),
     review_summary: z.string().min(20).max(4000), changes_made: z.string().min(8).max(4000),
@@ -69,8 +69,8 @@ export function installTools(server) {
   const finalize = async ({ filename, source_sha256, review_summary, changes_made, final_check, final_narrative }, narrativeOnly) => finalizeReviewedScene(filename, {
     sourceSha256: source_sha256, reviewSummary: review_summary, changesMade: changes_made, finalCheck: final_check, finalNarrative: final_narrative
   }, { narrativeOnly });
-  tool('finalize_reviewed_scene', 'Codex Coordinator only: validate final review against the approved draft hash, save the scene and continue with image production.', finalReviewSchema, input => finalize(input, false));
-  tool('finalize_reviewed_narrative', 'Codex Coordinator only: validate final review against the approved draft hash and save the scene and review evidence. Returns verified artifact hashes without starting image production. Refuses stale drafts and replay.', finalReviewSchema, input => finalize(input, true));
+  tool('finalize_reviewed_scene', 'OpenCode GPT-6 Luna Coordinator only: validate final review against the approved draft hash, save the scene and continue with image production.', finalReviewSchema, input => finalize(input, false));
+  tool('finalize_reviewed_narrative', 'OpenCode GPT-6 Luna Coordinator only: validate final review against the approved draft hash and save the scene and review evidence. Returns verified artifact hashes without starting image production. Refuses stale drafts and replay.', finalReviewSchema, input => finalize(input, true));
   tool('register_project', 'Associate an existing canonical Project File with this Regia session automatically. No session UUID needed. Call once from Regia, then get_orchestration_status.', { filename: z.string() }, async ({ filename }) => registrationText(await store.register(filename)));
   tool('attach_project_directory', 'Associate a user-selected game project directory with this Project File. Use only the exact directory the user identified. This enables read-only access to Ink files and Markdown under docs/. The directory must be inside configured Programmer roots; this tool never reads or writes its files.', {
     filename: z.string(), project_root: z.string().min(1)
@@ -118,8 +118,8 @@ export function installTools(server) {
   tool('recover_interrupted_job', 'Recover a dead coordinator as an interrupted handback. Never automatically repeats work; inspect produced files before deciding on a new handoff.', { filename: z.string() }, async ({ filename }) => {
     const state = await store.recover(filename); return state.handback;
   });
-  tool('select_programmer', 'Regia only: record whether Claude or Codex was selected to implement this approved project. This does not start implementation. After selection, ask the user in a separate turn for explicit approval to start.', {
-    filename: z.string(), provider: z.enum(['claude', 'codex']), project_root: z.string().min(1)
+  tool('select_programmer', 'Regia only: record whether Claude or OpenCode GPT-6 Luna was selected to implement this approved project. This does not start implementation. After selection, ask the user in a separate turn for explicit approval to start.', {
+    filename: z.string(), provider: z.enum(['claude', 'opencode']), project_root: z.string().min(1)
   }, async ({ filename, provider, project_root }) => selectProgrammer({ store, filename, provider, projectRoot: project_root }));
   tool('start_programmer', 'Regia only: start the previously selected Claude or Codex implementation after a separate explicit user approval. Uses the provider CLI default model; never changes provider or model automatically. A missing CLI returns an error without fallback.', {
     filename: z.string(), selection_id: z.string().uuid(), approval_text: z.string().min(1).max(4000), implementation_brief: z.string().min(1).max(12000)

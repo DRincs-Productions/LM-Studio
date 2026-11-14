@@ -120,7 +120,7 @@ export class Store {
   }
   async recover(filename) {
     return this.update(filename, state => {
-      if (state.status !== 'running' || alive(state.job.runnerPid, state.job.startedAt) || (state.job.codexPid && alive(state.job.codexPid, state.job.codexStartedAt))) throw Error('Only a job with a dead runner and dead coordinator can be recovered');
+      if (state.status !== 'running' || alive(state.job.runnerPid, state.job.startedAt) || ((state.job.openCodePid || state.job.codexPid) && alive(state.job.openCodePid || state.job.codexPid, state.job.openCodeStartedAt || state.job.codexStartedAt))) throw Error('Only a job with a dead runner and dead coordinator can be recovered');
       state.owner = 'regia'; state.status = 'handback_ready'; state.job.status = 'interrupted';
       state.handback = { summary: 'The coordinator process stopped. Inspect produced files and job state before retrying.', completedTasks: [], assets: [], problems: ['Interrupted job; side effects may have occurred. No automatic replay.'], decisions: ['Decide whether to retry after inspecting outputs.'], questionForUser: 'May this interrupted phase be retried?', jobId: state.job.id, status: 'interrupted', createdAt: now(), acknowledgedAt: null };
     });
@@ -152,7 +152,7 @@ export async function waitHandback(store, filename, jobId, { signal, timeoutMs =
     const state = await store.read(filename);
     if (state.job?.id !== jobId) throw Error('Project job changed during wait');
     if (state.status === 'handback_ready' || state.handback?.acknowledgedAt) return { status: 'handback_ready', projectId: state.projectId, projectFile: filename, handback: state.handback };
-    if (state.status === 'running' && state.job.runnerPid && !alive(state.job.runnerPid, state.job.startedAt) && (!state.job.codexPid || !alive(state.job.codexPid, state.job.codexStartedAt))) {
+    if (state.status === 'running' && state.job.runnerPid && !alive(state.job.runnerPid, state.job.startedAt) && (!(state.job.openCodePid || state.job.codexPid) || !alive(state.job.openCodePid || state.job.codexPid, state.job.openCodeStartedAt || state.job.codexStartedAt))) {
       await store.recover(filename);
       continue;
     }

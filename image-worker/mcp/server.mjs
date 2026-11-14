@@ -5,6 +5,7 @@ import { z } from "zod";
 import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
+import crypto from "node:crypto";
 
 // =========================================================
 // CONFIG
@@ -32,15 +33,18 @@ const PROFILES = {
 const PROFILE_PATHS = Object.fromEntries(Object.entries(PROFILES).map(([id, profile]) => [id, path.join(MODELS, profile.file)]));
 const LORA_CATALOG = JSON.parse(await fs.readFile(LORA_CATALOG_PATH, "utf8")).loras;
 
-const CODEX = "codex";
+const OPEN_CODE = process.env.OPENCODE_EXECUTABLE || (process.env.APPDATA
+  ? path.join(process.env.APPDATA, "npm", "node_modules", "@opencode", "cli", "bin", "opencode.exe")
+  : "opencode");
+const OPEN_CODE_MODEL = process.env.SHADOW_OPENCODE_MODEL || "openai/gpt-6-luna";
 
 const RCLONE = "rclone";
 const RCLONE_REMOTE = "imagecloud:";
 const RCLONE_FINAL_DIR = "ImageWorker/final";
 const RCLONE_TIMEOUT_MS = 120000;
 
-// Maximum time allowed for one Codex review.
-const CODEX_TIMEOUT_MS = 120000;
+// Maximum time allowed for one OpenCode review.
+const OPEN_CODE_TIMEOUT_MS = 120000;
 const IMAGE_TIMEOUT_MS = 60 * 60 * 1000;
 
 // =========================================================
@@ -85,12 +89,13 @@ function isInsideRoot(filePath) {
 function runProcess(executable, args, options = {}) {
   const {
     stdin = null,
-    timeoutMs = 0
+    timeoutMs = 0,
+    cwd = ROOT,
   } = options;
 
   return new Promise((resolve) => {
     const child = spawn(executable, args, {
-      cwd: ROOT,
+      cwd,
       windowsHide: true,
       shell: false
     });
@@ -243,7 +248,8 @@ server.tool(
       work_directory: WORK,
       final_directory: FINAL,
 
-      codex_command: CODEX,
+      opencode_command: OPEN_CODE,
+      reviewer_model: OPEN_CODE_MODEL,
 
       rclone_command: RCLONE,
       rclone_remote: RCLONE_REMOTE,
@@ -522,13 +528,13 @@ server.tool(
 );
 
 // =========================================================
-// TOOL 4 — review_with_codex
+// TOOL 4 — review_with_opencode
 // =========================================================
 
 server.tool(
-  "review_with_codex",
+  "review_with_opencode",
 
-  "Have Codex visually inspect an actual generated image and return a numerical quality assessment. The original scene request must be supplied.",
+  "Have OpenCode GPT-6 Luna visually inspect an actual generated image and return a numerical quality assessment. The original scene request must be supplied.",
 
   {
     image_path:
@@ -573,7 +579,7 @@ PATH: ${resolved}`
     }
 
     // ---------------------------------------------
-    // Codex review prompt
+    // OpenCode review prompt
     // ---------------------------------------------
 
     const reviewPrompt =
@@ -637,28 +643,28 @@ MAJOR_ERROR: <YES or NO>
 RETRY_HINT: <one short actionable sentence, or NONE>`;
 
     // ---------------------------------------------
-    // Execute Codex
+    // Execute OpenCode
     // ---------------------------------------------
 
-    const result = await runProcess(
-      CODEX,
-
-      [
-        "exec",
-
-        "--skip-git-repo-check",
-
-        "-i",
-        resolved,
-
-        "-"
-      ],
-
-      {
-        stdin: reviewPrompt,
-        timeoutMs: CODEX_TIMEOUT_MS
-      }
-    );
+    const reviewId = crypto.randomUUID();
+    const reviewDirectory = path.join(WORK, `opencode-image-review-${reviewId}`);
+    const requestPath = path.join(reviewDirectory, "review-request.md");
+    await fs.mkdir(reviewDirectory, { recursive: true });
+    await fs.writeFile(requestPath, reviewPrompt, { flag: "wx" });
+    await fs.writeFile(path.join(reviewDirectory, "opencode.json"), JSON.stringify({
+      $schema: "https://opencode.ai/config.json",
+      model: OPEN_CODE_MODEL,
+      mcp: { servers: {} },
+      agents: { "image-reviewer": {
+        description: "Read-only visual quality reviewer.", mode: "primary", model: OPEN_CODE_MODEL,
+        permissions: [{ action: "*", resource: "*", effect: "deny" }],
+      } },
+      permissions: [{ action: "*", resource: "*", effect: "deny" }],
+    }, null, 2), { flag: "wx" });
+    const result = await runProcess(OPEN_CODE, [
+      "--standalone", "run", "--model", OPEN_CODE_MODEL, "--agent", "image-reviewer", "--format", "json",
+      "--file", resolved, "--file", requestPath, "Evaluate the attached image and follow the attached review request exactly.",
+    ], { timeoutMs: OPEN_CODE_TIMEOUT_MS, cwd: reviewDirectory });
 
     // ---------------------------------------------
     // Execution failure
@@ -670,7 +676,7 @@ RETRY_HINT: <one short actionable sentence, or NONE>`;
           type: "text",
           text:
 `REVIEW_FAILED
-REASON: Codex review timed out`
+REASON: OpenCode review timed out`
         }]
       };
     }
@@ -693,44 +699,55 @@ ${result.stderr}`
     }
 
     // ---------------------------------------------
-    // Parse Codex final answer
+    // Parse OpenCode final answer
     // ---------------------------------------------
 
-    const text =
-      result.stdout.trim();
+    const text = [];
+    for (const line of result.stdout.split(/\r?\n/)) {
+      if (!line.trim()) continue;
+      try {
+        const event = JSON.parse(line);
+        if (event?.type === "text" && event.part?.type === "text" && typeof event.part.text === "string") text.push(event.part.text);
+      } catch { /* Ignore non-JSON CLI diagnostics. */ }
+    }
+    const response = text.join("").trim();
 
-    if (/\b(?:can't|can’t|cannot|unable to|declined to)\s+(?:evaluate|review|inspect|assess)\b/i.test(text)) {
+    if (!response) {
+      return { content: [{ type: "text", text: "REVIEW_FAILED\nREASON: OpenCode returned no review text" }] };
+    }
+
+    if (/\b(?:can't|can’t|cannot|unable to|declined to)\s+(?:evaluate|review|inspect|assess)\b/i.test(response)) {
       return {
         content: [{
           type: "text",
-          text: `REVIEW_FAILED\nREASON: Codex declined to evaluate this image.\n\nRAW_RESPONSE:\n${text}`
+          text: `REVIEW_FAILED\nREASON: OpenCode declined to evaluate this image.\n\nRAW_RESPONSE:\n${response}`
         }]
       };
     }
 
     const score =
-      parseNumber(text, "SCORE");
+      parseNumber(response, "SCORE");
 
     const people =
-      parsePeople(text);
+      parsePeople(response);
 
     const requestMatch =
       parseNumber(
-        text,
+        response,
         "REQUEST_MATCH"
       );
 
     const faces =
       parseNumber(
-        text,
+        response,
         "FACES"
       );
 
     const majorError =
-      parseMajorError(text);
+      parseMajorError(response);
 
     const retryHint =
-      parseRetryHint(text);
+      parseRetryHint(response);
 
     // ---------------------------------------------
     // Validate response
@@ -749,10 +766,10 @@ ${result.stderr}`
           type: "text",
           text:
 `REVIEW_FAILED
-REASON: Could not parse Codex response
+REASON: Could not parse OpenCode response
 
 RAW_RESPONSE:
-${text}`
+${response}`
         }]
       };
     }

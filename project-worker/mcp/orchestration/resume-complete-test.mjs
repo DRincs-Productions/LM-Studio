@@ -132,7 +132,7 @@ try {
     filename: projectFile, production_approved: true,
     approval_text: 'APPROVO la produzione audio del test completo secondo i cue canonici del Project File.',
     phase: 'audio_cue_production',
-    summary: 'Produce only audio cues explicitly specified by Regia. Reuse suitable project audio assets first; preserve music/SFX, loop, trigger and stop behavior. Have the Audio Worker listen and Codex review each cue; publish only passing assets to the existing rclone destinations.',
+    summary: 'Produce only audio cues explicitly specified by Regia. Reuse suitable project audio assets first; preserve music/SFX, loop, trigger and stop behavior. Have the Audio Worker listen and OpenCode GPT-6 Luna review each cue; publish only passing assets to the existing rclone destinations.',
     expected_revision: state.revision, expected_sha256: projectHash, execution_mode: 'complete_test'
   });
   await record('recovery_audio_phase', audio);
@@ -161,7 +161,7 @@ try {
   const assetReadback = await call('read_project_file', { filename: projectFile }, 60000);
   if (!assetReadback.text?.includes('Copied verified production assets:')) throw Error('Asset paths failed Project File read-back verification');
 
-  const selection = await call('select_programmer', { filename: projectFile, provider: 'codex', project_root: gameRoot }, 60000);
+  const selection = await call('select_programmer', { filename: projectFile, provider: 'opencode', project_root: gameRoot }, 60000);
   await record('programmer_provider_selected', selection);
   if (selection.status !== 'awaiting_explicit_approval') throw Error('Programmer selection did not wait for a separate approval');
   const brief = `Implement the approved story in the existing Pixi'VN Visual Novel + Ink project at ${gameRoot}. Read the canonical Project File and test-assets-manifest.json. Populate the Ink story with the approved complete narrative and integrate copied image/audio assets at their paths. Preserve story facts, canon, tone, scene order, audio loop and stop behavior. Fix template errors needed for a successful build. Do not modify files outside this disposable game project.`;
@@ -173,7 +173,7 @@ try {
   await fs.writeFile(path.join(runRoot, 'final-build.log'), build.output + '\n');
   await record('final_build', build);
   for (let attempt = 1; build.exitCode !== 0 && attempt <= 2; attempt++) {
-    const next = await call('select_programmer', { filename: projectFile, provider: 'codex', project_root: gameRoot }, 60000);
+    const next = await call('select_programmer', { filename: projectFile, provider: 'opencode', project_root: gameRoot }, 60000);
     const repaired = await call('start_programmer', { filename: projectFile, selection_id: next.selection_id, approval_text: 'APPROVO separatamente la riparazione del build nel progetto temporaneo del test.', implementation_brief: `Fix only the current build errors in ${gameRoot}. Read ${path.join(runRoot, 'final-build.log')}, preserve approved story/assets, and run npm run build.` }, 4 * 60 * 60 * 1000);
     await record(`programmer_build_repair_${attempt}`, repaired);
     if (repaired.status !== 'completed') break;

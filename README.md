@@ -10,18 +10,18 @@ Il progetto usa hardware di seconda mano e comprende Shadow PC nell’ambiente d
 
 ## Architettura generale
 
-La conversazione creativa standard può svolgersi con GPT in Codex, che coordina anche la produzione e le risorse locali. In alternativa, la Regia locale può dialogare direttamente in Bionic o, su richiesta esplicita, attraverso Codex come tramite; dopo l’approvazione della fase creativa passa il progetto al Coordinatore Codex. Tutte le decisioni confluiscono nello stesso Project File. Scrittore, Disegnatore e Progettista sonoro preparano i contenuti; i risultati ritornano al punto d’ingresso usato dall’utente. La programmazione richiede una scelta e un’approvazione separate.
+La conversazione creativa standard può svolgersi in Codex, che resta il client MCP e il punto d’ingresso dell’utente. OpenCode con GPT-6 Luna coordina le richieste interne e i passaggi tra i worker. In alternativa, la Regia locale può dialogare direttamente in Bionic o, su richiesta esplicita, attraverso Codex come tramite; dopo l’approvazione della fase creativa passa il progetto al Coordinatore OpenCode. Tutte le decisioni confluiscono nello stesso Project File. Scrittore, Disegnatore e Progettista sonoro preparano i contenuti; i risultati ritornano al punto d’ingresso usato dall’utente. La programmazione richiede una scelta e un’approvazione separate.
 
 ```mermaid
 flowchart TD
-    U <--> X[Codex · dialogo GPT e coordinamento]
+    U <--> X[Codex · dialogo GPT e client MCP]
     U <--> B[Bionic · dialogo diretto]
     X <-->|su richiesta esplicita| R[Regia]
     B <--> R
     R -->|richiesta fonti| PW[Project Worker]
     F[Ink e docs selezionati] -->|sola lettura| PW
     PW -->|fonti restituite| R
-    X --> C[Coordinatore]
+    X --> C[OpenCode · GPT-6 Luna Coordinator]
     R -->|handoff approvato| C
     C --> PRODUZIONE
     subgraph PRODUZIONE[Produzione]
@@ -73,7 +73,7 @@ Il Project Worker MCP consente alla Regia di associare la cartella di gioco scel
 flowchart LR
     R[Regia]
     subgraph COORD[Coordinatore]
-        C[Codex]
+        C[OpenCode · GPT-6 Luna]
     end
     subgraph PRODUZIONE[Produzione]
         W[Scrittore]
@@ -86,9 +86,9 @@ flowchart LR
     COORD --> R
 ```
 
-Il Coordinatore è Codex, configurato per questo flusso con **Codex 6 Luna Light**, un modello online. Il suo compito è organizzare attività e attese, leggere il Project File, attivare i worker necessari e raccogliere i risultati. Il coordinamento e l’attesa dei processi locali sono attività adatte a questo modello leggero; essendo online, il Coordinatore non occupa la VRAM locale.
+Il Coordinatore è OpenCode con il modello **`openai/gpt-6-luna`**. Organizza attività e attese, legge il Project File, attiva i worker MCP autorizzati e raccoglie i risultati. Il coordinamento e l’attesa dei processi locali avvengono online e non occupano la VRAM locale. Codex resta il client e il punto d’ingresso dell’utente; i processi MCP e il server non avviano direttamente la CLI Codex.
 
-Codex governa l’uso della VRAM: fa lavorare un modello locale per volta e ne libera la memoria prima di avviare il successivo. Gestisce gli imprevisti senza cambiare le decisioni creative approvate; se serve una decisione creativa, restituisce il controllo alla conversazione d’origine, in Bionic o in Codex.
+OpenCode governa l’uso della VRAM attraverso i worker: fa lavorare un modello locale per volta e ne libera la memoria prima di avviare il successivo. Gestisce gli imprevisti senza cambiare le decisioni creative approvate; se serve una decisione creativa, restituisce il controllo alla conversazione d’origine, in Bionic o in Codex.
 
 Per avviare le funzioni produttive il Coordinatore usa strumenti MCP. I singoli MCP e le loro responsabilità saranno descritti in una sezione dedicata.
 
@@ -96,7 +96,7 @@ A fine produzione, il Coordinatore restituisce un handback persistente con risul
 
 ### Scrittore
 
-The paired server Coordinator claims queued jobs and dispatches `codex.execute` to server-side Codex and `narrative.generate` to the narration pipeline. A narration run writes stage evidence and a result manifest in its owned directory, publishes the selected English scene to the configured `imagecloud:` OneDrive remote, and verifies the remote bytes before completing. The authenticated relay returns the file reference and SHA-256; the client MCP downloads and verifies it before the client analyses it. See [Server narration handoff](handoffs/08-server-narration.md).
+The paired server Coordinator claims queued jobs and dispatches `codex.execute` through OpenCode with `openai/gpt-6-luna`, or `narrative.generate` to the narration pipeline. A narration run writes stage evidence and a result manifest in its owned directory, publishes the selected English scene to the configured `imagecloud:` OneDrive remote, and verifies the remote bytes before completing. The authenticated relay returns the file reference and SHA-256; the client MCP downloads and verifies it before the client analyses it. See [Server narration handoff](handoffs/08-server-narration.md).
 
 ```mermaid
 flowchart LR
@@ -111,11 +111,11 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-    C[Coordinatore]
+    C[OpenCode · GPT-6 Luna]
     subgraph SCRITTORE[Scrittore]
         W[Hemmingway]
         G[Deterministic draft checks]
-        X[Codex final check · current default]
+        X[Venice final edit through OpenCode]
         Q[Qwen2.5 14B · opt-in direct edit]
         W -->|review request| G
         G -->|Validation issues · up to 5 revisions| W
@@ -127,23 +127,21 @@ flowchart TD
     end
     C -->|richiesta originale e canon disponibile| W
     X -->|Valid final edit| C
-    X -->|Refusal, error, or invalid output| V[Venice final edit fallback]
-    V -->|Valid edit or latest usable draft| C
 ```
 
-The diagram above describes the remote Shadow narration path. It passes the submitted brief and any supplied canon directly to the Writer; this path does not create a Codex plan or SceneContract before drafting.
+The diagram above describes the remote Shadow narration path. It passes the submitted brief and any supplied canon directly to the Writer; this path does not create an OpenCode plan or SceneContract before drafting.
 
-The remote Shadow narration path passes the original brief and any supplied canon directly to its configured Writer, which returns an English draft and optional NCF cues. It does not create a Codex plan or SceneContract before drafting. The Bionic production workflow keeps its own Project File and scene planning gates. The operational Bionic Writer remains **Hemmingway 1 Abliterated Extreme**. **MS3.2 PaintedFantasy v4.1 24B Q4_K_M** and **Dark Champion 30B A3B Heretic Q3_K_S** have isolated evaluation profiles; Skyfall 36B v2 Q4_K_M was removed after its historical evaluation. Dark Champion completed its three standalone component cases but failed key canon, scene-control and endpoint constraints; its hot draft and revision and violent revision reached the output cap with repetition. Hemmingway's latest standalone component cases all completed with revisions; they showed coherent prose but still missed some canon, consent, and endpoint requirements. Neither candidate is promoted. BlueStar was removed after its paired evaluation; historical results remain in the [BlueStar–Hemmingway report](production-tests/WRITER-BLUESTAR-HEMMINGWAY-PAIRED-2026-10-26.md). The [Skyfall–Hemmingway comparison](production-tests/WRITER-SKYFALL-HEMMINGWAY-PAIRED-2026-10-26.md) records the historical matched results. [Dark Champion's standalone evaluation](production-tests/WRITER-DARK-CHAMPION-30B-A3B-HERETIC-2026-10-27.md) and [Hemmingway's latest component evaluation](production-tests/WRITER-HEMMINGWAY-COMPONENT-2026-10-27.md) record the recent runs.
+The remote Shadow narration path passes the original brief and any supplied canon directly to its configured Writer, which returns an English draft and optional NCF cues. It does not create an OpenCode plan or SceneContract before drafting. The Bionic production workflow keeps its own Project File and scene planning gates. The operational Bionic Writer remains **Hemmingway 1 Abliterated Extreme**. **MS3.2 PaintedFantasy v4.1 24B Q4_K_M** and **Dark Champion 30B A3B Heretic Q3_K_S** have isolated evaluation profiles; Skyfall 36B v2 Q4_K_M was removed after its historical evaluation. Dark Champion completed its three standalone component cases but failed key canon, scene-control and endpoint constraints; its hot draft and revision and violent revision reached the output cap with repetition. Hemmingway's latest standalone component cases all completed with revisions; they showed coherent prose but still missed some canon, consent, and endpoint requirements. Neither candidate is promoted. BlueStar was removed after its paired evaluation; historical results remain in the [BlueStar–Hemmingway report](production-tests/WRITER-BLUESTAR-HEMMINGWAY-PAIRED-2026-10-26.md). The [Skyfall–Hemmingway comparison](production-tests/WRITER-SKYFALL-HEMMINGWAY-PAIRED-2026-10-26.md) records the historical matched results. [Dark Champion's standalone evaluation](production-tests/WRITER-DARK-CHAMPION-30B-A3B-HERETIC-2026-10-27.md) and [Hemmingway's latest component evaluation](production-tests/WRITER-HEMMINGWAY-COMPONENT-2026-10-27.md) record the recent runs.
 
 The matched 5 November NCF comparison selected Hemmingway as the Writer: it had stronger prose overall and won the Gemini-reviewed matched scene (prose 4/5, constraints 3/5 versus Magidonia 3/5 and 2/5). The Bionic profiles for Magidonia and the local Qwen3 8B Narrative Reviewer have been removed; their GGUF files are still present in the LM Studio catalog because the environment rejected their terminal deletion. Gemory 26B-A4B Q4_K_M completed its three isolated Writer cases at about 26–30 tokens/s, but endpoint and fidelity failures mean it is not promoted. See the [narrative model comparison](docs/CONFRONTO-MODELLI-NARRAZIONE.md), [Gemini-reviewed comparison](docs/WRITER-GEMINI-REVIEWED-COMPARISON-2026-11-05.md), and [Gemory evaluation report](production-tests/WRITER-GEMORY-26B-A4B-Q4_K_M-2026-11-05.md).
 
-The installable [narration skill](skills/narration/SKILL.md) defines the scene artifact and Narrative Cue Format (NCF), combining Story Skills' medium-specific craft conventions with project cues for visual, audio, and animated assets. Its default is dialogue-led prose: spoken words should usually exceed narrative/action prose in the Narrative section, with exceptions for adult intimacy, sex, fights, action, suspense, physical tasks, and deliberate quiet. Every spoken turn uses a visual-novel speaker label (`**Name:**` or `**Name (Mood or State):**`) before the quote; when the brief establishes a relevant ongoing or line-specific state, the parenthetical is required, and ongoing states repeat on each line until they change. Shouted words are uppercase. The Writer follows these rules while drafting, and Codex/Venice enforce them during final editing. Long narrator passages may be redistributed among concise voiceover, optional visual direction, and/or a brief summary with a written sound. The companion [expressive-sounds skill](skills/expressive-sounds/SKILL.md) guides onomatopoeia and vocalizations and is bundled into the Shadow Writer prompt; adult erotic and sparse-dialogue action scenes should use several varied written sound forms, not breathing description alone. Codex and Venice share the same final editing prompt and must directly correct dialogue format, state labels for established conditions, capitalization of explicit shouts, dialogue balance, long narration, dialogue quality, and missing contextual sounds. Both the Bionic Hemmingway profile and Shadow server prompt require English prose and dialogue, translating non-English briefs while preserving proper names. Bionic's model-specific Writer system prompts embed the applicable NCF and sound rules because local inference models cannot read agent skill files directly. The existing image pipeline consumes `> Visual:`. Inline music, SFX, and animation execution still requires worker/runtime integration; their documented syntax is not evidence that an asset was produced.
+The installable [narration skill](skills/narration/SKILL.md) defines the scene artifact and Narrative Cue Format (NCF), combining Story Skills' medium-specific craft conventions with project cues for visual, audio, and animated assets. Its default is dialogue-led prose: spoken words should usually exceed narrative/action prose in the Narrative section, with exceptions for adult intimacy, sex, fights, action, suspense, physical tasks, and deliberate quiet. Every spoken turn uses a visual-novel speaker label (`**Name:**` or `**Name (Mood or State):**`) before the quote; when the brief establishes a relevant ongoing or line-specific state, the parenthetical is required, and ongoing states repeat on each line until they change. Shouted words are uppercase. The Writer follows these rules while drafting, and OpenCode GPT-6 Luna/Venice enforce them during final editing. Long narrator passages may be redistributed among concise voiceover, optional visual direction, and/or a brief summary with a written sound. The companion [expressive-sounds skill](skills/expressive-sounds/SKILL.md) guides onomatopoeia and vocalizations and is bundled into the Shadow Writer prompt; adult erotic and sparse-dialogue action scenes should use several varied written sound forms, not breathing description alone. OpenCode GPT-6 Luna and Venice share the same final editing prompt and must directly correct dialogue format, state labels for established conditions, capitalization of explicit shouts, dialogue balance, long narration, dialogue quality, and missing contextual sounds. Both the Bionic Hemmingway profile and Shadow server prompt require English prose and dialogue, translating non-English briefs while preserving proper names. Bionic's model-specific Writer system prompts embed the applicable NCF and sound rules because local inference models cannot read agent skill files directly. The existing image pipeline consumes `> Visual:`. Inline music, SFX, and animation execution still requires worker/runtime integration; their documented syntax is not evidence that an asset was produced.
 
-The remote Shadow default runs the Writer, deterministic draft checks, and the Codex final check. The server embeds the scene-format rules from the narration skill and sends validation issues back to the Writer for up to five revisions. In Writer-only mode, the Coordinator validates the Writer result and skips final editing. Venice attempts the final edit once if Codex refuses, fails, or returns an invalid artifact and the API confirms that the configured model is available on a non-charged tier. Errors, refusals, malformed replies or exhaustion are recorded and passed to Codex with the latest usable draft. Codex runs as a read-only, ephemeral review without the user's MCP configuration. The independent Bionic production workflow retains its own Reviewer gate. Before packaging a server release, GitHub Actions runs `node --check coordinator/src/narration.mjs` from `apps/shadow-controller` to catch syntax errors in the bundled narration worker and its embedded prompts.
+The remote Shadow workflow runs the Writer, deterministic draft checks, and a final edit through Venice via OpenCode. Validation issues go back to the Writer for up to five revisions. If Venice fails or returns an invalid scene, the Coordinator records the error and retains the latest usable draft. Writer-only mode skips the final edit. The separate Bionic workflow continues to use Gemini through OpenCode.
 
-Qwen2.5 14B Instruct Abliterated v2 Q4_K_M is available as an opt-in local backend by setting `SHADOW_NARRATION_REVIEW_BACKEND=qwen`; absent an explicit mode, it uses one direct edit after Writer generation. `SHADOW_NARRATION_REVIEW_MODE=feedback-loop` instead asks Qwen for evidence-based feedback, returns requested revisions to the Writer for up to five cycles, then asks Qwen for a final bounded edit. The models are loaded one at a time and unloaded before delivery. A 6 November 2026 normal-scene comparison found that the feedback reviewer returned an unsupported PASS on a clear key-placement order violation, while the final Qwen response was byte-identical to the Writer draft. In two direct-edit runs, Qwen also returned the Writer draft unchanged and left unauthorized cue lines in place. The Qwen backend is therefore not promoted as a replacement for Gemini and Codex; the existing default remains active pending stronger evidence. The direct-worker test bypassed Cloudflare, relay authentication, and the MCP/SQLite queue, and verified the Writer/Qwen stages, OneDrive publication, local download hashes, and model cleanup. See the [Qwen reviewer mode test report](production-tests/shadow-narration/20261106_qwen-reviewer-mode-comparison/report.md).
+Qwen2.5 14B Instruct Abliterated v2 Q4_K_M is available as an opt-in local backend by setting `SHADOW_NARRATION_REVIEW_BACKEND=qwen`; absent an explicit mode, it uses one direct edit after Writer generation. `SHADOW_NARRATION_REVIEW_MODE=feedback-loop` instead asks Qwen for evidence-based feedback, returns requested revisions to the Writer for up to five cycles, then asks Qwen for a final bounded edit. The models are loaded one at a time and unloaded before delivery. A 6 November 2026 normal-scene comparison found that the feedback reviewer returned an unsupported PASS on a clear key-placement order violation, while the final Qwen response was byte-identical to the Writer draft. In two direct-edit runs, Qwen also returned the Writer draft unchanged and left unauthorized cue lines in place. Qwen is not promoted as a replacement for the current OpenCode GPT-6 Luna default. The direct-worker test bypassed Cloudflare, relay authentication, and the MCP/SQLite queue, and verified the Writer/Qwen stages, OneDrive publication, local download hashes, and model cleanup. See the [Qwen reviewer mode test report](production-tests/shadow-narration/20261106_qwen-reviewer-mode-comparison/report.md).
 
-The reduced-refusal Qwen3.5 9B Abliterated Q4_K_M candidate and the formerly configured Qwen3 8B local Reviewer completed historical evaluations and were removed. In the historical matched comparison, Qwen3 8B detected 6/6 seeded defects while Abliterated detected 2/6, added a false-positive consent finding, and fabricated evidence in the violent case. These local-model evaluations are retained as historical evidence; Gemini CLI Auto is now the Narrative Reviewer. [Historical matched comparison](production-tests/REVIEWER-COMPARISON-QWEN3-8B-QWEN35-9B-ABLITERATED-2026-10-27.md) and [candidate evaluation](production-tests/REVIEWER-QWEN35-9B-ABLITERATED-2026-10-27.md).
+The reduced-refusal Qwen3.5 9B Abliterated Q4_K_M candidate and the formerly configured Qwen3 8B local Reviewer completed historical evaluations and were removed. In the historical matched comparison, Qwen3 8B detected 6/6 seeded defects while Abliterated detected 2/6, added a false-positive consent finding, and fabricated evidence in the violent case. These local-model evaluations are retained as historical evidence; the Bionic Narrative Reviewer now uses Google Gemini through OpenCode. [Historical matched comparison](production-tests/REVIEWER-COMPARISON-QWEN3-8B-QWEN35-9B-ABLITERATED-2026-10-27.md) and [candidate evaluation](production-tests/REVIEWER-QWEN35-9B-ABLITERATED-2026-10-27.md).
 
 Il confronto dei test Writer isolati è in [Confronto dei modelli di narrazione](docs/CONFRONTO-MODELLI-NARRAZIONE.md); il [rapporto storico dei test narrativi completi](docs/CONFRONTO-MODELLI-DI-NARRAZIONE.md) conserva i campioni e i risultati precedenti.
 
@@ -159,7 +157,7 @@ flowchart TD
         ANIME[Krea2 Anime]
         REDCRAFT[RedCraft]
         G[Genera un'immagine]
-        R[Codex]
+        R[OpenCode · GPT-6 Luna]
         O[Pubblica con rclone]
         I --> M
         M -->|standard non anime| KREA
@@ -180,7 +178,7 @@ Il Disegnatore prepara le immagini coerenti con personaggi, ambienti e momenti n
 
 Il LoKR SNOFS è stato rimosso e non rientra più nei profili né nei test pianificati. Le prove precedenti nel percorso `sd-cli` non applicavano i pesi (0/768 tensori) e il sampling falliva; questo esito storico non costituisce una valutazione della qualità visiva del modello.
 
-Codex definisce il prompt visivo, il Worker genera le immagini e Codex esamina i risultati. Un’immagine viene accettata se la valutazione visiva raggiunge la soglia prevista e non rileva errori visivi gravi; altrimenti il processo può correggere il prompt e riprovare entro il limite configurato. Il controller visivo separato non è attualmente installato: il Coordinatore prepara direttamente la richiesta visiva.
+OpenCode con GPT-6 Luna definisce il prompt visivo e valuta le immagini generate dal Worker. Un’immagine viene accettata se la valutazione visiva raggiunge la soglia prevista e non rileva errori visivi gravi; altrimenti il processo può correggere il prompt e riprovare entro il limite configurato. Il controller visivo separato non è attualmente installato: il Coordinatore prepara direttamente la richiesta visiva.
 
 `generate_image` consente di specificare `steps`, `cfg_scale`, `style` e LoRA registrate facoltative; il server impedisce sovrascritture in staging e considera fallita una generazione se la CLI dichiara che non ha applicato alcun tensore richiesto. Gli adapter restano esclusi dai default e sono bloccati per la produzione finché il relativo stato nel catalogo non è `ready`. I default sono Krea2 Turbo 8 passi/CFG 1, RedCraft 12/CFG 1 e Krea2 Anime 12/CFG 1. Width, height, seed, percorso modello, encoder, VAE, adapter e parametri effettivi vengono registrati nel risultato. La nuova prova della LoRA `flaccid_erect_krea2_loraholic` ha applicato `512 / 512` tensori su RedCraft con i pesi +3 e -3. Il candidato +3 ha ottenuto 78/100 senza errore grave, sotto la soglia di accettazione; la valutazione del candidato -3 è stata rifiutata. La compatibilità tecnica è quindi confermata, ma la convalida visiva non è completa e l’adapter resta escluso dalla produzione. Dettagli nel [catalogo LoRA](docs/IMAGE-LORAS.md) e nel [manifest](production-tests/components/designer_lora_20261025093323_ee11c97f74/manifest.json). Il confronto modelli è in [Rapporto confronto modelli immagini](production-tests/DESIGNER-MODEL-COMPARISON-2026-10-24.md). Tutti i candidati di test restano in staging e non vengono pubblicati.
 
@@ -212,7 +210,7 @@ flowchart TD
         T -->|loop| P
         subgraph REVIEW[Revisione audio]
             LM[Qwen2.5 Omni 7B · ascolto]
-            R[Codex · valutazione]
+            R[OpenCode · GPT-6 Luna · valutazione]
             LM -->|evidenze percettive| R
         end
         T --> ASK
@@ -236,11 +234,11 @@ La revisione percettiva usa **Qwen2.5 Omni 7B Q4_K_M** con il projector audio in
 
 Il test da terminale con un breve chime sintetico ha riconosciuto categoria ed elementi descritti, restituito JSON valido, nessun difetto e il flag `loop=false`. È un test di funzionamento dell’ingresso audio e del prompt, non una valutazione della qualità di suoni musicali reali. llama.cpp segnala che l’ingresso audio è sperimentale.
 
-Codex non riceve direttamente il WAV tramite il percorso CLI usato per la revisione delle immagini. L’Audio Worker avvia perciò Qwen2.5 Omni localmente e restituisce un rapporto percettivo in JSON; Codex confronta quel rapporto e i controlli tecnici con il cue, assegna il punteggio e decide se approvare o correggere il prompt. Un cue viene finalizzato soltanto con almeno 80 punti, nessun errore grave e un rapporto d’ascolto interpretabile. Il limite è di tre generazioni per cue. Per i loop viene ascoltata anche un’anteprima ripetuta senza crossfade artificiale; una singola passata non certifica la continuità del loop.
+L’Audio Worker avvia Qwen2.5 Omni localmente e restituisce un rapporto percettivo in JSON; OpenCode con GPT-6 Luna confronta quel rapporto e i controlli tecnici con il cue, assegna il punteggio e decide se approvare o correggere il prompt. Un cue viene finalizzato soltanto con almeno 80 punti, nessun errore grave e un rapporto d’ascolto interpretabile. Il limite è di tre generazioni per cue. Per i loop viene ascoltata anche un’anteprima ripetuta senza crossfade artificiale; una singola passata non certifica la continuità del loop.
 
-Prima di generare, il Coordinatore cerca gli audio già finalizzati nello spazio del progetto e ne confronta manifest, categoria e comportamento loop con il cue. Se trova un asset adatto, lo riusa e ne verifica hash e manifest. I nuovi WAV approvati vengono finalizzati in `C:\AI\assets\<PROJECT_ID>\Audio\Music` o `C:\AI\assets\<PROJECT_ID>\Audio\SoundEffects`, poi pubblicati in percorsi distinti tramite rclone. Il manifest conserva hash, rapporto percettivo, decisione Codex e stato di pubblicazione.
+Prima di generare, il Coordinatore cerca gli audio già finalizzati nello spazio del progetto e ne confronta manifest, categoria e comportamento loop con il cue. Se trova un asset adatto, lo riusa e ne verifica hash e manifest. I nuovi WAV approvati vengono finalizzati in `C:\AI\assets\<PROJECT_ID>\Audio\Music` o `C:\AI\assets\<PROJECT_ID>\Audio\SoundEffects`, poi pubblicati in percorsi distinti tramite rclone. Il manifest conserva hash, rapporto percettivo, decisione del Coordinatore e stato di pubblicazione.
 
-Il confronto dei modelli è documentato in [Confronto dei modelli audio](docs/CONFRONTO-MODELLI-AUDIO.md) e [Confronto dei tre modelli Writer](docs/CONFRONTO-MODELLI-NARRAZIONE.md). La prova completa degli strumenti Audio Worker, dell’ascolto Qwen e della decisione Codex è riportata in [Test del flusso Audio Worker](RAPPORTO-TEST-AUDIO-WORKER.md). Il runner del Coordinatore è predisposto per la fase audio; l’handoff Bionic non è stato ripetuto mentre il Project File canonico aveva un handback narrativo pendente.
+Il confronto dei modelli è documentato in [Confronto dei modelli audio](docs/CONFRONTO-MODELLI-AUDIO.md) e [Confronto dei tre modelli Writer](docs/CONFRONTO-MODELLI-NARRAZIONE.md). La prova completa degli strumenti Audio Worker, dell’ascolto Qwen e della decisione del Coordinatore è riportata in [Test del flusso Audio Worker](RAPPORTO-TEST-AUDIO-WORKER.md). Il runner del Coordinatore è predisposto per la fase audio; l’handoff Bionic non è stato ripetuto mentre il Project File canonico aveva un handback narrativo pendente.
 
 ### Programmatore
 
@@ -250,7 +248,7 @@ flowchart LR
     R[Regia]
     F[Files del progetto]
     subgraph PROGRAMMATORE[Programmatore]
-        C[Claude o Codex]
+        C[Claude o OpenCode · GPT-6 Luna]
     end
     U <-->|dialogo| R
     R -->|scelta provider e conferma separata| C
@@ -258,9 +256,9 @@ flowchart LR
     C -->|risultati e stato aggiornato| R
 ```
 
-Il Programmatore è il ruolo che **modifica concretamente il progetto software**: interviene sui file sorgente, integra scene e asset, implementa i comportamenti interattivi e verifica il risultato nel progetto. Codex gli consegna il Project File, la documentazione pertinente, i contenuti approvati, gli asset riutilizzabili e le istruzioni tecniche. Codex coordina il passaggio; non sostituisce il Programmatore nell’editing del progetto.
+Il Programmatore è il ruolo che **modifica concretamente il progetto software**: interviene sui file sorgente, integra scene e asset, implementa i comportamenti interattivi e verifica il risultato nel progetto. OpenCode con GPT-6 Luna riceve il Project File, la documentazione pertinente, i contenuti approvati, gli asset riutilizzabili e le istruzioni tecniche, quindi applica le modifiche approvate nel progetto.
 
-Al termine del ciclo creativo e produttivo, Regia chiede all’utente se implementerà Claude o Codex. Dopo aver registrato la scelta, chiede una conferma esplicita separata prima di avviare l’implementazione tramite il Project Worker MCP. Il provider selezionato usa il proprio modello predefinito; se non è installato o autenticato, il passaggio si ferma e Regia informa l’utente senza cambiare provider automaticamente. Il Programmatore opera direttamente sui file del progetto e resta separato dalla conversazione creativa in LM Studio/Bionic.
+Al termine del ciclo creativo e produttivo, Regia chiede all’utente se implementerà Claude o il percorso OpenAI gestito da OpenCode. Dopo aver registrato la scelta, chiede una conferma esplicita separata prima di avviare l’implementazione tramite il Project Worker MCP. Il percorso OpenAI usa `openai/gpt-6-luna`; se OpenCode non è disponibile o autenticato, il passaggio si ferma e Regia informa l’utente senza cambiare provider automaticamente. Il Programmatore opera direttamente sui file del progetto e resta separato dalla conversazione creativa in LM Studio/Bionic.
 
 ## PC locale, PC cloud e condivisione dei file
 
@@ -277,7 +275,7 @@ flowchart LR
     end
     subgraph CLOUD[PC cloud · modelli locali]
         B[Bionic e Regia]
-        C[Codex Coordinatore]
+        C[OpenCode · GPT-6 Luna Coordinator]
         M[Modelli e Worker]
         B --> C
         C --> M
@@ -303,7 +301,7 @@ La GPU, i modelli e i percorsi del PC cloud devono essere verificati sulla macch
 
 | Dati o programmi | Destinazione architetturale | Note |
 |---|---|---|
-| Modelli linguistici LM Studio | `C:\Users\Shadow\.lmstudio\models` | Regia e Writer Hemmingway 1 Abliterated Extreme sono modelli locali; Narrative Reviewer tramite Gemini CLI Auto. |
+| Modelli linguistici LM Studio | `C:\Users\Shadow\.lmstudio\models` | Regia e Writer Hemmingway 1 Abliterated Extreme sono modelli locali; Narrative Reviewer Google Gemini tramite OpenCode. |
 | Checkpoint immagini | `C:\AI\image-worker\models` | `krea2_turbo_fp8_scaled.safetensors` (standard), `redcraftREDMIXHybridA2A_30Krea2.safetensors` (adulto non anime) e `krea2Anime_v20_fp8.safetensors` (anime, qualunque rating). Il LoKR SNOFS è stato rimosso e non è più installato né previsto nel flusso immagini. |
 | Encoder e VAE immagini | `C:\Users\Shadow\AppData\Local\Comfy-Desktop\ComfyUI-Shared\models` | `text_encoders\qwen3vl_4b_fp8_scaled.safetensors` e `vae\qwen_image_vae.safetensors`, usati da `sd-cli`; questo percorso contiene solo i componenti condivisi e non implica l’uso di ComfyUI come runtime. Se la cartella condivisa viene rimossa, questi due file dovranno essere ricollocati e aggiornati nella configurazione del Worker. |
 | Eseguibile Image Worker | `C:\Users\Shadow\.lmstudio\image-worker\bin\sd-cli.exe` | Il server MCP risiede in `C:\Users\Shadow\.lmstudio\image-worker\mcp`. |
@@ -343,7 +341,7 @@ flowchart LR
     R[Regia in Bionic] -->|strumenti di progetto e handoff| PW[Project Worker MCP]
     F[Cartella di gioco selezionata] -->|solo *.ink e docs/**/*.md| PW
     PW -->|fonti lette su richiesta| R
-    C[Codex] -->|avvia e coordina| IW[Image Worker MCP]
+    C[OpenCode · GPT-6 Luna Coordinator] -->|avvia e coordina| IW[Image Worker MCP]
     C -->|recupero e trasferimento asset| AW[Asset Worker MCP]
     C -->|produzione e revisione audio| SW[Audio Worker MCP]
     PW -->|handoff, test di componente e cancello Programmatore| C
@@ -356,7 +354,7 @@ flowchart LR
 
 Il **Project Worker** è l’MCP collegato a Bionic. Fornisce alla Regia gli strumenti per creare e leggere il Project File, registrare il progetto, associare una cartella di gioco selezionata dall’utente e consultare in sola lettura i sorgenti Ink e i Markdown sotto `docs/`. L’accesso è limitato alle radici Programmer configurate; link simbolici, traversal, altri tipi di file e scritture del gioco sono rifiutati. Il worker può inoltre avviare il Coordinatore, eseguire i passaggi di prova dei test di componente e avviare il Programmatore dopo scelta e conferma separate. È registrato nella configurazione MCP interna di Bionic sotto `C:\Users\Shadow\.lmstudio\apps\bionic\.internal`. Il comando `lms` disponibile in questo PC non offre un sottocomando `mcp`; quindi il ripristino della registrazione si esegue dalle impostazioni MCP dell’app.
 
-Il Project Worker offre due strumenti per il Programmatore: `select_programmer` registra Claude o Codex senza eseguire codice; `start_programmer` accetta solo la selezione pendente e una conferma esplicita separata. Entrambi usano la directory progetto indicata e configurata tra le radici ammesse. Il comando avviato non riceve un override del modello. Se il provider scelto manca, il tool restituisce un errore e non passa all’altro.
+Il Project Worker offre due strumenti per il Programmatore: `select_programmer` registra Claude o OpenCode senza eseguire codice; `start_programmer` accetta solo la selezione pendente e una conferma esplicita separata. OpenCode usa GPT-6 Luna per impostazione predefinita. Entrambi usano la directory progetto indicata e configurata tra le radici ammesse. Se il provider scelto manca, il tool restituisce un errore e non passa all’altro.
 
 I quattro server sono configurati anche per Codex in `C:\Users\Shadow\.codex\config.toml`: Project Worker, Image Worker, Asset Worker e Audio Worker. Il Coordinatore abilita i soli strumenti Audio Worker necessari nella fase `audio_cue_production`: ricerca asset, generazione, ispezione, anteprima loop, ascolto locale, finalizzazione e pubblicazione. La fase audio è separata da Writer e Disegnatore e non richiede Claude.
 
@@ -376,7 +374,7 @@ Da `project-worker/mcp`, la prova dedicata è `npm run test:component:relay`: ge
 
 Verifica del 24 ottobre 2026: **26 test automatici passati** e prova componente reale `20261024165920360_b7e258f95bf675ce` completata con cronologia ripresa e nessun job produttivo. Il tramite accetta prosa italiana senza riscriverla e usa un contesto di 32768 token; il limite esplicito del transcript evita troncamenti silenziosi. Due errori iniziali (timeout e formato JSON obbligatorio) sono stati corretti conservando le prove fallite. Non è stato eseguito un ciclo produttivo completo dal nuovo ingresso. Dettagli in [Verifica Codex → Regia](production-tests/CODEX-REGIA-RELAY-2026-10-24.md).
 
-Il test di componente usa un input nuovo per ogni esecuzione e mette alla prova un ruolo reale alla volta. Regia, Coordinatore e Scrittore verificano le interazioni senza avviare fasi downstream. Il test Designer genera e revisiona un’immagine candidata in staging. Il test audio usa Stable Audio come modello sotto prova e Codex soltanto come Coordinatore: crea un WAV, lo ispeziona, lo fa ascoltare a Qwen, registra la revisione e, se supera il gate, lo finalizza e pubblica in un percorso locale/remoto univoco del run. Nessun test componente avvia il Programmatore. Il test completo parte da Codex come interlocutore e Coordinatore; usa un Project File e un progetto Pixi’VN/Ink temporanei, gli MCP in modalità reale e controlla i file effettivamente consegnati. Il percorso Regia/Bionic si prova separatamente quando è l’oggetto specifico della verifica.
+Il test di componente usa un input nuovo per ogni esecuzione e mette alla prova un ruolo reale alla volta. Regia, Coordinatore e Scrittore verificano le interazioni senza avviare fasi downstream. Il test Designer genera e revisiona un’immagine candidata in staging. Il test audio usa Stable Audio come modello sotto prova e OpenCode GPT-6 Luna soltanto come Coordinatore: crea un WAV, lo ispeziona, lo fa ascoltare a Qwen, registra la revisione e, se supera il gate, lo finalizza e pubblica in un percorso locale/remoto univoco del run. Nessun test componente avvia il Programmatore. Il test completo parte da Codex come interlocutore e client MCP; OpenCode GPT-6 Luna coordina la produzione. Si usano un Project File e un progetto Pixi’VN/Ink temporanei, gli MCP in modalità reale e si controllano i file effettivamente consegnati. Il percorso Regia/Bionic si prova separatamente quando è l’oggetto specifico della verifica.
 
 Nel caso `modify`, `npm create pixi-vn@latest` può avviare automaticamente installazioni npm e inizializzare preset UI: sono passaggi normali dello scaffold temporaneo, quindi il runner li lascia terminare e ne conserva l’output. Cache e prefisso npm globale vanno indirizzati alla directory del run quando supportato. Un errore reale lascia intatti directory parziale e log; non si rilancia lo scaffold nello stesso run.
 
@@ -401,7 +399,7 @@ npm run test:complete:resume -- --root="C:\Users\Shadow\.lmstudio\production-tes
 
 Per preparare un nuovo progetto completo, eseguire `npm create pixi-vn@latest` nella cartella `game` del test e scegliere **Visual Novel**, **Ink + TypeScript**, **Web page** e i valori predefiniti per il resto. Ogni nuovo test parte da una cartella mai usata prima. La ripresa è disponibile solo per un test fallito e conserva i job e gli artefatti precedenti. Il manifest registra input, modello, handoff, output, verifiche e fallimenti; il test non modifica database Bionic né installazione Bionic. `AGENTS.md` contiene i dettagli operativi e i percorsi delle configurazioni.
 
-Il test audio completo del componente si avvia con `node project-worker/mcp/orchestration/audio-component-test.mjs` dalla radice `.lmstudio`. Il runner genera premise, seed, Project File e cue fixture nuovi; Codex coordina Project Worker e Audio Worker e non interpreta il ruolo del Sound Designer né inventa il cue. Stable Audio genera il candidato, Qwen lo ascolta e Codex, come Coordinatore, valuta le evidenze. Solo un candidato con punteggio almeno 80 e senza errori gravi viene finalizzato in `C:\AI\assets\<RUN_ID>\Audio\<Music|SoundEffects>` e pubblicato sotto `imagecloud:AudioWorker/<Music|SoundEffects>/final/<RUN_ID>/`; la pubblicazione verifica dimensioni di WAV e manifest. Un run conserva output, log MCP e prove anche se fallisce. Il test non avvia il Programmatore. Il test completo del 24 ottobre 2026 ha pubblicato il WAV `20261024192544995_8d9dc7555236cb1a`: 100/100, nessun errore grave, hash verificato e dimensioni remote controllate. Dettagli in [Rapporto test componente audio completo](production-tests/SOUND-DESIGNER-AUDIO-FULL-COMPONENT-2026-10-24.md).
+Il test audio completo del componente si avvia con `node project-worker/mcp/orchestration/audio-component-test.mjs` dalla radice `.lmstudio`. Il runner genera premise, seed, Project File e cue fixture nuovi; OpenCode GPT-6 Luna coordina Project Worker e Audio Worker e non interpreta il ruolo del Sound Designer né inventa il cue. Stable Audio genera il candidato, Qwen lo ascolta e OpenCode, come Coordinatore, valuta le evidenze. Solo un candidato con punteggio almeno 80 e senza errori gravi viene finalizzato in `C:\AI\assets\<RUN_ID>\Audio\<Music|SoundEffects>` e pubblicato sotto `imagecloud:AudioWorker/<Music|SoundEffects>/final/<RUN_ID>/`; la pubblicazione verifica dimensioni di WAV e manifest. Un run conserva output, log MCP e prove anche se fallisce. Il test non avvia il Programmatore. Il test completo del 24 ottobre 2026 ha pubblicato il WAV `20261024192544995_8d9dc7555236cb1a`: 100/100, nessun errore grave, hash verificato e dimensioni remote controllate. Dettagli in [Rapporto test componente audio completo](production-tests/SOUND-DESIGNER-AUDIO-FULL-COMPONENT-2026-10-24.md).
 
 ### Requisiti comuni
 
@@ -438,7 +436,7 @@ Valutazione componente Qwen3.5 27B Writer V2 Uncensored Heretic del 26 ottobre 2
 Confronto abbinato Hemmingway–Qwen3.5 del 26 ottobre 2026: tre nuovi brief condivisi fra le due varianti, con run e Project File distinti. Entrambi hanno completato normale, hot e cruento. Qwen è stato circa 3,1–3,7 volte più rapido per scena grazie a output più brevi; Hemmingway ha ottenuto una prosa più sviluppata nel hot e nel cruento, ma ha introdotto più deviazioni dal canone e dai limiti. Qwen resta più rapido, ma nessuno rispetta tutti i vincoli o tutte le revisioni: il confronto non giustifica un cambio del Writer operativo. Valutazioni, velocità, brief comuni e manifest/output: [Confronto Hemmingway–Qwen3.5](production-tests/WRITER-HEMMINGWAY-QWEN35-PAIRED-2026-10-26.md). Cinque tentativi Qwen hot falliti prima della generazione e un errore di cleanup post-generazione nel normale sono stati conservati nel registro.
 
 - Windows, Node.js e npm. In questa macchina sono presenti Node.js 24 e npm 11.
-- Codex CLI per i worker usati dal Coordinatore.
+- OpenCode CLI authenticated with the OpenAI account used by the internal Coordinator.
 - Le dipendenze e i programmi specifici del worker, come `sd-cli.exe` e `audio.cpp`, oltre ai modelli richiesti. I modelli non si installano con `npm`.
 - Le cartelle di lavoro e dei modelli indicate nelle configurazioni. I file sorgente MCP sono sotto `C:\Users\Shadow\.lmstudio`; alcuni percorsi di lavoro e modelli puntano a `C:\AI`.
 
@@ -480,7 +478,7 @@ Questo server coordina le fasi, ma non genera direttamente immagini o audio. La 
    codex mcp add image-worker -- node C:\Users\Shadow\.lmstudio\image-worker\mcp\server.mjs
    ```
 
-4. Eseguire `codex mcp list` e verificare che `image-worker` sia attivo. Le sue funzioni generano immagini, richiedono la revisione di Codex, finalizzano l’immagine scelta e la pubblicano.
+4. Eseguire `codex mcp list` e verificare che `image-worker` sia attivo. Le sue funzioni generano immagini; il Coordinatore OpenCode GPT-6 Luna le revisiona prima di finalizzare e pubblicare l’immagine scelta.
 
 Il codice MCP e lo staging temporaneo sono sotto `.lmstudio`; `C:\AI\image-worker` contiene invece i checkpoint e le immagini finali. Questa separazione mantiene il codice dei Worker fuori da `C:\AI`, che conserva modelli e asset. Se si spostano queste cartelle dati, vanno aggiornati i percorsi configurati nel Worker.
 
@@ -528,7 +526,7 @@ Il modello online del Coordinatore non occupa la VRAM della macchina locale. I m
 ```mermaid
 flowchart LR
     R1[Regia attiva] -->|handoff approvato| U1[Scarica Regia]
-    U1 --> C1[Codex online coordina]
+    U1 --> C1[OpenCode GPT-6 Luna coordinates online]
     C1 --> W1[Carica un worker locale]
     W1 --> X1[Esegue un'attività]
     X1 --> D1[Scarica il worker]
@@ -563,18 +561,16 @@ flowchart LR
     S --> W[Writer]
     W --> G[Deterministic draft checks]
     G -->|Validation issues within five revisions| W
-    G -->|Pass or revision limit| C[Codex review and optional edit]
+    G -->|Pass or revision limit| C[Venice final edit through OpenCode]
     C -->|Valid final edit and stage outcomes| S
-    C -->|Refusal, error, or invalid output| V[Venice final edit fallback]
-    V -->|Valid edit or latest usable draft| S
     S -->|Publish verified scene| O[OneDrive]
     S -->|JSON result with file reference| A
     O -->|Download and verify via MCP| A
 ```
 
-Codex receives the original prompt and the draft validation results. If Codex fails, Venice receives the original brief, available canon, and latest usable draft for one final edit. Shadow Controller records each outcome and keeps the latest usable draft if the fallback fails or free API access is unavailable. The manifest identifies the Writer model in `writer` and the selected final editor in `reviewer` as `codex`, `venice`, or `none`. Draft checks remain visible in stage diagnostics. A missing canonical text is recorded as a limitation: `projectSha256` identifies the revision but does not itself let the server read or validate project contents. The narration worker selects Hemmingway directly. Configure `SHADOW_LM_API_BASE_URL`, `lms`, Codex CLI, and `rclone` on the server. The writer instance is unloaded after the full review cycle; cleanup failures appear in the result. The JSON references the English scene on OneDrive only after upload and byte verification. The client uses MCP to download and verify the file before analysis. Asset production is separate. See [Handoff 08](handoffs/08-server-narration.md) and the client [Shadow Requests skill](apps/shadow-client/skills/shadow-requests/SKILL.md).
+The default final editor is Venice via OpenCode using `venice/venice-uncensored-1-2`. It receives the brief, available canon, draft and validation outcomes. This mode can use Venice API credits. The Coordinator retains the latest usable draft if the edit fails. The manifest identifies the Writer model in `writer` and the selected final editor in `reviewer` as `opencode`, `venice`, or `none`. Draft checks remain visible in stage diagnostics. A missing canonical text is recorded as a limitation: `projectSha256` identifies the revision but does not itself let the server read or validate project contents. The narration worker selects Hemmingway directly. Configure `SHADOW_LM_API_BASE_URL`, `lms`, OpenCode authenticated with OpenAI and Venice, and `rclone` on the server. The writer instance is unloaded after the full review cycle; cleanup failures appear in the result. The JSON references the English scene on OneDrive only after upload and byte verification. The client uses MCP to download and verify the file before analysis. Asset production is separate. See [Handoff 08](handoffs/08-server-narration.md) and the client [Shadow Requests skill](apps/shadow-client/skills/shadow-requests/SKILL.md).
 
-The three fixed client-driven narration test prompts are [normal](test/normal_narration.txt), [hot](test/hot_narration.txt), and [cyberpunk](test/cyperpunk_narration.txt). Codex submits each file through Shadow Controller MCP, waits for completion, retrieves the verified OneDrive result, and returns the scene as a file. The exact run, recovery, and read-only server/OneDrive diagnostic procedure is in [AGENTS.md](AGENTS.md#test-workflow).
+The three fixed client-driven narration test prompts are [normal](test/normal_narration.txt), [hot](test/hot_narration.txt), and [cyberpunk](test/cyperpunk_narration.txt). Codex submits each file through Shadow Controller MCP as the client, waits for completion, retrieves the verified OneDrive result, and returns the scene as a file; the server-side model work runs through OpenCode GPT-6 Luna. The exact run, recovery, and read-only server/OneDrive diagnostic procedure is in [AGENTS.md](AGENTS.md#test-workflow).
 
 #### Signing in a Shadow client
 

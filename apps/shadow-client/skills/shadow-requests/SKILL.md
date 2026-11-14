@@ -19,6 +19,6 @@ The server returns English narrative and may include Visual, Music, SFX, or Anim
 
 ## Other requests
 
-Use `shadow_submit_job` with `operation: "codex.execute"` only for generic tasks intended for server-side Codex. Use the job ID or request ID to poll; do not submit the same action again automatically.
+Use `shadow_submit_job` with `operation: "codex.execute"` for generic tasks intended for the server-side OpenCode GPT-6 Luna Coordinator. The operation name is retained for protocol compatibility. Use the job ID or request ID to poll; do not submit the same action again automatically.
 
 Use `shadow_retry_job` only after the user explicitly requests a retry for a job in the `failed` state. Preserve a `retryRequestId` when checking an uncertain retry: query it with `shadow_job_status` before asking for another run. Interrupted jobs are not eligible because the previous outcome may be uncertain.

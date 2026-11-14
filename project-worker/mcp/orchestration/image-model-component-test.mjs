@@ -178,7 +178,7 @@ try {
     await saveManifest();
 
     const requestForReview = `${candidate.prompt}\n\nExpected style: ${candidate.style}. Requested content class: consenting adults; erotic adult scene. This is a model comparison candidate. Judge only the visible match, adult appearance, pose readability, anatomy, faces, and absence of extra people.`;
-    const review = await call(imageClient, imageLog, 'review_with_codex', { image_path: workerPath, original_request: requestForReview }, 15 * 60 * 1000);
+    const review = await call(imageClient, imageLog, 'review_with_opencode', { image_path: workerPath, original_request: requestForReview }, 15 * 60 * 1000);
     output.review = review.text;
     output.score = Number(review.text.match(/^SCORE:\s*(\d+)\s*$/m)?.[1] ?? NaN);
     output.majorError = review.text.match(/^MAJOR_ERROR:\s*(YES|NO)\s*$/m)?.[1] ?? null;

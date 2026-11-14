@@ -7,6 +7,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { writerInstruction, LocalChatApi, localModelsApiBaseUrl } from './production.mjs';
 import { cleanCliText } from './cli-output.mjs';
+import { runOpenCode, DEFAULT_OPENCODE_MODEL } from './opencode.mjs';
 
 const root = path.resolve(process.env.USERPROFILE || 'C:\\Users\\Shadow', '.lmstudio');
 const projectWorker = path.join(root, 'project-worker', 'mcp', 'server.mjs');
@@ -104,7 +105,7 @@ async function configForRole(role, writerProfileId = 'hemmingway') {
     const json = JSON.parse(await fs.readFile(selected.config, 'utf8'));
     return { engine: 'writer-api', config: json, model: selected.model, profileId: writerProfileId, system: json.operation.fields.find(x => x.key === 'llm.prediction.systemPrompt')?.value || '' };
   }
-  return { engine: 'codex', model: 'Codex CLI configured default', system: `You are the ${names[role]} in a component test. Complete the requested role task only; do not run production or edit files. Use plain text.` };
+  return { engine: 'opencode', model: process.env.BIONIC_OPENCODE_MODEL || DEFAULT_OPENCODE_MODEL, system: `You are the ${names[role]} in a component test. Complete the requested role task only; do not run production or edit files. Use plain text.` };
 }
 
 async function ask(config, prompt, system, cwd, output) {
@@ -130,9 +131,14 @@ async function ask(config, prompt, system, cwd, output) {
     if (result.error || result.status !== 0) throw Error(`LM Studio CLI failed (${result.status ?? result.error?.message ?? 'unknown error'}): ${result.stderr || result.stdout}`);
     return cleanCliText(result.stdout);
   }
-  const result = spawnSync('codex', ['exec', '--skip-git-repo-check', '--ephemeral', '--sandbox', 'read-only', '--color', 'never', '--output-last-message', output, '--cd', cwd, '-'], { cwd, encoding: 'utf8', input: `${system}\n\n${prompt}`, windowsHide: true, timeout: 30 * 60 * 1000, maxBuffer: 8 * 1024 * 1024 });
-  if (result.error || result.status !== 0) throw Error(`Codex CLI failed (${result.status ?? result.error?.message ?? 'unknown error'})`);
-  return fs.readFile(output, 'utf8').then(x => x.trim());
+  const model = config.model || process.env.BIONIC_OPENCODE_MODEL || DEFAULT_OPENCODE_MODEL;
+  const result = await runOpenCode({
+    cwd, workspace: cwd, prompt: `${system}\n\n${prompt}`, requestPath: output + '.request.md', responsePath: output,
+    model, agent: 'component', timeoutMs: 30 * 60 * 1000, label: path.basename(output, path.extname(output)),
+    config: { $schema: 'https://opencode.ai/config.json', model, mcp: { servers: {} }, agents: { component: { description: 'Complete the bounded component test request only.', mode: 'primary', model, permissions: [{ action: '*', resource: '*', effect: 'deny' }] } }, permissions: [{ action: '*', resource: '*', effect: 'deny' }] },
+    configPath: output + '.opencode.json'
+  });
+  return result.text;
 }
 
 const role = arg('--role');

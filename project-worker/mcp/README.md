@@ -1,20 +1,20 @@
 # Project Worker MCP
 
-Project Worker espone i ruoli e l’orchestrazione del progetto narrativo tramite MCP. Regia e Coordinatore governano il progetto; il Writer genera la prosa richiesta; il Narrative Reviewer valuta la scena e può chiedere correzioni localizzate. Il Writer non modifica direttamente Project File o canone.
+Project Worker exposes the narrative project's roles and orchestration through MCP. Regia and the Coordinator govern the project; the Writer drafts prose; the Narrative Reviewer checks scenes and may request localized corrections. The Writer does not directly modify the Project File or canon.
 
-## Processo narrativo
+## Narrative workflow
 
-1. Codex e Qwen producono proposte di piano in parallelo.
-2. Codex fonde le proposte in un `SceneContract` e ne valida schema e punto di vista. Se il contratto resta invalido dopo l’unica correzione consentita, il flusso si arresta prima della scrittura.
-3. Il Writer riceve contratto e contesto canonico pertinente e scrive la scena.
-4. Il Narrative Reviewer restituisce un esito e, se necessario, richieste di revisione circoscritte.
-5. Dopo le correzioni, Codex verifica vincoli, canone e continuità. Le modifiche canoniche richiedono autorizzazione; la prosa non le applica automaticamente.
+1. OpenCode using `openai/gpt-6-luna` proposes a `SceneContract` from the approved brief and Project File.
+2. The same OpenCode planner validates and merges the proposal against the authoritative source, then performs one bounded schema repair if needed. Invalid contracts stop before Writer generation.
+3. The Writer receives the contract and relevant canon, then drafts the scene.
+4. OpenCode runs the text-only Gemini Narrative Reviewer, which returns a verdict and, when needed, bounded revision requests.
+5. After revisions, OpenCode using `openai/gpt-6-luna` directly edits and verifies the final scene. Canon changes require separate authorization; generated prose never updates canon automatically.
 
-Planner e controlli di vincolo non sostituiscono il giudizio stilistico del Reviewer. Un fatto ignoto resta non definito e non autorizza il Writer a inventarlo. Per i dettagli dell’architettura e dello stato corrente, vedere il [README principale](../../README.md) e il [confronto dei modelli di narrazione](../../docs/CONFRONTO-MODELLI-NARRAZIONE.md).
+Planning and constraint checks do not replace the Reviewer's stylistic judgment. Unknown facts remain unknown and do not authorize the Writer to invent them. For architecture and current status, see the [root README](../../README.md) and the [narrative model comparison](../../docs/CONFRONTO-MODELLI-NARRAZIONE.md).
 
-## Comandi
+## Commands
 
-Eseguire i comandi da questa directory:
+Run commands from this directory:
 
 ```powershell
 npm test
@@ -24,6 +24,6 @@ npm run test:component -- --role writer --writer-profile <profile> --writer-case
 npm run test:component -- --role writer --writer-profile <profile> --writer-case violent
 ```
 
-I test Writer isolati richiedono tre run indipendenti (`normal`, `hot`, `violent`), ciascuno con fixture, Project File, seed, run ID e cartella di output nuovi. Il runner usa risposte di revisione simulate; non avvia il Narrative Reviewer reale o la produzione. Nei confronti tra modelli si mantiene identica la fixture corrispondente per rendere comparabile ciascuna coppia. Si valutano richiesta, canone, continuità, tono ed endpoint, senza usare conteggio parole o rifinitura stilistica come criteri di superamento.
+Isolated Writer evaluations require three independent runs (`normal`, `hot`, `violent`), each with a fresh fixture, Project File, seed, run ID, and output directory. The runner uses simulated revision replies; it does not start the real Narrative Reviewer or production. Model comparisons use the same fixture for each matched pair. Evaluate the request, canon, continuity, tone, and endpoint; word count and surface polish alone are not pass criteria.
 
-Il test Planner è isolato: registra le proposte, il merge e la validazione del contratto senza invocare Writer, asset o pubblicazione. Ogni run produce manifest e prove in `production-tests/components`; preservare run parziali e non rilanciare automaticamente chiamate dall’esito incerto. Le regole complete sono in [AGENTS.md](../../AGENTS.md).
+Planner tests are isolated: they record the proposal, merge, and contract validation without invoking Writer, asset creation, or publication. Each run stores a manifest and evidence under `production-tests/components`; preserve partial runs and do not automatically replay uncertain model calls. Full guidance is in [AGENTS.md](../../AGENTS.md).

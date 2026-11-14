@@ -251,7 +251,7 @@ function Jobs() {
     try {
       const rows = await invoke<Job[]>("list_local_jobs", { clientId: "desktop-ui", limit: 50 });
       setJobs(rows);
-      setMessage(`${rows.length} local job${rows.length === 1 ? "" : "s"}. Only authenticated codex.execute requests are sent to server-side Codex; local placeholders are not executed.`);
+        setMessage(`${rows.length} local job${rows.length === 1 ? "" : "s"}. Only authenticated codex.execute requests are sent to the server-side OpenCode runner; local placeholders are not executed.`);
     } catch (error) {
       setMessage(String(error));
     } finally {
@@ -272,7 +272,7 @@ function Jobs() {
         },
       });
       await refresh();
-      setMessage("A local placeholder was saved. It is not a Codex task and will not start execution.");
+        setMessage("A local placeholder was saved. It is not a server task and will not start execution.");
     } catch (error) {
       setMessage(String(error));
       setBusy(false);
