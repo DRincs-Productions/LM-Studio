@@ -641,7 +641,7 @@ Return EXACTLY these six lines and nothing else:
 SCORE: <0-100>
 PEOPLE: <number>
 REQUEST_MATCH: <0-100>
-FACES: <0-100>
+FACES: <0-100, use 100 when no face is present>
 MAJOR_ERROR: <YES or NO>
 RETRY_HINT: <one short actionable sentence, or NONE>`;
 
@@ -740,11 +740,8 @@ ${result.stderr}`
         "REQUEST_MATCH"
       );
 
-    const faces =
-      parseNumber(
-        response,
-        "FACES"
-      );
+    const faces = parseNumber(response, "FACES")
+      ?? (people === 0 && /^FACES:\s*N\/A\s*$/im.test(response) ? 100 : null);
 
     const majorError =
       parseMajorError(response);
