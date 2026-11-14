@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw
 from scipy import ndimage
 from rembg import new_session, remove
 
@@ -66,8 +66,37 @@ def background_candidates(source, cutout):
     return regions
 
 
+def candidate_preview(source, cutout, preview, output):
+    boxes = background_candidates(source, cutout)
+    if not boxes:
+        print("[]")
+        return
+    with Image.open(preview) as image:
+        width, height = image.size
+        sheet = Image.new("RGB", (480, ((len(boxes) + 1) // 2) * 184), "#eeeeee")
+        draw = ImageDraw.Draw(sheet)
+        for index, box in enumerate(boxes):
+            left, top, right, bottom = box
+            bounds = (max(0, left * width // 1000 - 12),
+                      max(0, top * height // 1000 - 12),
+                      min(width, right * width // 1000 + 12),
+                      min(height, bottom * height // 1000 + 12))
+            crop = image.crop(bounds)
+            scale = min(220 / crop.width, 154 / crop.height)
+            crop = crop.resize((max(1, round(crop.width * scale)),
+                                max(1, round(crop.height * scale))))
+            x, y = (index % 2) * 240, (index // 2) * 184
+            draw.text((x + 4, y + 4), str(box), fill="#222222")
+            sheet.paste(crop, (x + 4, y + 22))
+        with Path(output).open("xb") as file:
+            sheet.save(file, format="PNG")
+    print(json.dumps(boxes))
+
+
 if __name__ == "__main__":
-    if sys.argv[1] == "--inspect":
+    if sys.argv[1] == "--evidence":
+        candidate_preview(*sys.argv[2:])
+    elif sys.argv[1] == "--inspect":
         print(json.dumps(background_candidates(*sys.argv[2:])))
     elif sys.argv[1] == "--preview":
         with Image.open(sys.argv[2]) as image:

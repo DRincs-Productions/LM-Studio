@@ -135,13 +135,16 @@ try {
   stage = 'review';
   const inspect = async (imagePath, logName, candidatePath) => {
     let evidence = '';
+    let evidencePath;
     if (transparent) {
+      const details = path.join(runDir, `${logName}-details.png`);
       const { stdout } = await command(process.env.SHADOW_IMAGE_PYTHON || 'python',
-        [path.join(path.dirname(worker), 'transparent.py'), '--inspect', source, candidatePath], 30_000);
+        [path.join(path.dirname(worker), 'transparent.py'), '--evidence', source, candidatePath, imagePath, details], 30_000);
+      if (JSON.parse(stdout.toString()).length) evidencePath = details;
       evidence = `\nInspect these candidate boxes [left,top,right,bottom] in normalized 0..1000 coordinates: ${stdout.toString().trim()}. They contain opaque pixels resembling the original background color. Use the image to distinguish residue from the foreground.`;
     }
     const review = await call('review_with_opencode', {
-      image_path: imagePath, original_request: brief + evidence, inspect_alpha: transparent,
+      image_path: imagePath, original_request: brief + evidence, inspect_alpha: transparent, evidence_path: evidencePath,
     }, 960_000, logName);
     const scoreText = field(review, 'SCORE');
     const score = /^\d{1,3}$/.test(scoreText ?? '') ? Number(scoreText) : null;

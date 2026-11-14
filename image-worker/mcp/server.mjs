@@ -544,12 +544,14 @@ server.tool(
 
     original_request: z.string().min(1),
     inspect_alpha: z.boolean().optional().default(false),
+    evidence_path: z.string().min(1).optional(),
   },
 
   async ({
     image_path,
     original_request,
-    inspect_alpha
+    inspect_alpha,
+    evidence_path
   }) => {
     const resolved =
       path.resolve(image_path);
@@ -579,6 +581,11 @@ REASON: image does not exist
 PATH: ${resolved}`
         }]
       };
+    }
+
+    const evidencePath = inspect_alpha && evidence_path ? path.resolve(evidence_path) : null;
+    if (evidencePath && (!isInsideRoot(evidencePath) || !(await exists(evidencePath)))) {
+      return { content: [{ type: "text", text: "REVIEW_FAILED\nREASON: invalid alpha evidence image" }] };
     }
 
     // ---------------------------------------------
@@ -647,6 +654,7 @@ MAJOR_ERROR: <YES or NO>
 RETRY_HINT: <one short actionable sentence, or NONE>${inspect_alpha ? `
 
 The attached checkerboard represents transparency. Inspect internal holes (handles, gaps between limbs and props), background-colored islands and halos. Identify only remaining original background. Never select a subject, its outlines or shadows integral to the subject.
+${evidencePath ? 'A second attachment contains enlarged candidate areas labeled with boxes in full-image coordinates. Inspect these details, and trace any confirmed residue in coordinates of the first image.' : ''}
 Add a seventh line BACKGROUND_RESIDUE: followed by a JSON array of up to 4 tightly traced polygons, each an array of [x,y] points normalized to integer coordinates 0..1000 over the entire image, top-left origin. Use [] only when no original background remains. Use UNKNOWN if you see residue but cannot locate it precisely. Do not inpaint.` : ''}`;
 
     // ---------------------------------------------
@@ -670,7 +678,7 @@ Add a seventh line BACKGROUND_RESIDUE: followed by a JSON array of up to 4 tight
     }, null, 2), { flag: "wx" });
     const result = await runProcess(OPEN_CODE, [
       "--standalone", "run", "--model", OPEN_CODE_MODEL, "--agent", "image-reviewer", "--format", "json",
-      "--file", resolved, "--file", requestPath, "Evaluate the attached image and follow the attached review request exactly.",
+      "--file", resolved, ...(evidencePath ? ["--file", evidencePath] : []), "--file", requestPath, "Evaluate the attached image and follow the attached review request exactly.",
     ], { timeoutMs: OPEN_CODE_TIMEOUT_MS, cwd: reviewDirectory });
 
     // ---------------------------------------------
