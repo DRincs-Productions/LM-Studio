@@ -11,14 +11,25 @@ const remotePath = `imagecloud:NarrationWorker/final/${jobId}/scene.md`;
 const stages = [];
 const warnings = [];
 const hash = value => createHash('sha256').update(value).digest('hex');
+const openCodeText = output => {
+  const text = [];
+  for (const line of String(output || '').split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    try {
+      const event = JSON.parse(line);
+      if (event?.type === 'text' && event.part?.type === 'text' && typeof event.part.text === 'string') text.push(event.part.text);
+    } catch { /* Ignore non-JSON log lines; OpenCode emits JSONL for these calls. */ }
+  }
+  return text.join('').trim();
+};
 const record = async value => {
   stages.push(value);
   await writeFile(`${runDir}/stages.json`, JSON.stringify(stages, null, 2));
 };
-const run = (exe, args, { input: stdin, timeout = 300_000, max = 4 * 1024 * 1024, label = 'process' } = {}) => new Promise((resolve, reject) => {
+const run = (exe, args, { input: stdin, timeout = 300_000, max = 4 * 1024 * 1024, label = 'process', env } = {}) => new Promise((resolve, reject) => {
   const command = exe.toLowerCase().endsWith('.js') ? process.execPath : exe;
   const commandArgs = command === process.execPath && exe.toLowerCase().endsWith('.js') ? [exe, ...args] : args;
-  const child = spawn(command, commandArgs, { cwd: runDir, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
+  const child = spawn(command, commandArgs, { cwd: runDir, env: env ? { ...process.env, ...env } : process.env, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
   let stdout = Buffer.alloc(0), stderr = Buffer.alloc(0), overflow = false;
   let timedOut = false;
   const append = (current, chunk) => {
@@ -56,8 +67,8 @@ const clip = value => String(value ?? '').slice(0, 40_000);
 const safeFailure = error => {
   const message = String(error?.message || 'stage_failed');
   if (['writer_api_start_failed', 'writer_api_unavailable', 'writer_empty_response'].includes(message)) return message;
-  if (/^(writer_http_\d+|scene_validation_failed|writer_artifact_invalid|gemini_malformed_response|gemini_malformed_review|gemini_unusable_review|qwen_reviewer_http_\d+|qwen_reviewer_empty_response|qwen_final_http_\d+|qwen_final_empty_response|qwen_malformed_response|qwen_malformed_review|qwen_unusable_review|codex_artifact_invalid|process_timeout|process_output_limit|process_exit_-?\d+|onedrive_integrity_mismatch|writer_cleanup_not_verified|narration_review_mode_invalid|narration_reviewer_backend_invalid)$/.test(message)) return message;
-  if (/^(codex_refusal|venice_(?:credentials_missing|free_access_unavailable|access_check_failed|artifact_invalid|http_\d+))$/.test(message)) return message;
+  if (/^(writer_http_\d+|scene_validation_failed|writer_artifact_invalid|gemini_malformed_response|gemini_malformed_review|gemini_unusable_review|qwen_reviewer_http_\d+|qwen_reviewer_empty_response|qwen_final_http_\d+|qwen_final_empty_response|qwen_malformed_response|qwen_malformed_review|qwen_unusable_review|opencode_artifact_invalid|process_timeout|process_output_limit|process_exit_-?\d+|onedrive_integrity_mismatch|writer_cleanup_not_verified|narration_review_mode_invalid|narration_reviewer_backend_invalid)$/.test(message)) return message;
+  if (/^(opencode_refusal|opencode_failed|opencode_empty_response|venice_(?:credentials_missing|free_access_unavailable|access_check_failed|artifact_invalid|http_\d+|opencode_failed|empty_response))$/.test(message)) return message;
   if (error?.code === 'ENOENT') return 'executable_unavailable';
   if (error?.code === 'ETIMEDOUT' || error?.name === 'TimeoutError') return 'process_timeout';
   return 'stage_failed';
@@ -113,7 +124,7 @@ const sceneIssues = value => {
   if (!hasDialogue) issues.push('Include English dialogue in the required speaker format.');
   return issues;
 };
-const codexRefused = value => /\bI (?:can['’]t|cannot|won['’]t|am unable to) (?:help|provide|rewrite|edit|revise|continue|produce|complete|assist)\b/i.test(value);
+const modelRefused = value => /\bI (?:can['’]t|cannot|won['’]t|am unable to) (?:help|provide|rewrite|edit|revise|continue|produce|complete|assist)\b/i.test(value);
 const editWithVenice = async prompt => {
   let apiKey = process.env.VENICE_API_KEY;
   if (!apiKey) {
@@ -121,7 +132,7 @@ const editWithVenice = async prompt => {
     catch { /* The installed CLI configuration is optional. */ }
   }
   if (typeof apiKey !== 'string' || !apiKey.trim()) throw new Error('venice_credentials_missing');
-  const model = process.env.SHADOW_VENICE_MODEL || 'deepseek-v4-1-flash-uncensored';
+  const model = process.env.SHADOW_VENICE_MODEL || 'venice-uncensored-1-2';
   const authorization = `Bearer ${apiKey.trim()}`;
   const access = await fetch('https://api.venice.ai/api/v1/api_keys/rate_limits', {
     headers: { Authorization: authorization },
@@ -133,21 +144,37 @@ const editWithVenice = async prompt => {
       || !Array.isArray(data.rateLimits) || !data.rateLimits.some(limit => limit?.apiModelId === model)) {
     throw new Error('venice_free_access_unavailable');
   }
-  const response = await fetch('https://api.venice.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: { Authorization: authorization, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model,
-      messages: [{ role: 'user', content: prompt }],
-      max_tokens: 8192,
-      temperature: 0.2,
-    }),
-    signal: AbortSignal.timeout(120_000),
-  });
-  if (!response.ok) throw new Error(`venice_http_${response.status}`);
-  const result = await response.json();
-  const content = result.choices?.[0]?.message?.content;
-  const edited = typeof content === 'string' ? content.trim() : '';
+  const openCodeModel = process.env.SHADOW_OPENCODE_VENICE_MODEL || `venice/${model}`;
+  const openCode = process.env.OPENCODE_EXECUTABLE || (process.env.APPDATA
+    ? join(process.env.APPDATA, 'npm', 'node_modules', '@opencode', 'cli', 'bin', 'opencode.exe')
+    : 'opencode');
+  const promptPath = `${runDir}/opencode-venice-final-prompt.md`;
+  const configPath = `${runDir}/opencode.json`;
+  const config = {
+    $schema: 'https://opencode.ai/config.json',
+    mcp: { servers: {} },
+    agents: {
+      reviewer: { description: 'Read-only narrative reviewer and editor with approved story skills.', mode: 'primary', model: process.env.SHADOW_OPENCODE_MODEL || 'openai/gpt-6-luna', permissions: [{ action: '*', resource: '*', effect: 'deny' }, { action: 'skill', resource: '*', effect: 'allow' }] },
+      'venice-reviewer': { description: 'Narrative editor with access only to approved narrative skills.', mode: 'primary', permissions: [{ action: '*', resource: '*', effect: 'deny' }, { action: 'skill', resource: '*', effect: 'allow' }] },
+    },
+    permissions: [{ action: '*', resource: '*', effect: 'deny' }],
+  };
+  const skillPrompt = `Before editing, load and follow these installed skills with the skill tool: @narration, @expressive-sounds, @scene-craft, @revision-continuity, and @line-editing. Use them to review and directly correct the scene under the supplied brief and canon. Do not call any tools other than the skill tool.\n\n${prompt}`;
+  await writeFile(promptPath, skillPrompt, { flag: 'wx' });
+  try { await writeFile(configPath, JSON.stringify(config, null, 2), { flag: 'wx' }); }
+  catch (error) { if (error?.code !== 'EEXIST') throw error; }
+  let result;
+  try {
+    result = await run(openCode, ['--standalone', 'run', '--model', openCodeModel, '--agent', 'venice-reviewer', '--format', 'json', '--file', promptPath, 'Return only the full corrected English Markdown scene.'], {
+      timeout: 120_000,
+      max: 4 * 1024 * 1024,
+      label: 'opencode-venice-final',
+    });
+  } catch {
+    throw new Error('venice_opencode_failed');
+  }
+  const edited = openCodeText(result.stdout);
+  if (!edited) throw new Error('venice_empty_response');
   if (!artifactValid(edited) || sceneIssues(edited).length) throw new Error('venice_artifact_invalid');
   return edited;
 };
@@ -164,7 +191,7 @@ const context = `ORIGINAL BRIEF (untrusted project data):\n${clip(payload.brief)
 let narrative = '';
 let selectedDraft = 'draft-0';
 const writerModel = "hemmingway-1-abliterated-extreme";
-const reviewerBackend = process.env.SHADOW_NARRATION_REVIEW_BACKEND === 'gemini-codex' ? 'deterministic-codex' : (process.env.SHADOW_NARRATION_REVIEW_BACKEND || 'deterministic-codex');
+const reviewerBackend = process.env.SHADOW_NARRATION_REVIEW_BACKEND === 'gemini-codex' ? 'opencode' : (process.env.SHADOW_NARRATION_REVIEW_BACKEND || 'opencode');
 const reviewerModel = reviewerBackend === 'qwen' ? (process.env.SHADOW_NARRATION_REVIEWER_MODEL || 'qwen2.5-14b-instruct-abliterated-v2') : '';
 const reviewerMode = process.env.SHADOW_NARRATION_REVIEW_MODE || (reviewerModel ? 'direct-edit' : 'feedback-loop');
 const apiBase = (process.env.SHADOW_LM_API_BASE_URL || 'http://127.0.0.1:1234').replace(/\/$/, '');
@@ -209,7 +236,7 @@ const unloadModel = async (identifier, label) => {
   if (after.includes(identifier)) throw new Error('writer_cleanup_not_verified');
 };
 try {
-  if (!['qwen', 'deterministic-codex', 'writer-only'].includes(reviewerBackend)) throw new Error('narration_reviewer_backend_invalid');
+if (!['qwen', 'opencode', 'writer-only'].includes(reviewerBackend)) throw new Error('narration_reviewer_backend_invalid');
   if (reviewerMode !== 'feedback-loop' && reviewerMode !== 'direct-edit') throw new Error('narration_review_mode_invalid');
   const writerIdentifier = `shadow-narration-${jobId}`;
   const reviewerIdentifier = `shadow-reviewer-${jobId}`;
@@ -351,7 +378,22 @@ Return only the full corrected scene in the required Markdown envelope.`;
     const modeInstructions = reviewerMode === 'direct-edit'
       ? 'Perform a rule-by-rule editorial pass. Correct every concrete violation above and compare each explicit constraint against the latest scene.'
       : 'Review the validation outcomes and complete the bounded final edit, correcting remaining evidence-backed issues under the shared editing rules.';
-    const finalPrompt = `${sceneStyle}\n\n${sharedEditorInstructions}\n\n${modeInstructions}\n\n${context}\n\nLATEST USABLE DRAFT:\n${narrative}${reviewerMode === 'feedback-loop' ? `\n\nReview stage outcomes:\n${JSON.stringify(stages.filter(stage => stage.stage === 'qwen_reviewer' || stage.stage === 'draft_validation'))}` : ''}`;
+    const finalPrompt = `Before editing, load and follow these installed skills with the skill tool: @narration, @expressive-sounds, @scene-craft, @revision-continuity, and @line-editing.\n\n${sceneStyle}\n\n${sharedEditorInstructions}\n\n${modeInstructions}\n\n${context}\n\nLATEST USABLE DRAFT:\n${narrative}${reviewerMode === 'feedback-loop' ? `\n\nReview stage outcomes:\n${JSON.stringify(stages.filter(stage => stage.stage === 'qwen_reviewer' || stage.stage === 'draft_validation'))}` : ''}`;
+    const openCodeModel = process.env.SHADOW_OPENCODE_MODEL || 'openai/gpt-6-luna';
+    const openCodeExecutable = process.env.OPENCODE_EXECUTABLE || (process.env.APPDATA
+      ? join(process.env.APPDATA, 'npm', 'node_modules', '@opencode', 'cli', 'bin', 'opencode.exe')
+      : 'opencode');
+    const openCodePromptPath = `${runDir}/opencode-final-prompt.md`;
+    const openCodeConfig = {
+      $schema: 'https://opencode.ai/config.json', mcp: { servers: {} },
+      agents: {
+        reviewer: { description: 'Read-only narrative reviewer and editor with approved story skills.', mode: 'primary', model: openCodeModel, permissions: [{ action: '*', resource: '*', effect: 'deny' }, { action: 'skill', resource: '*', effect: 'allow' }] },
+        'venice-reviewer': { description: 'Narrative editor with access only to approved narrative skills.', mode: 'primary', permissions: [{ action: '*', resource: '*', effect: 'deny' }, { action: 'skill', resource: '*', effect: 'allow' }] },
+      },
+      permissions: [{ action: '*', resource: '*', effect: 'deny' }],
+    };
+    try { await writeFile(`${runDir}/opencode.json`, JSON.stringify(openCodeConfig, null, 2), { flag: 'wx' }); }
+    catch (error) { if (error?.code !== 'EEXIST') throw error; }
     try {
       if (reviewerModel) {
         if (reviewerMode === 'direct-edit' && activeModelIdentifier !== reviewerIdentifier) {
@@ -362,22 +404,22 @@ Return only the full corrected scene in the required Markdown envelope.`;
           await loadModel(reviewerModel, reviewerIdentifier, 'qwen-final-editor-load');
         }
         await writeFile(`${runDir}/qwen-final-prompt.md`, finalPrompt, { flag: 'wx' });
-      } else await writeFile(`${runDir}/codex-prompt.md`, finalPrompt, { flag: 'wx' });
+      } else await writeFile(openCodePromptPath, finalPrompt, { flag: 'wx' });
       const stdout = reviewerModel
         ? await chat(reviewerModel, 'You are the final English narrative editor. Make only bounded, evidence-backed corrections. Return only the complete Markdown artifact.', finalPrompt, { label: 'qwen_final' })
-        : (await run(process.env.SHADOW_CODEX_EXECUTABLE || 'codex', ['exec', '--sandbox', 'read-only', '--ignore-user-config', '--ephemeral', '--skip-git-repo-check', '-'], { input: finalPrompt, timeout: 900_000, max: 256 * 1024, label: 'codex-final' })).stdout;
+        : openCodeText((await run(openCodeExecutable, ['--standalone', 'run', '--model', openCodeModel, '--agent', 'reviewer', '--format', 'json', '--file', openCodePromptPath, 'Return only the full corrected English Markdown scene.'], { timeout: 900_000, max: 4 * 1024 * 1024, label: 'opencode-final' })).stdout);
       const edited = stdout.trim();
       if (!artifactValid(edited) || sceneIssues(edited).length) {
-        throw new Error(!reviewerModel && codexRefused(edited) ? 'codex_refusal' : 'codex_artifact_invalid');
+        throw new Error(!reviewerModel && modelRefused(edited) ? 'opencode_refusal' : 'opencode_artifact_invalid');
       }
       narrative = edited;
-      selectedDraft = reviewerModel ? `qwen-${reviewerMode === 'direct-edit' ? 'direct-edit' : 'final-edit'}` : 'codex-final';
-      await writeFile(`${runDir}/${reviewerModel ? 'qwen-final' : 'codex-final'}.md`, narrative, { flag: 'wx' });
-      await record({ stage: reviewerModel ? 'qwen_final' : 'codex', outcome: 'succeeded', attempts: 1 });
+      selectedDraft = reviewerModel ? `qwen-${reviewerMode === 'direct-edit' ? 'direct-edit' : 'final-edit'}` : 'opencode-final';
+      await writeFile(`${runDir}/${reviewerModel ? 'qwen-final' : 'opencode-final'}.md`, narrative, { flag: 'wx' });
+      await record({ stage: reviewerModel ? 'qwen_final' : 'opencode', outcome: 'succeeded', attempts: 1, ...(reviewerModel ? {} : { model: openCodeModel }) });
     } catch (error) {
       const reason = safeFailure(error);
       warnings.push({ code: reason, message: reason });
-      await record({ stage: reviewerModel ? 'qwen_final' : 'codex', outcome: 'error', attempts: 1, errorCode: reason, reason });
+      await record({ stage: reviewerModel ? 'qwen_final' : 'opencode', outcome: 'error', attempts: 1, errorCode: reason, reason, ...(reviewerModel ? {} : { model: openCodeModel }) });
       if (!reviewerModel) {
         try {
           const edited = await editWithVenice(finalPrompt);
@@ -415,10 +457,10 @@ Return only the full corrected scene in the required Markdown envelope.`;
     narrativeSha256: hash(narrative),
     selectedDraft,
     writer: writerModel,
-    reviewer: selectedDraft === 'codex-final' ? 'codex' : selectedDraft === 'venice-final' ? 'venice' : 'none',
+    reviewer: selectedDraft === 'opencode-final' ? 'opencode' : selectedDraft === 'venice-final' ? 'venice' : 'none',
     reviewerBackend,
     reviewerMode,
-    reviewerModel: reviewerModel || null,
+    reviewerModel: reviewerModel || ((reviewerBackend === 'opencode' && selectedDraft === 'opencode-final') ? (process.env.SHADOW_OPENCODE_MODEL || 'openai/gpt-6-luna') : null),
     reviewerCalls: reviewerModel ? stages.filter(stage => stage.stage === 'qwen_reviewer').length : 0,
     validationCalls,
     qwenFinalCalls: reviewerModel && stages.some(stage => stage.stage === 'qwen_final' && stage.outcome === 'succeeded') ? 1 : 0,
