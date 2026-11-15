@@ -570,11 +570,11 @@ flowchart LR
 
 The default final editor is Venice via OpenCode using `venice/venice-uncensored-1-2`. It receives the brief, available canon, draft and validation outcomes. This mode can use Venice API credits. The Coordinator retains the latest usable draft if the edit fails. The manifest identifies the Writer model in `writer` and the selected final editor in `reviewer` as `opencode`, `venice`, or `none`. Draft checks remain visible in stage diagnostics. A missing canonical text is recorded as a limitation: `projectSha256` identifies the revision but does not itself let the server read or validate project contents. The narration worker selects Hemmingway directly. Configure `SHADOW_LM_API_BASE_URL`, `lms`, OpenCode authenticated with OpenAI and Venice, and `rclone` on the server. The writer instance is unloaded after the full review cycle; cleanup failures appear in the result. The JSON references the English scene on OneDrive only after upload and byte verification. The client uses MCP to download and verify the file before analysis. Asset production is separate. See [Handoff 08](handoffs/08-server-narration.md) and the client [Shadow Requests skill](apps/shadow-client/skills/shadow-requests/SKILL.md).
 
-The three fixed client-driven narration test prompts are [normal](test/normal_narration.txt), [hot](test/hot_narration.txt), and [cyberpunk](test/cyperpunk_narration.txt). Codex submits each file through Shadow Controller MCP as the client, waits for completion, retrieves the verified OneDrive result, and returns the scene as a file; the server-side model work runs through OpenCode GPT-6 Luna. The exact run, recovery, and read-only server/OneDrive diagnostic procedure is in [AGENTS.md](AGENTS.md#test-workflow).
+The fixed client-driven narration test prompts are [normal](test/normal_narration.txt), [hot](test/hot_narration.txt), [cyberpunk](test/cyperpunk_narration.txt), and [three strangers at a bar](test/bar_three_strangers.txt). Codex submits the selected fixtures through Shadow Controller MCP, waits for completion, retrieves the verified OneDrive result, and returns the scene as a file. The exact run, recovery, and read-only server/OneDrive diagnostic procedure is in [AGENTS.md](AGENTS.md#test-workflow).
 
 ### Remote image generation
 
-The client submits a visual brief and output options through Shadow Controller. The Coordinator uses the server image preparation skill to draft the prompt, select compatible adapters and validate generation settings. The Coordinator runs Image Worker, checks the result and publishes the approved PNG. The client downloads and verifies the delivered file.
+The client submits a visual brief and output options through Shadow Controller. The Coordinator uses the server image preparation skill to draft the prompt, infer the output size and whether the brief calls for a transparent cutout, select compatible adapters and validate generation settings. The Coordinator runs Image Worker, checks the result and publishes the approved PNG. The client downloads and verifies the delivered file.
 
 ```mermaid
 flowchart LR
@@ -594,6 +594,8 @@ flowchart LR
 ```
 
 Use [Shadow Image Requests](apps/shadow-client/skills/shadow-image-requests/SKILL.md) for the client workflow and the [server setup](apps/shadow-controller/README.md#image-generation) for configuration.
+
+The client exposes `shadow_submit_normal_image`, `shadow_submit_hot_image`, and `shadow_submit_anime_image`. Each tool accepts the fixed test prompt through `filePath`, and the server infers output mode, dimensions and adapter needs from its text. The client waits on the assigned job and retrieves the verified PNG. See [AGENTS.md](AGENTS.md#test-workflow).
 
 #### Signing in a Shadow client
 

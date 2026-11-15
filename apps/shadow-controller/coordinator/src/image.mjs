@@ -9,7 +9,7 @@ import { pathToFileURL } from 'node:url';
 
 const [requestPath, runDir, skillPath] = process.argv.slice(2);
 const { jobId, requestId, payload } = JSON.parse(await readFile(requestPath, 'utf8'));
-const { brief, prompt: legacyPrompt, negativePrompt: requestedNegativePrompt, profile = 'normal', mode = 'standard', width = 1920, height = 1080, loras: requestedLoras = [] } = payload;
+const { brief, prompt: legacyPrompt, negativePrompt: requestedNegativePrompt, profile = 'normal', mode: legacyMode, width: legacyWidth, height: legacyHeight, loras: requestedLoras = [] } = payload;
 const seed = randomInt(1, 2147483647);
 const routes = {
   normal: { generator: 'normal', style: 'standard', id: 'krea2_turbo', stepRange: [8, 8], reviewer: 'openai/gpt-6-luna' },
@@ -19,7 +19,7 @@ const routes = {
 const route = routes[profile];
 const reviewer = profile === 'normal' ? route.reviewer : process.env.SHADOW_IMAGE_VENICE_MODEL || route.reviewer;
 const planner = profile === 'normal' ? (process.env.SHADOW_OPENCODE_MODEL || 'openai/gpt-6-luna') : reviewer;
-const manifest = { schemaVersion: 1, runId: jobId, requestId, status: 'running', profile, mode, width, height, seed, checkpoint: route.id, planner, reviewer, stages: [] };
+const manifest = { schemaVersion: 1, runId: jobId, requestId, status: 'running', profile, seed, checkpoint: route.id, planner, reviewer, stages: [] };
 const manifestPath = path.join(runDir, 'result-manifest.json');
 const save = async () => {
   const temp = manifestPath + '.tmp';
@@ -44,12 +44,14 @@ async function prepareImage(checkpoint, catalog) {
   const skill = await readFile(skillPath || new URL('../../../../skills/image-preparation/SKILL.md', import.meta.url), 'utf8');
   const [minSteps, maxSteps] = route.stepRange;
   const limits = {
-    checkpoint: route.id, width, height, minSteps, maxSteps,
-    defaults: { steps: checkpoint.steps, cfgScale: checkpoint.cfgScale },
+    checkpoint: route.id, minSteps, maxSteps,
+    dimensions: { min: 512, max: 2048, multipleOf: 8 },
+    defaults: { width: 1920, height: 1080, steps: checkpoint.steps, cfgScale: checkpoint.cfgScale },
     sampler: 'euler', scheduler: 'simple', readyLoras: catalog,
   };
   const request = {
-    brief: brief ?? legacyPrompt, mode, negativePromptPreference: requestedNegativePrompt,
+    brief: brief ?? legacyPrompt, legacyModePreference: legacyMode, negativePromptPreference: requestedNegativePrompt,
+    legacyDimensions: legacyWidth !== undefined ? { width: legacyWidth, height: legacyHeight } : undefined,
     requestedLoras,
   };
   const input = `${skill}\n\nSupported settings:\n${JSON.stringify(limits)}\n\nImage request:\n${JSON.stringify(request)}`;
@@ -85,7 +87,9 @@ async function prepareImage(checkpoint, catalog) {
   const validPrompt = text => typeof text === 'string' && text.trim() && Buffer.byteLength(text) <= 12000
     && !text.includes('\0') && !/<\s*lora\s*:/i.test(text);
   const negativePrompt = draft?.negativePrompt === '' || draft?.negativePrompt === null ? undefined : draft?.negativePrompt;
-  if (!validPrompt(draft?.prompt) || (negativePrompt !== undefined && !validPrompt(negativePrompt))
+  const validDimension = value => Number.isInteger(value) && value >= 512 && value <= 2048 && value % 8 === 0;
+  if (!validDimension(draft?.width) || !validDimension(draft?.height)
+      || !['standard', 'transparent'].includes(draft?.mode) || !validPrompt(draft?.prompt) || (negativePrompt !== undefined && !validPrompt(negativePrompt))
       || !Number.isInteger(draft.steps) || draft.steps < minSteps || draft.steps > maxSteps
       || draft.cfgScale !== checkpoint.cfgScale || !Array.isArray(draft.loras) || draft.loras.length > 4) {
     throw new Error('Image planner returned unsupported prompts or sampling settings');
@@ -99,7 +103,7 @@ async function prepareImage(checkpoint, catalog) {
     return { id: adapter.id, weight };
   });
   if (new Set(loras.map(item => item.id)).size !== loras.length) throw new Error('Image planner returned duplicate LoRAs');
-  return { prompt: draft.prompt.trim(), negativePrompt, steps: draft.steps, cfgScale: draft.cfgScale, loras };
+  return { mode: draft.mode, width: draft.width, height: draft.height, prompt: draft.prompt.trim(), negativePrompt, steps: draft.steps, cfgScale: draft.cfgScale, loras };
 }
 
 async function call(name, args, timeout, logName = name) {
@@ -114,7 +118,7 @@ function field(message, name) {
   return message.match(new RegExp(`^${name}: ([^\\r\\n]+)`, 'm'))?.[1];
 }
 
-function verifyPng(bytes) {
+function verifyPng(bytes, width, height) {
   if (bytes.length < 33 || bytes.length > maxImageBytes
       || bytes.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a'
       || bytes.toString('ascii', 12, 16) !== 'IHDR'
@@ -153,8 +157,8 @@ try {
     item.available && item.validationStatus === 'ready' && item.profiles.includes(route.id))
     .map(([id, { minWeight, maxWeight, effect, preferredWeight, trigger }]) =>
       ({ id, minWeight, maxWeight, effect, preferredWeight, trigger }));
-  const { prompt, negativePrompt, steps, cfgScale, loras } = await prepareImage(checkpoint, catalog);
-  Object.assign(manifest, { steps, cfgScale, loras, loraPaths: loras.map(({ id }) => registered[id].path) });
+  const { mode, width, height, prompt, negativePrompt, steps, cfgScale, loras } = await prepareImage(checkpoint, catalog);
+  Object.assign(manifest, { mode, width, height, steps, cfgScale, loras, loraPaths: loras.map(({ id }) => registered[id].path) });
   manifest.stages.push({ stage, outcome: 'verified', model: planner });
   await save();
 
@@ -181,7 +185,7 @@ try {
   generationSettings.negativePrompt = reportedNegativePrompt
     ? JSON.parse(reportedNegativePrompt) : negativePrompt;
   const sourceBytes = await readFile(source);
-  verifyPng(sourceBytes);
+  verifyPng(sourceBytes, width, height);
   manifest.stages.push({ stage, outcome: 'verified', sha256: hash(sourceBytes), bytes: sourceBytes.length });
   await save();
 
@@ -197,7 +201,7 @@ try {
     await writeFile(final, sourceBytes, { flag: 'wx' });
   }
   const initialPng = await readFile(final);
-  verifyPng(initialPng);
+  verifyPng(initialPng, width, height);
   manifest.stages.push({ stage, outcome: 'verified' });
   await save();
 
@@ -273,7 +277,7 @@ try {
   manifest.stages.push({ stage, outcome: accepted ? 'accepted' : 'rejected' });
   if (!accepted) throw new Error('The candidate did not pass visual review');
   const png = await readFile(delivery);
-  verifyPng(png);
+  verifyPng(png, width, height);
   await save();
 
   stage = 'publication';

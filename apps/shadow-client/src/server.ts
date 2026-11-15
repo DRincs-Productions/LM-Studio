@@ -22,10 +22,6 @@ const imageText = z.string().trim().min(1).refine((text) =>
   Buffer.byteLength(text) <= 12000 && !text.includes("\0"));
 const imagePrompt = imageText.refine((text) => !/<\s*lora\s*:/i.test(text),
   "Declare LoRAs separately from the prompt.");
-const imageLoras = z.array(z.strictObject({
-  id: z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/),
-  weight: z.number().finite().refine((weight) => weight !== 0),
-})).max(4);
 function createServer(): McpServer {
   const server = new McpServer({ name: "shadow-controller", version: "0.1.0" });
 
@@ -187,34 +183,45 @@ function createServer(): McpServer {
     }
   });
 
-  const dimension = z.number().int().min(512).max(2048).multipleOf(8).optional();
-  server.registerTool("shadow_submit_image", {
-    description: "Queue one image on the paired server. Defaults to normal, standard output and 1920 × 1080. Use shadow_wait_job and get_image_result.",
-    inputSchema: z.strictObject({
-      brief: imageText.optional(),
-      prompt: imagePrompt.optional(),
-      negativePrompt: imagePrompt.optional(),
-      profile: z.enum(["normal", "nsfw", "anime"]).optional(),
-      mode: z.enum(["standard", "transparent"]).optional(),
-      width: dimension,
-      height: dimension,
-      loras: imageLoras.optional(),
-      requestId: z.string().uuid().optional(),
-    }).refine(({ prompt, brief }) => Boolean(prompt) !== Boolean(brief), "Provide a prepared prompt or a legacy brief.")
-      .refine(({ width, height }) => (width === undefined) === (height === undefined), "Provide both dimensions.")
-      .refine(({ loras = [] }) => new Set(loras.map(({ id }) => id)).size === loras.length, "LoRA IDs must be unique."),
-  }, async ({ requestId = randomUUID(), ...params }) => {
-    try {
-      const response = await callRelay({
-        version: 1, type: "job.submit", messageId: randomUUID(), requestId,
-        payloadVersion: 1, payload: { operation: "image.generate", params },
-      });
-      if (response.type === "error") return errorResult(new Error(errorMessage(response.error)));
-      return jsonResult({ requestId, response });
-    } catch (error) {
-      return errorResult(new Error(`${errorMessage(error)} Request ID: ${requestId}. Query this ID before submitting again.`));
-    }
-  });
+  const imageInput = z.strictObject({
+    brief: imageText.optional(),
+    filePath: z.string().trim().min(1).max(2048).optional(),
+    negativePrompt: imagePrompt.optional(),
+    requestId: z.string().uuid().optional(),
+  }).refine(({ brief, filePath }) => Boolean(brief) !== Boolean(filePath), "Provide a brief or a prompt file.");
+
+  const imageTools = [
+    ["shadow_submit_normal_image", "normal", "a standard image"],
+    ["shadow_submit_hot_image", "nsfw", "a RedCraft image"],
+    ["shadow_submit_anime_image", "anime", "an anime image"],
+  ] as const;
+  for (const [name, profile, label] of imageTools) {
+    server.registerTool(name, {
+      description: `Queue ${label} on the paired server from a brief or an explicitly selected UTF-8 prompt file. Use shadow_wait_job and get_image_result.`,
+      inputSchema: imageInput,
+    }, async ({ requestId = randomUUID(), filePath, brief, ...options }) => {
+      if (filePath) {
+        try {
+          const bytes = await readFile(filePath);
+          if (!bytes.length || bytes.length > 12000) return errorResult(new Error("Image prompt files must contain 1–12,000 bytes."));
+          brief = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+          if (!imageText.safeParse(brief).success) return errorResult(new Error("The selected image prompt file is invalid or empty."));
+        } catch {
+          return errorResult(new Error("Could not read the selected UTF-8 image prompt file."));
+        }
+      }
+      try {
+        const response = await callRelay({
+          version: 1, type: "job.submit", messageId: randomUUID(), requestId,
+          payloadVersion: 1, payload: { operation: "image.generate", params: { ...options, profile, brief } },
+        });
+        if (response.type === "error") return errorResult(new Error(errorMessage(response.error)));
+        return jsonResult({ requestId, response });
+      } catch (error) {
+        return errorResult(new Error(`${errorMessage(error)} Request ID: ${requestId}. Query this ID before submitting again.`));
+      }
+    });
+  }
 
   server.registerTool("get_image_result", {
     description: "Download a published PNG for an authenticated image job and verify its SHA-256 before returning its local path.",
