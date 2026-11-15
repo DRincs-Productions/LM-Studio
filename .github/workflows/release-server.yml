@@ -68,6 +68,7 @@ jobs:
           sparse-checkout: |
             apps/shadow-controller
             skills/narration
+            skills/image-preparation
             skills/expressive-sounds
 
       - if: runner.os == 'Linux'
@@ -84,9 +85,11 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - name: Validate bundled narration worker syntax
+      - name: Validate bundled media worker syntax
         working-directory: apps/shadow-controller
-        run: node --check coordinator/src/narration.mjs
+        run: |
+          node --check coordinator/src/narration.mjs
+          node --check coordinator/src/image.mjs
 
       - name: Install desktop dependencies
         working-directory: apps/shadow-controller
