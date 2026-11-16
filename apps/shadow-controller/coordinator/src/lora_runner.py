@@ -135,6 +135,8 @@ def train(workspace, attempt):
         "backup_before_save": False,
         "sample_after_unit": "NEVER",
         "sample_after": 999999999,
+        "samples_to_tensorboard": False,
+        "non_ema_sampling": False,
         "save_filename_prefix": "shadow-",
         "continue_last_backup": False,
         "rolling_backup": False,
