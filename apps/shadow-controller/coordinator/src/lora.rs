@@ -266,7 +266,7 @@ impl Scheduler {
                     .join("model.safetensors");
                 let (state, detail) = if output.is_file() {
                     ("completed", output.display().to_string())
-                } else if status.code() == Some(75) || attempt.deadline.is_some() {
+                } else if status.code() == Some(75) {
                     (
                         "waiting",
                         format!("Paused. Attempt log: {}", attempt.path.display()),

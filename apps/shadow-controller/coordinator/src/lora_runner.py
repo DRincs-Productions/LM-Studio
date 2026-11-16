@@ -130,9 +130,6 @@ def train(workspace, attempt):
     trainer.train()
     if commands.get_stop_command():
         return 75
-    if pause_file.exists() and trainer.one_step_trained:
-        backup(trainer.model.train_progress)
-        return 75
     trainer.end()
     with safe_open(output, framework="pt") as model:
         if not model.keys():
