@@ -228,7 +228,13 @@ mod tests {
             .lora_request(&root, "uid", "owner", "attach", &key)
             .unwrap();
         assert_eq!(attached["job"]["attached"], true);
-        set_state(&store, key["jobId"].as_str().unwrap(), "running", "Training").unwrap();
+        set_state(
+            &store,
+            key["jobId"].as_str().unwrap(),
+            "running",
+            "Training",
+        )
+        .unwrap();
         assert_eq!(
             store
                 .lora_request(&root, "uid", "owner", "pause", &key)
