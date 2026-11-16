@@ -99,23 +99,24 @@ flowchart TD
     C[Shadow Controller] -->|Brief and available canon| W[Writer]
     W -->|Draft| V[Draft checks]
     V -->|Issues, up to five revisions| W
-    V -->|Draft and check outcomes| E[Final editor through OpenCode]
+    V -->|Draft and check outcomes| E[GPT-6 Luna through OpenCode]
+    E -->|Policy refusal or technical error| F[Venice through OpenCode]
     E -->|Edited scene| C
+    F -->|Edited scene| C
     C -->|Verified scene| O[OneDrive]
     O -->|Verified download through MCP| R[Regia]
 ```
 
 1. Shadow Controller sends the brief and available canon to the Writer.
 2. Hemmingway drafts the scene. Deterministic checks flag issues and can send the draft back for up to five revisions.
-3. Venice edits the latest draft through OpenCode. If the edit fails, Shadow Controller records the error and retains the latest usable draft.
+3. GPT-6 Luna edits the latest draft through OpenCode. Shadow Controller tries Venice once after a policy refusal or technical failure, subject to the free access check. A scene that fails validation does not trigger Venice. If no edit succeeds, Shadow Controller records the error and retains the latest usable draft.
 4. Shadow Controller validates the selected scene, publishes it to OneDrive, and returns the reference and SHA-256 for verified retrieval through MCP.
 
 | Role | Model | Skills |
 |---|---|---|
 | Writer, Shadow and Bionic | Hemmingway 1 Abliterated Extreme | [narration](skills/narration/SKILL.md), [expressive-sounds](skills/expressive-sounds/SKILL.md) for Shadow |
-| Final editor, Shadow default | Venice Uncensored through OpenCode | [narration](skills/narration/SKILL.md), [expressive-sounds](skills/expressive-sounds/SKILL.md), plus the installed scene-craft, revision-continuity and line-editing skills |
-| Final editor, Shadow optional | GPT-6 Luna through OpenCode | [narration](skills/narration/SKILL.md), [expressive-sounds](skills/expressive-sounds/SKILL.md), plus the installed scene-craft, revision-continuity and line-editing skills |
-| Narrative reviewer, Bionic | Google Gemini through OpenCode | [Review criteria](AGENTS.md#narrative-reviewer-google-gemini-through-opencode) from scene-craft, revision-continuity and line-editing |
+| Fallback final editor | Venice Uncensored through OpenCode | [narration](skills/narration/SKILL.md), [expressive-sounds](skills/expressive-sounds/SKILL.md), plus the installed scene-craft, revision-continuity and line-editing skills |
+| Primary final editor | GPT-6 Luna through OpenCode | [narration](skills/narration/SKILL.md), [expressive-sounds](skills/expressive-sounds/SKILL.md), plus the installed scene-craft, revision-continuity and line-editing skills |
 
 Hemmingway was selected after comparing narrative models for prose quality and adherence to the brief. The comparison includes the candidates, test results, and limitations. [Narrative model comparison](docs/CONFRONTO-MODELLI-NARRAZIONE.md)
 
@@ -535,14 +536,14 @@ flowchart LR
     S --> W[Writer]
     W --> G[Deterministic draft checks]
     G -->|Validation issues within five revisions| W
-    G -->|Pass or revision limit| C[Venice final edit through OpenCode]
+    G -->|Pass or revision limit| C[GPT-6 Luna final edit through OpenCode]
     C -->|Valid final edit and stage outcomes| S
     S -->|Publish verified scene| O[OneDrive]
     S -->|JSON result with file reference| A
     O -->|Download and verify via MCP| A
 ```
 
-The default final editor is Venice via OpenCode using `venice/venice-uncensored-1-2`. It receives the brief, available canon, draft and validation outcomes. This mode can use Venice API credits. The Coordinator retains the latest usable draft if the edit fails. The manifest identifies the Writer model in `writer` and the selected final editor in `reviewer` as `opencode`, `venice`, or `none`. Draft checks remain visible in stage diagnostics. A missing canonical text is recorded as a limitation: `projectSha256` identifies the revision but does not itself let the server read or validate project contents. The narration worker selects Hemmingway directly. Configure `SHADOW_LM_API_BASE_URL`, `lms`, OpenCode authenticated with OpenAI and Venice, and `rclone` on the server. The writer instance is unloaded after the full review cycle; cleanup failures appear in the result. The JSON references the English scene on OneDrive only after upload and byte verification. The client uses MCP to download and verify the file before analysis. Asset production is separate. See the client [Shadow Requests skill](apps/shadow-client/skills/shadow-requests/SKILL.md).
+GPT-6 Luna is always the first final editor through OpenCode. It receives the brief, available canon, draft and validation outcomes. A policy refusal or technical failure triggers one Venice fallback through OpenCode, subject to the free access check. An invalid edited scene alone does not trigger fallback. The Coordinator retains the latest usable draft if the edit fails. The manifest identifies the Writer model in `writer` and the selected final editor in `reviewer` as `opencode`, `venice`, or `none`. Draft checks remain visible in stage diagnostics. A missing canonical text is recorded as a limitation: `projectSha256` identifies the revision but does not itself let the server read or validate project contents. The narration worker selects Hemmingway directly. Configure `SHADOW_LM_API_BASE_URL`, `lms`, OpenCode authenticated with OpenAI and Venice, and `rclone` on the server. The writer instance is unloaded after the full review cycle; cleanup failures appear in the result. The JSON references the English scene on OneDrive only after upload and byte verification. The client uses MCP to download and verify the file before analysis. Asset production is separate. See the client [Shadow Requests skill](apps/shadow-client/skills/shadow-requests/SKILL.md).
 
 The fixed client-driven narration test prompts are [normal](test/normal_narration.txt), [hot](test/hot_narration.txt), [cyberpunk](test/cyperpunk_narration.txt), and [three strangers at a bar](test/bar_three_strangers.txt). Codex submits the selected fixtures through Shadow Controller MCP, waits for completion, retrieves the verified OneDrive result, and returns the scene as a file. The exact run, recovery, and read-only server/OneDrive diagnostic procedure is in [AGENTS.md](AGENTS.md#test-workflow).
 

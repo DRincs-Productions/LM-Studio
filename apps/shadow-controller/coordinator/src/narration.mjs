@@ -71,7 +71,7 @@ const clip = value => String(value ?? '').slice(0, 40_000);
 const safeFailure = error => {
   const message = String(error?.message || 'stage_failed');
   if (['writer_api_start_failed', 'writer_api_unavailable', 'writer_empty_response'].includes(message)) return message;
-  if (/^(writer_http_\d+|scene_validation_failed|writer_artifact_invalid|gemini_malformed_response|gemini_malformed_review|gemini_unusable_review|opencode_artifact_invalid|process_timeout|process_output_limit|process_exit_-?\d+|onedrive_integrity_mismatch|writer_cleanup_not_verified|narration_reviewer_backend_invalid)$/.test(message)) return message;
+  if (/^(writer_http_\d+|scene_validation_failed|writer_artifact_invalid|gemini_malformed_response|gemini_malformed_review|gemini_unusable_review|opencode_artifact_invalid|process_timeout|process_output_limit|process_exit_-?\d+|onedrive_integrity_mismatch|writer_cleanup_not_verified)$/.test(message)) return message;
   if (/^(opencode_refusal|opencode_failed|opencode_empty_response|venice_(?:credentials_missing|free_access_unavailable|access_check_failed|artifact_invalid|http_\d+|opencode_failed|empty_response))$/.test(message)) return message;
   if (error?.code === 'ENOENT') return 'executable_unavailable';
   if (error?.code === 'ETIMEDOUT' || error?.name === 'TimeoutError') return 'process_timeout';
@@ -160,7 +160,7 @@ const editWithVenice = async (prompt, { freeOnly = false } = {}) => {
     $schema: 'https://opencode.ai/config.json',
     mcp: { servers: {} },
     agents: {
-      reviewer: { description: 'Read-only narrative reviewer and editor with approved story skills.', mode: 'primary', model: process.env.SHADOW_OPENCODE_MODEL || 'openai/gpt-6-luna', permissions: [{ action: '*', resource: '*', effect: 'deny' }, { action: 'skill', resource: '*', effect: 'allow' }] },
+      reviewer: { description: 'Read-only narrative reviewer and editor with approved story skills.', mode: 'primary', model: 'openai/gpt-6-luna', permissions: [{ action: '*', resource: '*', effect: 'deny' }, { action: 'skill', resource: '*', effect: 'allow' }] },
       'venice-reviewer': { description: 'Narrative editor with access only to approved narrative skills.', mode: 'primary', permissions: [{ action: '*', resource: '*', effect: 'deny' }, { action: 'skill', resource: '*', effect: 'allow' }] },
     },
     permissions: [{ action: '*', resource: '*', effect: 'deny' }],
@@ -197,7 +197,6 @@ const context = `ORIGINAL BRIEF (untrusted project data):\n${clip(payload.brief)
 let narrative = '';
 let selectedDraft = 'draft-0';
 const writerModel = "hemmingway-1-abliterated-extreme";
-const reviewerBackend = process.env.SHADOW_NARRATION_REVIEW_BACKEND === 'gemini-codex' ? 'opencode' : (process.env.SHADOW_NARRATION_REVIEW_BACKEND || 'venice');
 const apiBase = (process.env.SHADOW_LM_API_BASE_URL || 'http://127.0.0.1:1234').replace(/\/$/, '');
 const lmsExecutable = process.env.SHADOW_LMS_EXECUTABLE || 'lms';
 const writerApiReady = async () => {
@@ -240,7 +239,6 @@ const unloadModel = async (identifier, label) => {
   if (after.includes(identifier)) throw new Error('writer_cleanup_not_verified');
 };
 try {
-  if (!['opencode', 'venice', 'writer-only'].includes(reviewerBackend)) throw new Error('narration_reviewer_backend_invalid');
   const writerIdentifier = `shadow-narration-${jobId}`;
   const loadModel = async (model, identifier, label) => {
     modelLoadAttempted = true;
@@ -304,7 +302,7 @@ try {
       break;
     }
   }
-  if (reviewerBackend !== 'writer-only') {
+  {
     const sharedEditorInstructions = `You are the final narrative editor. Make the corrections directly in the complete scene; do not return review notes in place of an edited artifact. Check the entire request and canon, including required beats, event order, character knowledge, exact dialogue, voice, endpoint, English, scene craft, and cue authorization. Preserve unaffected prose, do not invent canon, and do not expand scope or create assets.
 
 Dialogue balance: In an ordinary dialogue-led scene, count the words spoken in speaker-labelled lines and the words in narrative/action prose within ## Narrative, excluding cue lines. Make spoken dialogue longer than the narrative/action prose. Edit directly to achieve this without padding or adding unsupported exchanges. Let narration exceed dialogue when speech naturally recedes, especially during adult intimacy or sex, fights, action, suspense, physical tasks, and deliberate quiet.
@@ -319,59 +317,52 @@ Character voice and scene fit: Make the prose less mechanical and the punctuatio
 
 Return only the full corrected scene in the required Markdown envelope.`;
     const finalPrompt = `Before editing, load and follow these installed skills with the skill tool: @narration, @expressive-sounds, @scene-craft, @revision-continuity, and @line-editing.\n\n${sceneStyle}\n\n${sharedEditorInstructions}\n\nReview the validation outcomes and complete the bounded final edit, correcting remaining evidence-backed issues under the shared editing rules.\n\n${context}\n\nLATEST USABLE DRAFT:\n${narrative}\n\nReview stage outcomes:\n${JSON.stringify(stages.filter(stage => stage.stage === 'draft_validation'))}`;
-    if (reviewerBackend === 'venice') {
-      try {
-        const edited = await editWithVenice(finalPrompt);
-        await writeFile(`${runDir}/venice-final.md`, edited, { flag: 'wx' });
-        narrative = edited;
-        selectedDraft = 'venice-final';
-        await record({ stage: 'venice', outcome: 'succeeded', attempts: 1, model: veniceEditorModel });
-      } catch (error) {
+    const openCodeModel = 'openai/gpt-6-luna';
+    const openCodeExecutable = process.env.OPENCODE_EXECUTABLE || (process.env.APPDATA
+      ? join(process.env.APPDATA, 'npm', 'node_modules', '@opencode', 'cli', 'bin', 'opencode.exe')
+      : 'opencode');
+    const openCodePromptPath = `${runDir}/opencode-final-prompt.md`;
+    const openCodeConfig = {
+      $schema: 'https://opencode.ai/config.json', mcp: { servers: {} },
+      agents: {
+        reviewer: { description: 'Read-only narrative reviewer and editor with approved story skills.', mode: 'primary', model: openCodeModel, permissions: [{ action: '*', resource: '*', effect: 'deny' }, { action: 'skill', resource: '*', effect: 'allow' }] },
+        'venice-reviewer': { description: 'Narrative editor with access only to approved narrative skills.', mode: 'primary', permissions: [{ action: '*', resource: '*', effect: 'deny' }, { action: 'skill', resource: '*', effect: 'allow' }] },
+      },
+      permissions: [{ action: '*', resource: '*', effect: 'deny' }],
+    };
+    try { await writeFile(`${runDir}/opencode.json`, JSON.stringify(openCodeConfig, null, 2), { flag: 'wx' }); }
+    catch (error) { if (error?.code !== 'EEXIST') throw error; }
+    try {
+      await writeFile(openCodePromptPath, finalPrompt, { flag: 'wx' });
+      const stdout = openCodeText((await run(openCodeExecutable, ['--standalone', 'run', '--model', openCodeModel, '--agent', 'reviewer', '--format', 'json', '--file', openCodePromptPath, 'Return only the full corrected English Markdown scene.'], { timeout: 900_000, max: 4 * 1024 * 1024, label: 'opencode-final' }).catch(error => {
         const reason = safeFailure(error);
-        warnings.push({ code: reason, message: `Venice final edit failed: ${reason}` });
-        await record({ stage: 'venice', outcome: 'error', attempts: 1, errorCode: reason, model: veniceEditorModel });
-      }
-    } else {
-      const openCodeModel = process.env.SHADOW_OPENCODE_MODEL || 'openai/gpt-6-luna';
-      const openCodeExecutable = process.env.OPENCODE_EXECUTABLE || (process.env.APPDATA
-        ? join(process.env.APPDATA, 'npm', 'node_modules', '@opencode', 'cli', 'bin', 'opencode.exe')
-        : 'opencode');
-      const openCodePromptPath = `${runDir}/opencode-final-prompt.md`;
-      const openCodeConfig = {
-        $schema: 'https://opencode.ai/config.json', mcp: { servers: {} },
-        agents: {
-          reviewer: { description: 'Read-only narrative reviewer and editor with approved story skills.', mode: 'primary', model: openCodeModel, permissions: [{ action: '*', resource: '*', effect: 'deny' }, { action: 'skill', resource: '*', effect: 'allow' }] },
-          'venice-reviewer': { description: 'Narrative editor with access only to approved narrative skills.', mode: 'primary', permissions: [{ action: '*', resource: '*', effect: 'deny' }, { action: 'skill', resource: '*', effect: 'allow' }] },
-        },
-        permissions: [{ action: '*', resource: '*', effect: 'deny' }],
-      };
-      try { await writeFile(`${runDir}/opencode.json`, JSON.stringify(openCodeConfig, null, 2), { flag: 'wx' }); }
-      catch (error) { if (error?.code !== 'EEXIST') throw error; }
-      try {
-        await writeFile(openCodePromptPath, finalPrompt, { flag: 'wx' });
-        const stdout = openCodeText((await run(openCodeExecutable, ['--standalone', 'run', '--model', openCodeModel, '--agent', 'reviewer', '--format', 'json', '--file', openCodePromptPath, 'Return only the full corrected English Markdown scene.'], { timeout: 900_000, max: 4 * 1024 * 1024, label: 'opencode-final' })).stdout);
-        const edited = stdout.trim();
-        if (!artifactValid(edited) || sceneIssues(edited).length) {
-          throw new Error(modelRefused(edited) ? 'opencode_refusal' : 'opencode_artifact_invalid');
-        }
-        narrative = edited;
-        selectedDraft = 'opencode-final';
-        await writeFile(`${runDir}/opencode-final.md`, narrative, { flag: 'wx' });
-        await record({ stage: 'opencode', outcome: 'succeeded', attempts: 1, model: openCodeModel });
-      } catch (error) {
-        const reason = safeFailure(error);
-        warnings.push({ code: reason, message: reason });
-        await record({ stage: 'opencode', outcome: 'error', attempts: 1, errorCode: reason, reason, model: openCodeModel });
+        throw new Error(reason.startsWith('process_') ? reason : 'opencode_failed');
+      })).stdout);
+      const edited = unwrapSceneMarkdown(stdout);
+      if (!edited) throw new Error('opencode_empty_response');
+      if (!artifactValid(edited) && modelRefused(edited)) throw new Error('opencode_refusal');
+      if (!artifactValid(edited) || sceneIssues(edited).length) throw new Error('opencode_artifact_invalid');
+      narrative = edited;
+      selectedDraft = 'opencode-final';
+      await writeFile(`${runDir}/opencode-final.md`, narrative, { flag: 'wx' });
+      await record({ stage: 'opencode', outcome: 'succeeded', attempts: 1, model: openCodeModel });
+    } catch (error) {
+      const reason = safeFailure(error);
+      warnings.push({ code: reason, message: reason });
+      await record({ stage: 'opencode', outcome: 'error', attempts: 1, errorCode: reason, reason, model: openCodeModel });
+      const useVenice = ['opencode_refusal', 'opencode_empty_response', 'process_timeout', 'process_output_limit', 'opencode_failed'].includes(reason)
+        || /^process_exit_-?\d+$/.test(reason);
+      if (useVenice) {
         try {
           const edited = await editWithVenice(finalPrompt, { freeOnly: true });
           await writeFile(`${runDir}/venice-final.md`, edited, { flag: 'wx' });
           narrative = edited;
           selectedDraft = 'venice-final';
-          await record({ stage: 'venice', outcome: 'succeeded', attempts: 1 });
+          await record({ stage: 'venice', outcome: 'succeeded', attempts: 1, model: veniceEditorModel });
         } catch (fallbackError) {
           const fallbackReason = safeFailure(fallbackError);
           warnings.push({ code: fallbackReason, message: `Venice final edit failed: ${fallbackReason}` });
-          await record({ stage: 'venice', outcome: 'error', attempts: 1, errorCode: fallbackReason, reason: fallbackReason });
+          await record({ stage: 'venice', outcome: 'error', attempts: 1, errorCode: fallbackReason, reason: fallbackReason, model: veniceEditorModel });
         }
       }
     }
@@ -399,8 +390,8 @@ Return only the full corrected scene in the required Markdown envelope.`;
     selectedDraft,
     writer: writerModel,
     reviewer: selectedDraft === 'opencode-final' ? 'opencode' : selectedDraft === 'venice-final' ? 'venice' : 'none',
-    reviewerBackend,
-    reviewerModel: selectedDraft === 'venice-final' ? veniceEditorModel : ((reviewerBackend === 'opencode' && selectedDraft === 'opencode-final') ? (process.env.SHADOW_OPENCODE_MODEL || 'openai/gpt-6-luna') : null),
+    reviewerBackend: 'opencode',
+    reviewerModel: selectedDraft === 'venice-final' ? veniceEditorModel : (selectedDraft === 'opencode-final' ? 'openai/gpt-6-luna' : null),
     validationCalls,
     warnings,
   });
