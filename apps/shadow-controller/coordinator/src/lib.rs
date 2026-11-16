@@ -158,9 +158,9 @@ pub fn valid_image_payload(payload: &serde_json::Value) -> bool {
             color.len() == 7
                 && color.starts_with('#')
                 && color[1..].bytes().all(|byte| byte.is_ascii_hexdigit())
-                && ((u16::from_str_radix(&color[1..3], 16).unwrap_or(0) * 299
-                    + u16::from_str_radix(&color[3..5], 16).unwrap_or(0) * 587
-                    + u16::from_str_radix(&color[5..7], 16).unwrap_or(0) * 114)
+                && ((u32::from_str_radix(&color[1..3], 16).unwrap_or(0) * 299
+                    + u32::from_str_radix(&color[3..5], 16).unwrap_or(0) * 587
+                    + u32::from_str_radix(&color[5..7], 16).unwrap_or(0) * 114)
                     / 1000
                     >= 160)
                 && ![

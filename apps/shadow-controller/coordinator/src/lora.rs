@@ -56,6 +56,19 @@ impl JobStore {
                 if original_name != name {
                     return Err(StoreError::IdempotencyConflict);
                 }
+                let inbox = data
+                    .join("lora-inbox")
+                    .canonicalize()
+                    .map_err(|_| StoreError::InvalidRequest("Server lora-inbox is unavailable"))?;
+                let path = inbox
+                    .join(name)
+                    .canonicalize()
+                    .ok()
+                    .filter(|path| path.parent() == Some(inbox.as_path()) && path.is_file())
+                    .ok_or(StoreError::InvalidRequest(
+                        "OneTrainer export was not found in the server inbox",
+                    ))?;
+                validate_export(&path)?;
                 id
             } else {
                 let inbox = data
@@ -79,13 +92,7 @@ impl JobStore {
                         "OneTrainer export exceeds 1 MiB",
                     ));
                 }
-                let config: Value =
-                    serde_json::from_str(serialized.trim_start_matches('\u{feff}'))?;
-                if config["training_method"] != "LORA" || !config["concepts"].is_array() {
-                    return Err(StoreError::InvalidRequest(
-                        "Export a LoRA configuration with embedded concepts",
-                    ));
-                }
+                let config = validate_export_text(&serialized)?;
                 let id = Uuid::new_v4().to_string();
                 connection.execute(
                     "INSERT INTO lora_jobs(id,uid,client_id,request_id,file_name,config) VALUES (?1,?2,?3,?4,?5,?6)",
@@ -98,7 +105,7 @@ impl JobStore {
         };
         let filter = "WHERE id=?1 AND uid=?2 AND client_id=?3";
         let update = match action {
-            "attach" => Some("attached_at=COALESCE(attached_at,?4)"),
+            "attach" => Some("attached_at=COALESCE(attached_at,?4), paused=0"),
             "detach" => Some("attached_at=NULL"),
             "pause" => Some("paused=1"),
             "start" | "resume" => Some(
@@ -108,7 +115,8 @@ impl JobStore {
             _ => return Err(StoreError::InvalidRequest("Unknown LoRA action")),
         };
         if let Some(update) = update {
-            let mut condition = format!("{filter} AND state!='completed'");
+            let mut condition =
+                format!("{filter} AND state NOT IN ('completed','running','pausing')");
             if matches!(action, "start" | "resume") {
                 condition.push_str(" AND attached_at IS NOT NULL");
             }
@@ -164,6 +172,36 @@ impl JobStore {
     }
 }
 
+fn validate_export(path: &Path) -> Result<(), StoreError> {
+    let mut serialized = String::new();
+    File::open(path)
+        .and_then(|file| file.take(1024 * 1024 + 1).read_to_string(&mut serialized))
+        .map_err(|_| StoreError::InvalidRequest("Cannot read OneTrainer export"))?;
+    if serialized.len() > 1024 * 1024 {
+        return Err(StoreError::InvalidRequest(
+            "OneTrainer export exceeds 1 MiB",
+        ));
+    }
+    validate_export_text(&serialized).map(|_| ())
+}
+
+fn validate_export_text(serialized: &str) -> Result<Value, StoreError> {
+    let config: Value = serde_json::from_str(serialized.trim_start_matches('\u{feff}'))?;
+    if config["training_method"] != "LORA"
+        || !config["concepts"].as_array().is_some_and(|concepts| {
+            !concepts.is_empty()
+                && concepts
+                    .iter()
+                    .any(|concept| concept["enabled"].as_bool() == Some(true))
+        })
+    {
+        return Err(StoreError::InvalidRequest(
+            "Export a LoRA configuration with enabled concepts",
+        ));
+    }
+    Ok(config)
+}
+
 fn uuid_field(message: &Value, field: &str) -> Result<String, StoreError> {
     message[field]
         .as_str()
@@ -192,7 +230,7 @@ mod tests {
         fs::create_dir_all(root.join("lora-inbox")).unwrap();
         fs::write(
             root.join("lora-inbox/test.json"),
-            r#"{"training_method":"LORA","concepts":[]}"#,
+            r#"{"training_method":"LORA","concepts":[{"enabled":true}]}"#,
         )
         .unwrap();
         let store = JobStore::open_in_memory().unwrap();
