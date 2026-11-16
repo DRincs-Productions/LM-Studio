@@ -140,7 +140,6 @@ def train(workspace, attempt):
         "save_filename_prefix": "shadow-",
         "continue_last_backup": False,
         "rolling_backup": False,
-        "backup_before_save": False,
         "tensorboard": False,
         "tensorboard_always_on": False,
         "cloud": {"enabled": False},
@@ -164,7 +163,6 @@ def train(workspace, attempt):
             "continue_last_backup": True,
             "prevent_overwrites": False,
         })
-        args.pop("__version", None)
         (onetrainer_config / "args.json").write_text(json.dumps(args), encoding="utf-8")
         config.continue_last_backup = True
         config.lora_model_name = str(recovery_backup)
