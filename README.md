@@ -163,6 +163,14 @@ OpenCode con GPT-6 Luna definisce il prompt visivo e valuta le immagini generate
 
 Nel confronto componenti senza LoRA del 25 ottobre 2026 (`node project-worker/mcp/orchestration/image-three-krea2-component-test.mjs`), Krea2 Turbo e RedCraft hanno ottenuto entrambi 86/100 senza errori gravi; Krea2 Anime v2.0 ha ottenuto 48/100 con un errore grave per inquadratura troppo stretta e ambiente non privato. Tutti e tre hanno generato PNG 1024×1024 e sono stati revisionati; nessun candidato è stato finalizzato o pubblicato. Il run, i seed, gli hash, i percorsi dei modelli/encoder/VAE e le chiamate MCP sono registrati in `production-tests/components/designer_krea2_20261025090850_2110272945/manifest.json`. Nel test è stato corretto il flag di caricamento `sd-cli` per i checkpoint Krea2 autonomi (`--diffusion-model`) rispetto al checkpoint RedCraft (`-m`).
 
+| Image stage | Model or tool | Skill used |
+|---|---|---|
+| Standard prompt preparation | GPT-6 Luna by default through OpenCode | [image-preparation](skills/image-preparation/SKILL.md) |
+| Adult and anime prompt preparation | Venice Uncensored by default through OpenCode | [image-preparation](skills/image-preparation/SKILL.md) |
+| Image generation | Krea2 Turbo for standard, RedCraft v3.0 for adult non-anime, Krea2 Anime v2.0 for anime | [image-preparation](skills/image-preparation/SKILL.md) supplies the model-specific prompt and settings |
+| Visual review and cutout inspection | GPT-6 Luna for standard, Venice Uncensored by default for adult and anime | [image-cutout-review](skills/image-cutout-review/SKILL.md) for transparency |
+| Background removal and local repair | Rembg, then PhotoCraft for confirmed residue | [image-cutout-review](skills/image-cutout-review/SKILL.md) supplies the repair regions through the review verdict |
+
 ### Progettista sonoro
 
 ```mermaid
@@ -554,7 +562,7 @@ For the fixed narration tests, Codex sends [normal](test/normal_narration.txt) a
 
 ### Remote image generation
 
-The client submits a visual brief and output options through Shadow Controller. The Coordinator uses the server image preparation skill to draft the prompt, infer the output size and whether the brief calls for a transparent cutout, choose a uniform cutout background color, select compatible adapters and validate generation settings. White is preferred; the planner can choose a pale low-saturation alternative to contrast with light clothing or props, and includes that color in the generation prompt. The Coordinator runs Image Worker, checks the result and publishes the approved PNG. The client downloads and verifies the delivered file.
+The client submits a visual brief and output options through Shadow Controller. The Coordinator uses the server image preparation skill to draft the prompt, infer the output size and whether the brief calls for a transparent cutout, choose a uniform cutout background color, select compatible adapters and validate generation settings. White is preferred; the planner can choose a pale low-saturation alternative to contrast with light clothing or props, and includes that color in the generation prompt. The Coordinator runs Image Worker and checks the result before publishing the approved PNG. For transparent cutouts, the visual reviewer inspects the silhouette and gaps using a checkerboard preview and enlarged views of suspect regions. PhotoCraft clears confirmed remnants in up to two passes, with a new visual review after each pass. The client downloads and verifies the delivered file.
 
 ```mermaid
 flowchart LR

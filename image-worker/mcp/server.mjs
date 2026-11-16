@@ -603,10 +603,17 @@ PATH: ${resolved}`
     // OpenCode review prompt
     // ---------------------------------------------
 
+    const cutoutReviewGuide = inspect_alpha
+      ? await fs.readFile(new URL("../../skills/image-cutout-review/SKILL.md", import.meta.url), "utf8")
+      : "";
     const reviewPrompt =
 `You are a strict but practical image-quality reviewer.
 
-Inspect ONLY the attached image.
+Inspect the attached image and any attached evidence.
+${cutoutReviewGuide ? `
+Cutout review guidance:
+${cutoutReviewGuide}
+` : ""}
 
 Do not modify files.
 Do not run shell commands.
@@ -664,7 +671,7 @@ FACES: <0-100, use 100 when no face is present>
 MAJOR_ERROR: <YES or NO>
 RETRY_HINT: <one short actionable sentence, or NONE>${inspect_alpha ? `
 
-The attached checkerboard represents transparency. Inspect internal holes (handles, gaps between limbs and props), background-colored islands and halos. Identify only remaining original background. Never select a subject, its outlines or shadows integral to the subject.
+The attached checkerboard represents transparency. Inspect all four outer edges, the full silhouette, internal holes (handles and gaps between limbs and props), background-colored islands, and faint semitransparent color fringes. Compare the candidate regions with nearby foreground before judging them. Residue remains a defect even if the rest of the cutout looks clean. Identify only remaining original background. Never select a subject, its outlines or shadows integral to the subject.
 ${evidencePath ? 'A second attachment contains enlarged candidate areas labeled with boxes in full-image coordinates. Inspect these details, and trace any confirmed residue in coordinates of the first image.' : ''}
 Add a seventh line BACKGROUND_RESIDUE: followed by a JSON array of up to 4 tightly traced polygons, each an array of [x,y] points normalized to integer coordinates 0..1000 over the entire image, top-left origin. Use [] only when no original background remains. Use UNKNOWN if you see residue but cannot locate it precisely. Do not inpaint.` : ''}`;
 

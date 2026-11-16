@@ -16,18 +16,18 @@ def main(source, output, preview, model):
         cutout = remove(image.convert("RGB"), session=session)
         if cutout.mode != "RGBA" or cutout.size != image.size:
             raise ValueError("Background removal returned unexpected image metadata")
-        if model == "isnet-anime":
-            rgb = np.asarray(image.convert("RGB"), dtype=np.uint8)
-            alpha = np.asarray(cutout.getchannel("A"), dtype=np.uint8)
-            background = rgb[0, 0].astype(np.int16)
-            border = np.concatenate((rgb[0], rgb[-1], rgb[:, 0], rgb[:, -1])).astype(np.int16)
-            flat_background = np.mean(np.max(np.abs(border - background), axis=1) <= 8) >= 0.85
-            if flat_background:
-                distance = np.max(np.abs(rgb.astype(np.int16) - background), axis=2)
-                # Clear only near-exact pixels of the generated flat backdrop,
-                # preserving the antialiased subject boundary.
-                alpha[distance <= 8] = 0
-                cutout.putalpha(Image.fromarray(alpha, mode="L"))
+        rgb = np.asarray(image.convert("RGB"), dtype=np.int16)
+        background, coverage = border_background(rgb)
+        if coverage >= 0.85:
+            distance = np.max(np.abs(rgb - background), axis=2)
+            alpha = np.array(cutout.getchannel("A"), copy=True)
+            flat = distance <= 8
+            seeds = np.zeros_like(flat)
+            seeds[0], seeds[-1] = flat[0], flat[-1]
+            seeds[:, 0], seeds[:, -1] = flat[:, 0], flat[:, -1]
+            exterior = ndimage.binary_propagation(seeds, mask=flat)
+            alpha[exterior] = 0
+            cutout.putalpha(Image.fromarray(alpha))
 
     with Path(output).open("xb") as file:
         cutout.save(file, format="PNG")
@@ -55,23 +55,28 @@ def make_preview(cutout, preview):
         checker.convert("RGB").save(file, format="PNG")
 
 
+def border_background(rgb):
+    border = np.concatenate((rgb[0], rgb[-1], rgb[:, 0], rgb[:, -1]))
+    color = np.median(border, axis=0)
+    return color, np.mean(np.max(np.abs(border - color), axis=1) <= 24)
+
+
 def background_candidates(source, cutout):
     with Image.open(source) as image:
         rgb = np.asarray(image.convert("RGB"), dtype=np.int16)
     with Image.open(cutout) as image:
         alpha = np.asarray(image.getchannel("A"))
-    border = np.concatenate((rgb[0], rgb[-1], rgb[:, 0], rgb[:, -1]))
-    color = np.median(border, axis=0)
-    if np.mean(np.max(np.abs(border - color), axis=1) <= 24) < 0.6:
+    color, coverage = border_background(rgb)
+    if coverage < 0.6:
         return []
-    same_color = np.max(np.abs(rgb - color), axis=2) <= 16
-    labels, _ = ndimage.label(same_color & (alpha >= 128))
+    same_color = np.max(np.abs(rgb - color), axis=2) <= 24
+    labels, _ = ndimage.label(same_color & (alpha >= 24), structure=np.ones((3, 3)))
     counts = np.bincount(labels.ravel())
     height, width = alpha.shape
     regions = []
     objects = ndimage.find_objects(labels)
     for label in np.argsort(counts[1:])[::-1][:8] + 1:
-        if counts[label] < 16:
+        if counts[label] < 8:
             break
         y, x = objects[label - 1]
         regions.append([round(x.start * 1000 / width), round(y.start * 1000 / height),

@@ -87,9 +87,12 @@ async function prepareImage(checkpoint, catalog) {
   const draft = JSON.parse(response);
   const validPrompt = text => typeof text === 'string' && text.trim() && Buffer.byteLength(text) <= 12000
     && !text.includes('\0') && !/<\s*lora\s*:/i.test(text);
-  const validBackground = color => /^#[0-9a-f]{6}$/i.test(color)
-    && !['#000000', '#ff0000', '#ff4500', '#ff6600', '#ff8000', '#ffa500', '#00ff00', '#00ffff', '#ff00ff'].includes(color.toLowerCase())
-    && (Number.parseInt(color.slice(1, 3), 16) * 299 + Number.parseInt(color.slice(3, 5), 16) * 587 + Number.parseInt(color.slice(5, 7), 16) * 114) / 1000 >= 160;
+  const validBackground = color => {
+    if (!/^#[0-9a-f]{6}$/i.test(color)) return false;
+    const [red, green, blue] = color.slice(1).match(/../g).map(channel => Number.parseInt(channel, 16));
+    return (red * 299 + green * 587 + blue * 114) / 1000 >= 160
+      && Math.max(red, green, blue) - Math.min(red, green, blue) <= 48;
+  };
   const negativePrompt = draft?.negativePrompt === '' || draft?.negativePrompt === null ? undefined : draft?.negativePrompt;
   const validDimension = value => Number.isInteger(value) && value >= 512 && value <= 2048 && value % 8 === 0;
   if (!validDimension(draft?.width) || !validDimension(draft?.height)
@@ -221,7 +224,7 @@ try {
       const { stdout } = await command(process.env.SHADOW_IMAGE_PYTHON || 'python',
         [path.join(path.dirname(worker), 'transparent.py'), '--evidence', source, candidatePath, imagePath, details], 30_000);
       if (JSON.parse(stdout.toString()).length) evidencePath = details;
-      evidence = `\nInspect these candidate boxes [left,top,right,bottom] in normalized 0..1000 coordinates: ${stdout.toString().trim()}. They contain opaque pixels resembling the original background color. Use the image to distinguish residue from the foreground.`;
+      evidence = `\nInspect these candidate boxes [left,top,right,bottom] in normalized 0..1000 coordinates: ${stdout.toString().trim()}. They contain visible pixels, including partially transparent pixels, resembling the sampled original background color. Use the image to distinguish residue from the foreground.`;
     }
     const review = await call('review_with_opencode', {
       image_path: imagePath, original_request: `Original visual brief:\n${brief ?? legacyPrompt}\n\nPrepared prompt:\n${prompt}\n\nEffective generation prompt:\n${effectivePrompt}\n\nGeneration settings:\n${JSON.stringify({ ...generationSettings, loraApplication: manifest.loraApplication })}${evidence}`, inspect_alpha: transparent, evidence_path: evidencePath,
@@ -243,10 +246,11 @@ try {
   };
   let verdict = await inspect(preview, 'review_with_opencode', final);
   let delivery = final;
-  if (verdict.residue.length) {
+  for (let pass = 1; pass <= 2 && verdict.residue.length; pass++) {
     stage = 'background_repair';
     const executable = process.env.SHADOW_PHOTOCRAFT_EXECUTABLE;
     if (!executable) throw new Error('PhotoCraft is not configured for background repair');
+    const repaired = path.join(runDir, `image-repaired-${pass}.png`);
     const editor = new Client({ name: 'shadow-alpha-repair', version: '1.0.0' });
     try {
       await editor.connect(new StdioClientTransport({
@@ -260,24 +264,25 @@ try {
         await writeFile(path.join(runDir, 'photocraft-repair.jsonl'), JSON.stringify({ name, args, result }) + '\n', { flag: 'a' });
         if (result.isError) throw new Error(`PhotoCraft failed ${name}`);
       };
-      await edit('doc_open', { path: 'image.png' });
+      await edit('doc_open', { path: path.basename(delivery) });
       for (const polygon of verdict.residue) {
         const points = polygon.map(([x, y]) => [Math.round(x * (width - 1) / 1000), Math.round(y * (height - 1) / 1000)]);
         await edit('command_run', { id: 'select.lasso', params: { points } });
         await edit('command_run', { id: 'edit.clear', params: {} });
       }
-      await edit('doc_export', { path: 'image-repaired.png' });
+      await edit('doc_export', { path: path.basename(repaired) });
     } finally {
       await editor.close();
     }
-    delivery = path.join(runDir, 'image-repaired.png');
-    preview = path.join(runDir, 'review-repaired.png');
+    delivery = repaired;
+    verifyPng(await readFile(delivery), width, height);
+    preview = path.join(runDir, `review-repaired-${pass}.png`);
     await command(process.env.SHADOW_IMAGE_PYTHON || 'python',
       [path.join(path.dirname(worker), 'transparent.py'), '--preview', delivery, preview], 300_000);
-    manifest.stages.push({ stage, outcome: 'edited', editor: 'PhotoCraft', regions: verdict.residue });
+    manifest.stages.push({ stage, outcome: 'edited', editor: 'PhotoCraft', pass, regions: verdict.residue });
     await save();
     stage = 'review';
-    verdict = await inspect(preview, 'review_repaired', delivery);
+    verdict = await inspect(preview, `review_repaired_${pass}`, delivery);
   }
   manifest.review = verdict;
   const accepted = verdict.score >= 80 && !verdict.majorError && verdict.residue.length === 0;
