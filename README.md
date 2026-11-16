@@ -92,48 +92,32 @@ flowchart LR
 
 ### Scrittore
 
-The paired server Coordinator claims queued jobs and dispatches `codex.execute` through OpenCode with `openai/gpt-6-luna`, or `narrative.generate` to the narration pipeline. A narration run writes stage evidence and a result manifest in its owned directory, publishes the selected English scene to the configured `imagecloud:` OneDrive remote, and verifies the remote bytes before completing. The authenticated relay returns the file reference and SHA-256; the client MCP downloads and verifies it before the client analyses it. See [Server narration handoff](handoffs/08-server-narration.md).
-
-```mermaid
-flowchart LR
-    A[Codex client] --> B[Paired server queue]
-    B --> C[Writer + configured review and editing]
-    C --> D[Saved run evidence and result manifest]
-    D --> E[OneDrive via rclone · verified SHA-256]
-    E --> B
-    B -->|path, hash and stage outcomes| A
-    A -->|MCP download + hash check| E
-```
+The Writer turns the approved brief and available canon into an English scene with dialogue and any authorized Narrative Cue Format (NCF) cues. Shadow Controller checks the draft, coordinates the final edit, and delivers the scene to Regia.
 
 ```mermaid
 flowchart TD
-    C[Shadow Controller]
-    subgraph SCRITTORE[Scrittore]
-        W[Hemmingway]
-        G[Deterministic draft checks]
-        X[Venice final edit through OpenCode]
-        W -->|review request| G
-        G -->|Validation issues · up to 5 revisions| W
-        G -->|Pass or revision limit| X
-    end
-    C -->|richiesta originale e canon disponibile| W
-    X -->|Valid final edit| C
+    C[Shadow Controller] -->|Brief and available canon| W[Writer]
+    W -->|Draft| V[Draft checks]
+    V -->|Issues, up to five revisions| W
+    V -->|Draft and check outcomes| E[Final editor through OpenCode]
+    E -->|Edited scene| C
+    C -->|Verified scene| O[OneDrive]
+    O -->|Verified download through MCP| R[Regia]
 ```
 
-The diagram above describes the remote Shadow narration path. It passes the submitted brief and any supplied canon directly to the Writer; this path does not create an OpenCode plan or SceneContract before drafting.
+1. Shadow Controller sends the brief and available canon to the Writer.
+2. Hemmingway drafts the scene. Deterministic checks flag issues and can send the draft back for up to five revisions.
+3. Venice edits the latest draft through OpenCode. If the edit fails, Shadow Controller records the error and retains the latest usable draft.
+4. Shadow Controller validates the selected scene, publishes it to OneDrive, and returns the reference and SHA-256 for verified retrieval through MCP.
 
-The remote Shadow narration path passes the original brief and any supplied canon directly to its configured Writer, which returns an English draft and optional NCF cues. It does not create an OpenCode plan or SceneContract before drafting. The Bionic production workflow keeps its own Project File and scene planning gates. The operational Bionic Writer remains **Hemmingway 1 Abliterated Extreme**. **MS3.2 PaintedFantasy v4.1 24B Q4_K_M** and **Dark Champion 30B A3B Heretic Q3_K_S** have isolated evaluation profiles; Skyfall 36B v2 Q4_K_M was removed after its historical evaluation. Dark Champion completed its three standalone component cases but failed key canon, scene-control and endpoint constraints; its hot draft and revision and violent revision reached the output cap with repetition. Hemmingway's latest standalone component cases all completed with revisions; they showed coherent prose but still missed some canon, consent, and endpoint requirements. Neither candidate is promoted. BlueStar was removed after its paired evaluation; historical results remain in the [BlueStar–Hemmingway report](production-tests/WRITER-BLUESTAR-HEMMINGWAY-PAIRED-2026-10-26.md). The [Skyfall–Hemmingway comparison](production-tests/WRITER-SKYFALL-HEMMINGWAY-PAIRED-2026-10-26.md) records the historical matched results. [Dark Champion's standalone evaluation](production-tests/WRITER-DARK-CHAMPION-30B-A3B-HERETIC-2026-10-27.md) and [Hemmingway's latest component evaluation](production-tests/WRITER-HEMMINGWAY-COMPONENT-2026-10-27.md) record the recent runs.
+| Role | Model | Skills |
+|---|---|---|
+| Writer, Shadow and Bionic | Hemmingway 1 Abliterated Extreme | [narration](skills/narration/SKILL.md), [expressive-sounds](skills/expressive-sounds/SKILL.md) for Shadow |
+| Final editor, Shadow default | Venice Uncensored through OpenCode | [narration](skills/narration/SKILL.md), [expressive-sounds](skills/expressive-sounds/SKILL.md), plus the installed scene-craft, revision-continuity and line-editing skills |
+| Final editor, Shadow optional | GPT-6 Luna through OpenCode | [narration](skills/narration/SKILL.md), [expressive-sounds](skills/expressive-sounds/SKILL.md), plus the installed scene-craft, revision-continuity and line-editing skills |
+| Narrative reviewer, Bionic | Google Gemini through OpenCode | [Review criteria](AGENTS.md#narrative-reviewer-google-gemini-through-opencode) from scene-craft, revision-continuity and line-editing |
 
-The matched 5 November NCF comparison selected Hemmingway as the Writer: it had stronger prose overall and won the Gemini-reviewed matched scene (prose 4/5, constraints 3/5 versus Magidonia 3/5 and 2/5). The Bionic profiles for Magidonia and the local Qwen3 8B Narrative Reviewer have been removed; their GGUF files are still present in the LM Studio catalog because the environment rejected their terminal deletion. Gemory 26B-A4B Q4_K_M completed its three isolated Writer cases at about 26–30 tokens/s, but endpoint and fidelity failures mean it is not promoted. See the [narrative model comparison](docs/CONFRONTO-MODELLI-NARRAZIONE.md), [Gemini-reviewed comparison](docs/WRITER-GEMINI-REVIEWED-COMPARISON-2026-11-05.md), and [Gemory evaluation report](production-tests/WRITER-GEMORY-26B-A4B-Q4_K_M-2026-11-05.md).
-
-The installable [narration skill](skills/narration/SKILL.md) defines the scene artifact and Narrative Cue Format (NCF), combining Story Skills' medium-specific craft conventions with project cues for visual, audio, and animated assets. Its default is dialogue-led prose: spoken words should usually exceed narrative/action prose in the Narrative section, with exceptions for adult intimacy, sex, fights, action, suspense, physical tasks, and deliberate quiet. Every spoken turn uses a visual-novel speaker label (`**Name:**` or `**Name (Mood or State):**`) before the quote; when the brief establishes a relevant ongoing or line-specific state, the parenthetical is required, and ongoing states repeat on each line until they change. Shouted words are uppercase. The Writer follows these rules while drafting, and OpenCode GPT-6 Luna/Venice enforce them during final editing. Long narrator passages may be redistributed among concise voiceover, optional visual direction, and/or a brief summary with a written sound. The companion [expressive-sounds skill](skills/expressive-sounds/SKILL.md) guides onomatopoeia and vocalizations and is bundled into the Shadow Writer prompt; adult erotic and sparse-dialogue action scenes should use several varied written sound forms, not breathing description alone. OpenCode GPT-6 Luna and Venice share the same final editing prompt and must directly correct dialogue format, state labels for established conditions, capitalization of explicit shouts, dialogue balance, long narration, dialogue quality, and missing contextual sounds. Both the Bionic Hemmingway profile and Shadow server prompt require English prose and dialogue, translating non-English briefs while preserving proper names. Bionic's model-specific Writer system prompts embed the applicable NCF and sound rules because local inference models cannot read agent skill files directly. The existing image pipeline consumes `> Visual:`. Inline music, SFX, and animation execution still requires worker/runtime integration; their documented syntax is not evidence that an asset was produced.
-
-The remote Shadow workflow runs the Writer, deterministic draft checks, and a final edit through Venice via OpenCode. Validation issues go back to the Writer for up to five revisions. If Venice fails or returns an invalid scene, the Coordinator records the error and retains the latest usable draft. Writer-only mode skips the final edit. The separate Bionic workflow continues to use Gemini through OpenCode.
-
-
-The reduced-refusal Qwen3.5 9B Abliterated Q4_K_M candidate and the formerly configured Qwen3 8B local Reviewer completed historical evaluations and were removed. In the historical matched comparison, Qwen3 8B detected 6/6 seeded defects while Abliterated detected 2/6, added a false-positive consent finding, and fabricated evidence in the violent case. These local-model evaluations are retained as historical evidence; the Bionic Narrative Reviewer now uses Google Gemini through OpenCode. [Historical matched comparison](production-tests/REVIEWER-COMPARISON-QWEN3-8B-QWEN35-9B-ABLITERATED-2026-10-27.md) and [candidate evaluation](production-tests/REVIEWER-QWEN35-9B-ABLITERATED-2026-10-27.md).
-
-Il confronto dei test Writer isolati è in [Confronto dei modelli di narrazione](docs/CONFRONTO-MODELLI-NARRAZIONE.md); il [rapporto storico dei test narrativi completi](docs/CONFRONTO-MODELLI-DI-NARRAZIONE.md) conserva i campioni e i risultati precedenti.
+Hemmingway was selected after comparing narrative models for prose quality and adherence to the brief. The comparison includes the candidates, test results, and limitations. [Narrative model comparison](docs/CONFRONTO-MODELLI-NARRAZIONE.md)
 
 ### Disegnatore
 
@@ -527,7 +511,7 @@ flowchart LR
 
 Confronto controllato Hemmingway–PaintedFantasy del 25 ottobre 2026: entrambi hanno completato i tre cicli isolati (normale, hot, cruento), ma nessuno ha superato tutte le categorie. Hemmingway resta il preferito con confidenza bassa: è stato più aderente nel caso cruento e ha chiuso meglio la scena hot, ma ha comunque violato canon o endpoint in ogni caso e non ha applicato tutte le revisioni. PaintedFantasy ha seguito meglio la richiesta di consenso verbale nel caso hot, ma ha aggiunto contenuto dopo gli endpoint e una seconda ferita nel caso cruento. Nessuno ha passato interamente un caso; per ora non sostituiamo il Writer predefinito. Rapporto e link ai sei run con valutazioni individuali: [Confronto Writer](production-tests/WRITER-COMPARISON-2026-10-25.md). Il runner ora limita solo il prompt registrato via MCP e conserva quello completo negli artefatti locali, per rispettare il limite di dimensione del tool.
 
-Confronto abbinato BlueStar–Hemmingway del 26 ottobre 2026: sei run isolati completati sugli stessi tre fixture normali, hot e violenti. BlueStar ha impiegato meno tempo nei casi normale e hot, ma ha mancato del tutto il brief erotico e ha introdotto varie deviazioni nel caso violento. Hemmingway ha prodotto prosa più sviluppata, ma ha violato vincoli chiave in tutti i casi: continuità dell’oggetto e doppio endpoint nel normale, un passaggio di consenso non rispettato nel hot, dettagli inventati e prosecuzione dopo l’handoff nel violento. Nessuno dei due ha rispettato integralmente i brief o applicato tutte le revisioni simulate; Hemmingway resta il Writer operativo e BlueStar è stato rimosso. Tempi, punteggi, fixture, output e manifest: [Confronto BlueStar–Hemmingway](production-tests/WRITER-BLUESTAR-HEMMINGWAY-PAIRED-2026-10-26.md). I run con lingua errata, brief non abbinato, stream caduto o seconda istanza caricata sono conservati ma esclusi dalla valutazione.
+Confronto abbinato BlueStar–Hemmingway del 26 ottobre 2026: sei run isolati completati sugli stessi tre fixture normali, hot e violenti. BlueStar ha impiegato meno tempo nei casi normale e hot, ma ha mancato del tutto il brief erotico e ha introdotto varie deviazioni nel caso violento. Hemmingway ha prodotto prosa più sviluppata, ma ha violato vincoli chiave in tutti i casi: continuità dell’oggetto e doppio endpoint nel normale, un passaggio di consenso non rispettato nel hot, dettagli inventati e prosecuzione dopo l’handoff nel violento. Nessuno dei due ha rispettato integralmente i brief o applicato tutte le revisioni simulate; Hemmingway resta il Writer operativo e BlueStar è stato rimosso. Tempi, punteggi, fixture, output e manifest: [Confronto dei modelli di narrazione](docs/CONFRONTO-MODELLI-NARRAZIONE.md). I run con lingua errata, brief non abbinato, stream caduto o seconda istanza caricata sono conservati ma esclusi dalla valutazione.
 
 Confronto controllato Hemmingway–Cydonia 24B v4.3 del 25 ottobre 2026: entrambi i modelli hanno completato tre cicli Writer isolati con la stessa traccia entro ciascuna coppia (normale, hot, cruento); ogni caso ha premise e canone distinti, Project File, seed e directory autonomi. Nessuno dei due ha superato tutti i vincoli. Cydonia ha seguito meglio la correzione del dettaglio della radio nel caso normale e ha esplicitato il consenso nel caso hot, ma ha introdotto cronologia incoerente nel normale, anello rimosso dopo l'inizio del contatto nel draft hot e duplicazioni/invenzioni nel cruento. Hemmingway ha mantenuto una prosa più coerente nel cruento e il finale hot richiesto, ma nel normale ha oltrepassato il punto finale e nel cruento ha inventato dettagli; la revisione simulata ha anche spostato ulteriormente l'endpoint in alcuni casi. Nessuna base sufficiente per cambiare il Writer predefinito: Hemmingway resta operativo, Cydonia è un'alternativa da rivalutare con un prompt di revisione meno destabilizzante. Il runner accetta `--writer-brief-file` per applicare lo stesso brief in una coppia comparativa. Metodo, comandi e valutazioni per run: [Confronto Hemmingway–Cydonia](production-tests/WRITER-COMPARISON-CYDONIA-HEMMINGWAY-2026-10-25.md).
 
@@ -558,7 +542,7 @@ flowchart LR
     O -->|Download and verify via MCP| A
 ```
 
-The default final editor is Venice via OpenCode using `venice/venice-uncensored-1-2`. It receives the brief, available canon, draft and validation outcomes. This mode can use Venice API credits. The Coordinator retains the latest usable draft if the edit fails. The manifest identifies the Writer model in `writer` and the selected final editor in `reviewer` as `opencode`, `venice`, or `none`. Draft checks remain visible in stage diagnostics. A missing canonical text is recorded as a limitation: `projectSha256` identifies the revision but does not itself let the server read or validate project contents. The narration worker selects Hemmingway directly. Configure `SHADOW_LM_API_BASE_URL`, `lms`, OpenCode authenticated with OpenAI and Venice, and `rclone` on the server. The writer instance is unloaded after the full review cycle; cleanup failures appear in the result. The JSON references the English scene on OneDrive only after upload and byte verification. The client uses MCP to download and verify the file before analysis. Asset production is separate. See [Handoff 08](handoffs/08-server-narration.md) and the client [Shadow Requests skill](apps/shadow-client/skills/shadow-requests/SKILL.md).
+The default final editor is Venice via OpenCode using `venice/venice-uncensored-1-2`. It receives the brief, available canon, draft and validation outcomes. This mode can use Venice API credits. The Coordinator retains the latest usable draft if the edit fails. The manifest identifies the Writer model in `writer` and the selected final editor in `reviewer` as `opencode`, `venice`, or `none`. Draft checks remain visible in stage diagnostics. A missing canonical text is recorded as a limitation: `projectSha256` identifies the revision but does not itself let the server read or validate project contents. The narration worker selects Hemmingway directly. Configure `SHADOW_LM_API_BASE_URL`, `lms`, OpenCode authenticated with OpenAI and Venice, and `rclone` on the server. The writer instance is unloaded after the full review cycle; cleanup failures appear in the result. The JSON references the English scene on OneDrive only after upload and byte verification. The client uses MCP to download and verify the file before analysis. Asset production is separate. See the client [Shadow Requests skill](apps/shadow-client/skills/shadow-requests/SKILL.md).
 
 The fixed client-driven narration test prompts are [normal](test/normal_narration.txt), [hot](test/hot_narration.txt), [cyberpunk](test/cyperpunk_narration.txt), and [three strangers at a bar](test/bar_three_strangers.txt). Codex submits the selected fixtures through Shadow Controller MCP, waits for completion, retrieves the verified OneDrive result, and returns the scene as a file. The exact run, recovery, and read-only server/OneDrive diagnostic procedure is in [AGENTS.md](AGENTS.md#test-workflow).
 
