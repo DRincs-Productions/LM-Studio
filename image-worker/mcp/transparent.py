@@ -12,9 +12,22 @@ from rembg import new_session, remove
 
 def main(source, output, preview, model):
     with Image.open(source) as image:
-        cutout = remove(image.convert("RGB"), session=new_session(model))
+        session = new_session(model)
+        cutout = remove(image.convert("RGB"), session=session)
         if cutout.mode != "RGBA" or cutout.size != image.size:
             raise ValueError("Background removal returned unexpected image metadata")
+        if model == "isnet-anime":
+            rgb = np.asarray(image.convert("RGB"), dtype=np.uint8)
+            alpha = np.asarray(cutout.getchannel("A"), dtype=np.uint8)
+            background = rgb[0, 0].astype(np.int16)
+            border = np.concatenate((rgb[0], rgb[-1], rgb[:, 0], rgb[:, -1])).astype(np.int16)
+            flat_background = np.mean(np.max(np.abs(border - background), axis=1) <= 8) >= 0.85
+            if flat_background:
+                distance = np.max(np.abs(rgb.astype(np.int16) - background), axis=2)
+                # Clear only near-exact pixels of the generated flat backdrop,
+                # preserving the antialiased subject boundary.
+                alpha[distance <= 8] = 0
+                cutout.putalpha(Image.fromarray(alpha, mode="L"))
 
     with Path(output).open("xb") as file:
         cutout.save(file, format="PNG")

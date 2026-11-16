@@ -47,6 +47,7 @@ async function prepareImage(checkpoint, catalog) {
     checkpoint: route.id, minSteps, maxSteps,
     dimensions: { min: 512, max: 2048, multipleOf: 8 },
     defaults: { width: 1920, height: 1080, steps: checkpoint.steps, cfgScale: checkpoint.cfgScale },
+    transparentBackground: { defaultColor: '#FFFFFF', allowedStyle: 'white or pale low-saturation neutral/pastel selected to contrast with the subject; never black or vivid/saturated', promptMustNameExactColor: true },
     sampler: 'euler', scheduler: 'simple', readyLoras: catalog,
   };
   const request = {
@@ -86,10 +87,15 @@ async function prepareImage(checkpoint, catalog) {
   const draft = JSON.parse(response);
   const validPrompt = text => typeof text === 'string' && text.trim() && Buffer.byteLength(text) <= 12000
     && !text.includes('\0') && !/<\s*lora\s*:/i.test(text);
+  const validBackground = color => /^#[0-9a-f]{6}$/i.test(color)
+    && !['#000000', '#ff0000', '#ff4500', '#ff6600', '#ff8000', '#ffa500', '#00ff00', '#00ffff', '#ff00ff'].includes(color.toLowerCase())
+    && (Number.parseInt(color.slice(1, 3), 16) * 299 + Number.parseInt(color.slice(3, 5), 16) * 587 + Number.parseInt(color.slice(5, 7), 16) * 114) / 1000 >= 160;
   const negativePrompt = draft?.negativePrompt === '' || draft?.negativePrompt === null ? undefined : draft?.negativePrompt;
   const validDimension = value => Number.isInteger(value) && value >= 512 && value <= 2048 && value % 8 === 0;
   if (!validDimension(draft?.width) || !validDimension(draft?.height)
       || !['standard', 'transparent'].includes(draft?.mode) || !validPrompt(draft?.prompt) || (negativePrompt !== undefined && !validPrompt(negativePrompt))
+      || (draft.mode === 'transparent' && (typeof draft.backgroundColor !== 'string' || !validBackground(draft.backgroundColor)))
+      || (draft.mode === 'standard' && draft.backgroundColor !== null && draft.backgroundColor !== undefined)
       || !Number.isInteger(draft.steps) || draft.steps < minSteps || draft.steps > maxSteps
       || draft.cfgScale !== checkpoint.cfgScale || !Array.isArray(draft.loras) || draft.loras.length > 4) {
     throw new Error('Image planner returned unsupported prompts or sampling settings');
@@ -103,7 +109,7 @@ async function prepareImage(checkpoint, catalog) {
     return { id: adapter.id, weight };
   });
   if (new Set(loras.map(item => item.id)).size !== loras.length) throw new Error('Image planner returned duplicate LoRAs');
-  return { mode: draft.mode, width: draft.width, height: draft.height, prompt: draft.prompt.trim(), negativePrompt, steps: draft.steps, cfgScale: draft.cfgScale, loras };
+  return { mode: draft.mode, backgroundColor: draft.backgroundColor, width: draft.width, height: draft.height, prompt: draft.prompt.trim(), negativePrompt, steps: draft.steps, cfgScale: draft.cfgScale, loras };
 }
 
 async function call(name, args, timeout, logName = name) {
@@ -157,8 +163,8 @@ try {
     item.available && item.validationStatus === 'ready' && item.profiles.includes(route.id))
     .map(([id, { minWeight, maxWeight, effect, preferredWeight, trigger }]) =>
       ({ id, minWeight, maxWeight, effect, preferredWeight, trigger }));
-  const { mode, width, height, prompt, negativePrompt, steps, cfgScale, loras } = await prepareImage(checkpoint, catalog);
-  Object.assign(manifest, { mode, width, height, steps, cfgScale, loras, loraPaths: loras.map(({ id }) => registered[id].path) });
+  const { mode, backgroundColor, width, height, prompt, negativePrompt, steps, cfgScale, loras } = await prepareImage(checkpoint, catalog);
+  Object.assign(manifest, { mode, backgroundColor, width, height, steps, cfgScale, loras, loraPaths: loras.map(({ id }) => registered[id].path) });
   manifest.stages.push({ stage, outcome: 'verified', model: planner });
   await save();
 
@@ -168,16 +174,17 @@ try {
   const source = path.join(runDir, sourceName);
   const final = path.join(runDir, 'image.png');
   const effectivePrompt = transparent
-    ? `${prompt}\nIsolate the entire subject with space around it, against a uniform solid color that contrasts with its edges. No ground shadows, background objects, texture or gradients.`
+    ? `${prompt}\nBackground instruction: render the entire background as one uniform solid ${backgroundColor} color, with even illumination. No gradients, shadows, horizon, floor line, texture, or other objects.`
     : prompt;
   const generationSettings = {
-    checkpoint: route.id, seed, width, height, steps, cfgScale,
+    checkpoint: route.id, seed, width, height, steps, cfgScale, backgroundColor,
     sampler: 'euler', scheduler: 'simple', loras,
   };
   const generated = await call('generate_image', {
     generator: route.generator, style: route.style,
     width, height, seed, filename: sourceName, loras,
-    prompt: effectivePrompt, negative_prompt: negativePrompt, steps, cfg_scale: cfgScale,
+    prompt: effectivePrompt, background_color: transparent ? backgroundColor : undefined,
+    negative_prompt: negativePrompt, steps, cfg_scale: cfgScale,
   }, 3_660_000);
   if (!/^SUCCESS\r?$/m.test(generated)) throw new Error('Image Worker failed generation; see the preserved tool output');
   manifest.loraApplication = field(generated, 'LORA_TENSORS_APPLIED');

@@ -289,6 +289,7 @@ server.tool(
     loras: z.array(z.object({ id: z.string().min(1).max(100), weight: z.number().finite() })).max(4).optional().default([]),
 
     prompt: z.string().min(1),
+    background_color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
 
     negative_prompt: z
       .string()
@@ -317,6 +318,7 @@ server.tool(
     cfg_scale,
     loras,
     prompt,
+    background_color,
     negative_prompt,
     seed,
     filename,
@@ -338,6 +340,14 @@ server.tool(
     const profileId = style === "anime" ? "krea2_anime_v20" : generator === "adult" ? "redcraft_redmix_hybrid" : "krea2_turbo";
     if (generator === "adult" && adult_model && adult_model !== "redcraft") {
       return { content: [{ type: "text", text: `FAILED\nREASON: unsupported adult model: ${adult_model}` }] };
+    }
+    if (background_color !== undefined && ["#000000", "#ff0000", "#ff4500", "#ff6600", "#ff8000", "#ffa500", "#00ff00", "#00ffff", "#ff00ff"].includes(background_color.toLowerCase())) {
+      return { content: [{ type: "text", text: `FAILED\nREASON: the background color must be light and low-saturation, not black or vivid: ${background_color}` }] };
+    }
+    if (background_color !== undefined) {
+      const [, r, g, b] = background_color.match(/^#(..)(..)(..)$/);
+      const luminance = (parseInt(r, 16) * 299 + parseInt(g, 16) * 587 + parseInt(b, 16) * 114) / 1000;
+      if (luminance < 160) return { content: [{ type: "text", text: `FAILED\nREASON: the background color must be light for clean segmentation: ${background_color}` }] };
     }
     const profile = PROFILES[profileId];
     const model = PROFILE_PATHS[profileId];
@@ -409,7 +419,7 @@ PATH: ${model}`
 
     const args = [
       profile.loadFlag, model, "--llm", ENCODER, "--vae", VAE, "--lora-model-dir", LORAS,
-      "-p", prompt + selectedLoras.map(item => ` <lora:${item.id}:${item.weight}>`).join(""),
+      "-p", (background_color ? `${prompt} The entire background is a perfectly uniform flat ${background_color} solid color, evenly lit, with no floor line, cast shadow, objects, texture or gradient.` : prompt) + selectedLoras.map(item => ` <lora:${item.id}:${item.weight}>`).join(""),
       "-n", negative_prompt,
       "-W", String(width ?? 1024), "-H", String(height ?? 1024),
       "--steps", String(steps ?? profile.steps),

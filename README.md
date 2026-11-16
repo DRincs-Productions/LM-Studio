@@ -574,7 +574,7 @@ The fixed client-driven narration test prompts are [normal](test/normal_narratio
 
 ### Remote image generation
 
-The client submits a visual brief and output options through Shadow Controller. The Coordinator uses the server image preparation skill to draft the prompt, infer the output size and whether the brief calls for a transparent cutout, select compatible adapters and validate generation settings. The Coordinator runs Image Worker, checks the result and publishes the approved PNG. The client downloads and verifies the delivered file.
+The client submits a visual brief and output options through Shadow Controller. The Coordinator uses the server image preparation skill to draft the prompt, infer the output size and whether the brief calls for a transparent cutout, choose a uniform cutout background color, select compatible adapters and validate generation settings. White is preferred; the planner can choose a pale low-saturation alternative to contrast with light clothing or props, and includes that color in the generation prompt. The Coordinator runs Image Worker, checks the result and publishes the approved PNG. The client downloads and verifies the delivered file.
 
 ```mermaid
 flowchart LR

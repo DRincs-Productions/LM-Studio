@@ -111,6 +111,7 @@ pub fn valid_image_payload(payload: &serde_json::Value) -> bool {
                 | "negativePrompt"
                 | "profile"
                 | "mode"
+                | "backgroundColor"
                 | "width"
                 | "height"
                 | "loras"
@@ -150,6 +151,22 @@ pub fn valid_image_payload(payload: &serde_json::Value) -> bool {
         {
             return false;
         }
+    }
+    if fields.get("backgroundColor").is_some_and(|value| {
+        !value.as_str().is_some_and(|color| {
+            color.len() == 7
+                && color.starts_with('#')
+                && color[1..].bytes().all(|byte| byte.is_ascii_hexdigit())
+                && ((u16::from_str_radix(&color[1..3], 16).unwrap_or(0) * 299
+                    + u16::from_str_radix(&color[3..5], 16).unwrap_or(0) * 587
+                    + u16::from_str_radix(&color[5..7], 16).unwrap_or(0) * 114)
+                    / 1000 >= 160)
+                && !["#000000", "#ff0000", "#ff4500", "#ff6600", "#ff8000", "#ffa500", "#00ff00", "#00ffff", "#ff00ff"]
+                    .iter()
+                    .any(|disallowed| color.eq_ignore_ascii_case(disallowed))
+        })
+    }) {
+        return false;
     }
     match (fields.get("width"), fields.get("height")) {
         (None, None) => {}
@@ -1058,6 +1075,7 @@ mod tests {
         assert!(valid_image_payload(&brief));
         assert!(valid_image_payload(&serde_json::json!({
             "brief": "A lantern", "profile": "anime", "mode": "transparent",
+            "backgroundColor": "#FFFFFF",
             "width": 768, "height": 1024, "loras": [{ "id": "test-lora", "weight": -0.5 }]
         })));
         assert!(valid_image_payload(&serde_json::json!({
@@ -1070,6 +1088,9 @@ mod tests {
             serde_json::json!({"brief":"A lantern", "width":1920}),
             serde_json::json!({"brief":"A lantern", "width":1921, "height":1080}),
             serde_json::json!({"brief":"A lantern", "mode":"sprite"}),
+            serde_json::json!({"brief":"A lantern", "backgroundColor":"#000000"}),
+            serde_json::json!({"brief":"A lantern", "backgroundColor":"#FF6600"}),
+            serde_json::json!({"brief":"A lantern", "backgroundColor":"white"}),
             serde_json::json!({"brief":"A lantern", "loras":[{"id":"../../local", "weight":1}]}),
             serde_json::json!({"brief":"A lantern", "loras":[{"id":"test", "weight":0}]}),
             serde_json::json!({"brief":"A lantern", "loras":[{"id":"test", "weight":1},{"id":"test", "weight":2}]}),
