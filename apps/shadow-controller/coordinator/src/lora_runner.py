@@ -30,13 +30,7 @@ def publish_checkpoint(source, checkpoints, step, export_sha256):
         stream.flush()
         os.fsync(stream.fileno())
     destination = checkpoints / f"{time.time_ns():020d}-step-{step}-{uuid.uuid4().hex}"
-    temporary = checkpoints / f".publishing-{uuid.uuid4().hex}"
-    shutil.copytree(source, temporary)
-    source_hashes = {name: digest(source / name) for name in files}
-    if any(digest(temporary / name) != value for name, value in source_hashes.items()):
-        shutil.rmtree(temporary, ignore_errors=True)
-        raise RuntimeError("Checkpoint copy failed integrity verification")
-    temporary.rename(destination)
+    source.rename(destination)
     for old in sorted((item for item in checkpoints.iterdir() if not item.name.startswith(".")), reverse=True)[2:]:
         shutil.rmtree(old)
 
@@ -52,7 +46,7 @@ def find_checkpoint(checkpoints, expected_export):
             if not files or not all(digest(path / name) == value for name, value in files.items()):
                 continue
             return path
-        except (OSError, ValueError):
+        except (OSError, ValueError, KeyError, TypeError, AttributeError):
             continue
     return None
 
@@ -132,29 +126,14 @@ def train(workspace, attempt):
         "tensorboard": False,
         "tensorboard_always_on": False,
         "cloud": {"enabled": False},
+        "multi_gpu": False,
     }, migrate=False)
     checkpoint = find_checkpoint(checkpoints, workspace / "export.json")
     backup_dir = attempt / "backup"
     backup_dir.mkdir(exist_ok=True)
     if checkpoint:
-        recovery_backup = backup_dir / f"{checkpoint.name}-backup"
-        recovery_backup.mkdir(exist_ok=False)
-        shutil.copytree(checkpoint, recovery_backup, dirs_exist_ok=True)
-        onetrainer_config = recovery_backup / "onetrainer_config"
-        args = json.loads((onetrainer_config / "args.json").read_text(encoding="utf-8"))
-        args.pop("__version", None)
-        args.update({
-            "workspace_dir": str(attempt),
-            "cache_dir": str(workspace / "cache"),
-            "huggingface_cache_dir": str(workspace / "hub"),
-            "concept_file_name": str(onetrainer_config / "concepts.json"),
-            "sample_definition_file_name": str(onetrainer_config / "samples.json"),
-            "continue_last_backup": True,
-            "prevent_overwrites": False,
-        })
-        (onetrainer_config / "args.json").write_text(json.dumps(args), encoding="utf-8")
-        config.continue_last_backup = True
-        config.lora_model_name = str(recovery_backup)
+        config.lora_model_name = str(checkpoint)
+        config.clear_cache_before_training = False
         print(f"Resuming from {checkpoint.name}", flush=True)
     elif any(checkpoints.iterdir()):
         raise RuntimeError("No verified recovery checkpoint remains")
@@ -166,11 +145,11 @@ def train(workspace, attempt):
     trainer._GenericTrainer__needs_backup = lambda progress: False
     trainer._GenericTrainer__needs_save = lambda progress: False
     pause_file = attempt / "pause"
-    next_checkpoint = time.monotonic() + 300
-    last_checkpoint = checkpoint
+    next_checkpoint = time.monotonic() + 300 if checkpoint else 0
+
 
     def backup(progress, print_msg=True):
-        nonlocal last_checkpoint
+
         root = attempt / "backup"
         before = set(root.iterdir())
         save_backup(progress, print_msg)
@@ -179,10 +158,6 @@ def train(workspace, attempt):
             raise RuntimeError("OneTrainer checkpoint failed")
         for item in created:
             publish_checkpoint(item, checkpoints, progress.global_step, digest(workspace / "export.json"))
-        last_checkpoint = find_checkpoint(checkpoints, workspace / "export.json")
-        for path in list(backup_root for backup_root in root.iterdir() if backup_root.is_dir()):
-            if path.name.endswith("-backup"):
-                shutil.rmtree(path)
         if pause_file.exists():
             commands.stop()
 
@@ -190,31 +165,17 @@ def train(workspace, attempt):
         nonlocal next_checkpoint
         if pause_file.exists() or time.monotonic() >= next_checkpoint:
             commands.backup()
-            next_checkpoint = time.monotonic() + 300
+            next_checkpoint = time.monotonic() + 300 if checkpoint else 0
 
     trainer._GenericTrainer__backup = backup
     callbacks.set_on_update_train_progress(progress)
     if pause_file.exists():
         return 75
-    # A pause request may arrive during model loading or dataset caching, before
-    # the first optimization step. Preserve the current state before returning.
-    try:
-        trainer.start()
-    except BaseException:
-        if trainer.model is not None:
-            trainer.model.evict()
-        raise
-    if pause_file.exists() and last_checkpoint is None:
-        # Checkpoints require an optimizer state initialized by the first step.
-        # If paused before then, release the loaded model and restart this attempt
-        # later from its original config rather than reporting false recovery.
-        commands.stop()
+    trainer.start()
+    if pause_file.exists():
+        return 75
     trainer.train()
     if commands.get_stop_command():
-        if last_checkpoint is None:
-            trainer._GenericTrainer__backup(trainer.model.train_progress)
-            if not find_checkpoint(checkpoints, workspace / "export.json"):
-                raise RuntimeError("OneTrainer did not publish a recoverable checkpoint")
         return 75
     trainer.end()
     if not output.is_file():

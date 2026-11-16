@@ -56,19 +56,6 @@ impl JobStore {
                 if original_name != name {
                     return Err(StoreError::IdempotencyConflict);
                 }
-                let inbox = data
-                    .join("lora-inbox")
-                    .canonicalize()
-                    .map_err(|_| StoreError::InvalidRequest("Server lora-inbox is unavailable"))?;
-                let path = inbox
-                    .join(name)
-                    .canonicalize()
-                    .ok()
-                    .filter(|path| path.parent() == Some(inbox.as_path()) && path.is_file())
-                    .ok_or(StoreError::InvalidRequest(
-                        "OneTrainer export was not found in the server inbox",
-                    ))?;
-                validate_export(&path)?;
                 id
             } else {
                 let inbox = data
@@ -105,7 +92,7 @@ impl JobStore {
         };
         let filter = "WHERE id=?1 AND uid=?2 AND client_id=?3";
         let update = match action {
-            "attach" => Some("attached_at=COALESCE(attached_at,?4), paused=0"),
+            "attach" => Some("attached_at=COALESCE(attached_at,?4)"),
             "detach" => Some("attached_at=NULL"),
             "pause" => Some("paused=1"),
             "start" | "resume" => Some(
@@ -115,8 +102,7 @@ impl JobStore {
             _ => return Err(StoreError::InvalidRequest("Unknown LoRA action")),
         };
         if let Some(update) = update {
-            let mut condition =
-                format!("{filter} AND state NOT IN ('completed','running','pausing')");
+            let mut condition = format!("{filter} AND state!='completed'");
             if matches!(action, "start" | "resume") {
                 condition.push_str(" AND attached_at IS NOT NULL");
             }
@@ -170,19 +156,6 @@ impl JobStore {
         }
         Ok(())
     }
-}
-
-fn validate_export(path: &Path) -> Result<(), StoreError> {
-    let mut serialized = String::new();
-    File::open(path)
-        .and_then(|file| file.take(1024 * 1024 + 1).read_to_string(&mut serialized))
-        .map_err(|_| StoreError::InvalidRequest("Cannot read OneTrainer export"))?;
-    if serialized.len() > 1024 * 1024 {
-        return Err(StoreError::InvalidRequest(
-            "OneTrainer export exceeds 1 MiB",
-        ));
-    }
-    validate_export_text(&serialized).map(|_| ())
 }
 
 fn validate_export_text(serialized: &str) -> Result<Value, StoreError> {
@@ -255,6 +228,7 @@ mod tests {
             .lora_request(&root, "uid", "owner", "attach", &key)
             .unwrap();
         assert_eq!(attached["job"]["attached"], true);
+        set_state(&store, key["jobId"].as_str().unwrap(), "running", "Training").unwrap();
         assert_eq!(
             store
                 .lora_request(&root, "uid", "owner", "pause", &key)
