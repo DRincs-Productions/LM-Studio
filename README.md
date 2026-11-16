@@ -30,31 +30,33 @@ flowchart TD
 
 Regia is the creative role the user talks to in ChatGPT Desktop on the client, with Codex providing MCP access. Client-side OpenCode is a future option for the same role. Regia helps define the concept, characters, setting, tone, and visual and sound direction. It consults the canonical Project File and available sources before proposing changes, and asks the user to resolve gaps in canon or scope.
 
-After approval, Regia submits the brief directly through the Shadow Controller MCP client. The authenticated relay carries the request to the paired server. Regia uses the job ID to follow production and retrieves the verified result through MCP. The Project File and production artifacts are written in English. Regia speaks the user's language in chat. The local Regia workflow is documented under [Conversazione Regia attraverso Codex](#conversazione-regia-attraverso-codex).
+After approval, Regia submits the brief directly through the Shadow Controller MCP client. The authenticated relay carries the request to the paired server. Regia uses the job ID to follow production and retrieves the verified result through MCP. The Project File and production artifacts are written in English. Regia speaks the user's language in chat.
 
-| Area | MCP tool | Purpose |
-|---|---|---|
-| Access | `shadow_login` | Sign in through the browser. |
-| Access | `shadow_client_status` | Check local sign-in and enrollment. |
-| Access | `shadow_register_client` | Enroll this client. |
-| Access | `shadow_logout` | Clear the local sign-in. |
-| Access | `shadow_auth_token_status` | Inspect authentication token status. |
-| Access | `shadow_relay_status` | Check reachability of the paired server. |
-| Requests | `shadow_submit_job` | Submit a supported job through the generic entry point. |
-| Requests | `shadow_submit_narration` | Queue narration from a brief. |
-| Requests | `shadow_submit_narration_file` | Queue narration from a local brief file. |
-| Requests | `shadow_submit_normal_image` | Queue an image on the normal route. |
-| Requests | `shadow_submit_hot_image` | Queue an image on the hot route. |
-| Requests | `shadow_submit_anime_image` | Queue an image on the anime route. |
-| Jobs | `shadow_job_status` | Look up a job and its available result metadata. |
-| Jobs | `shadow_wait_job` | Wait for an existing job to reach a terminal state. |
-| Jobs | `shadow_list_jobs` | List jobs visible to this client. |
-| Jobs | `shadow_cancel_job` | Request cancellation. |
-| Jobs | `shadow_retry_job` | Request a retry of an eligible job. |
-| Results | `get_narration_result` | Download and verify the published scene. |
-| Results | `get_image_result` | Download and verify the published PNG. |
-| Results | `shadow_list_assets` | List available asset references. |
-| Results | `shadow_get_asset` | Retrieve a published asset. |
+Run `shadow-client install-skill` on the client to install the narration and image request skills for Codex.
+
+| Area | MCP tool | Purpose | Skills |
+|---|---|---|---|
+| Access | `shadow_login` | Sign in through the browser. | — |
+| Access | `shadow_client_status` | Check local sign-in and enrollment. | — |
+| Access | `shadow_register_client` | Enroll this client. | — |
+| Access | `shadow_logout` | Clear the local sign-in. | — |
+| Access | `shadow_auth_token_status` | Inspect authentication token status. | — |
+| Access | `shadow_relay_status` | Check reachability of the paired server. | — |
+| Requests | `shadow_submit_job` | Submit a supported job through the generic entry point. | — |
+| Requests | `shadow_submit_narration` | Queue narration from a brief. | [shadow-requests](apps/shadow-client/skills/shadow-requests/SKILL.md) |
+| Requests | `shadow_submit_narration_file` | Queue narration from a local brief file. | [shadow-requests](apps/shadow-client/skills/shadow-requests/SKILL.md) |
+| Requests | `shadow_submit_normal_image` | Queue an image on the normal route. | [shadow-image-requests](apps/shadow-client/skills/shadow-image-requests/SKILL.md) |
+| Requests | `shadow_submit_hot_image` | Queue an image on the hot route. | [shadow-image-requests](apps/shadow-client/skills/shadow-image-requests/SKILL.md) |
+| Requests | `shadow_submit_anime_image` | Queue an image on the anime route. | [shadow-image-requests](apps/shadow-client/skills/shadow-image-requests/SKILL.md) |
+| Jobs | `shadow_job_status` | Look up a job and its available result metadata. | — |
+| Jobs | `shadow_wait_job` | Wait for an existing job to reach a terminal state. | — |
+| Jobs | `shadow_list_jobs` | List jobs visible to this client. | — |
+| Jobs | `shadow_cancel_job` | Request cancellation. | — |
+| Jobs | `shadow_retry_job` | Request a retry of an eligible job. | — |
+| Results | `get_narration_result` | Download and verify the published scene. | [shadow-requests](apps/shadow-client/skills/shadow-requests/SKILL.md) |
+| Results | `get_image_result` | Download and verify the published PNG. | [shadow-image-requests](apps/shadow-client/skills/shadow-image-requests/SKILL.md) |
+| Results | `shadow_list_assets` | List available asset references. | — |
+| Results | `shadow_get_asset` | Retrieve a published asset. | — |
 
 Project Worker also provides read-only access to Ink and Markdown under `docs/` in the user-selected game folder. Regia requests separate approval before handing implementation to the Programmer.
 
@@ -88,8 +90,6 @@ flowchart LR
     SC -->|Verified result reference via MCP| R
 ```
 
-**Current implementation.** Shadow Controller already queues jobs in SQLite and publishes verified image and narration results to OneDrive. Image preparation runs before generation, chooses the model by image profile, and validates settings and adapter compatibility. Narration uses Venice as a fallback during final editing, where failures beyond policy refusals can trigger it. The shared preparation policy, correction before production, and publication of prompt and settings alongside every result describe the target workflow.
-
 ### Scrittore
 
 The paired server Coordinator claims queued jobs and dispatches `codex.execute` through OpenCode with `openai/gpt-6-luna`, or `narrative.generate` to the narration pipeline. A narration run writes stage evidence and a result manifest in its owned directory, publishes the selected English scene to the configured `imagecloud:` OneDrive remote, and verifies the remote bytes before completing. The authenticated relay returns the file reference and SHA-256; the client MCP downloads and verifies it before the client analyses it. See [Server narration handoff](handoffs/08-server-narration.md).
@@ -107,19 +107,14 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-    C[OpenCode · GPT-6 Luna]
+    C[Shadow Controller]
     subgraph SCRITTORE[Scrittore]
         W[Hemmingway]
         G[Deterministic draft checks]
         X[Venice final edit through OpenCode]
-        Q[Qwen2.5 14B · opt-in direct edit]
         W -->|review request| G
         G -->|Validation issues · up to 5 revisions| W
         G -->|Pass or revision limit| X
-        W -. optional Qwen backend .-> Q
-        Q -. direct edit or final edit .-> C
-        Q -. feedback-loop mode: localized feedback .-> W
-        W -. next draft · up to 5 cycles .-> Q
     end
     C -->|richiesta originale e canon disponibile| W
     X -->|Valid final edit| C
@@ -135,7 +130,6 @@ The installable [narration skill](skills/narration/SKILL.md) defines the scene a
 
 The remote Shadow workflow runs the Writer, deterministic draft checks, and a final edit through Venice via OpenCode. Validation issues go back to the Writer for up to five revisions. If Venice fails or returns an invalid scene, the Coordinator records the error and retains the latest usable draft. Writer-only mode skips the final edit. The separate Bionic workflow continues to use Gemini through OpenCode.
 
-Qwen2.5 14B Instruct Abliterated v2 Q4_K_M is available as an opt-in local backend by setting `SHADOW_NARRATION_REVIEW_BACKEND=qwen`; absent an explicit mode, it uses one direct edit after Writer generation. `SHADOW_NARRATION_REVIEW_MODE=feedback-loop` instead asks Qwen for evidence-based feedback, returns requested revisions to the Writer for up to five cycles, then asks Qwen for a final bounded edit. The models are loaded one at a time and unloaded before delivery. A 6 November 2026 normal-scene comparison found that the feedback reviewer returned an unsupported PASS on a clear key-placement order violation, while the final Qwen response was byte-identical to the Writer draft. In two direct-edit runs, Qwen also returned the Writer draft unchanged and left unauthorized cue lines in place. Qwen is not promoted as a replacement for the current OpenCode GPT-6 Luna default. The direct-worker test bypassed Cloudflare, relay authentication, and the MCP/SQLite queue, and verified the Writer/Qwen stages, OneDrive publication, local download hashes, and model cleanup. See the [Qwen reviewer mode test report](production-tests/shadow-narration/20261106_qwen-reviewer-mode-comparison/report.md).
 
 The reduced-refusal Qwen3.5 9B Abliterated Q4_K_M candidate and the formerly configured Qwen3 8B local Reviewer completed historical evaluations and were removed. In the historical matched comparison, Qwen3 8B detected 6/6 seeded defects while Abliterated detected 2/6, added a false-positive consent finding, and fabricated evidence in the violent case. These local-model evaluations are retained as historical evidence; the Bionic Narrative Reviewer now uses Google Gemini through OpenCode. [Historical matched comparison](production-tests/REVIEWER-COMPARISON-QWEN3-8B-QWEN35-9B-ABLITERATED-2026-10-27.md) and [candidate evaluation](production-tests/REVIEWER-QWEN35-9B-ABLITERATED-2026-10-27.md).
 
