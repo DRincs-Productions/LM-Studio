@@ -1,7 +1,6 @@
 import { createHash } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { readFile, rm, writeFile } from 'node:fs/promises';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 const input = JSON.parse(await readFile(process.argv[2], 'utf8'));
@@ -131,27 +130,7 @@ const sceneIssues = value => {
 };
 const modelRefused = value => /\bI (?:can['’]t|cannot|won['’]t|am unable to) (?:help|provide|rewrite|edit|revise|continue|produce|complete|assist)\b/i.test(value);
 const veniceEditorModel = process.env.SHADOW_OPENCODE_VENICE_MODEL || `venice/${process.env.SHADOW_VENICE_MODEL || 'venice-uncensored-1-2'}`;
-const editWithVenice = async (prompt, { freeOnly = false } = {}) => {
-  if (freeOnly) {
-    let apiKey = process.env.VENICE_API_KEY;
-    if (!apiKey) {
-      try { apiKey = JSON.parse(await readFile(join(homedir(), '.venice', 'config.json'), 'utf8')).api_key; }
-      catch { /* The installed CLI configuration is optional. */ }
-    }
-    if (typeof apiKey !== 'string' || !apiKey.trim()) throw new Error('venice_credentials_missing');
-    const model = process.env.SHADOW_VENICE_MODEL || 'venice-uncensored-1-2';
-    const authorization = `Bearer ${apiKey.trim()}`;
-    const access = await fetch('https://api.venice.ai/api/v1/api_keys/rate_limits', {
-      headers: { Authorization: authorization },
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!access.ok) throw new Error('venice_access_check_failed');
-    const { data } = await access.json();
-    if (data?.accessPermitted !== true || data.apiTier?.isCharged !== false
-        || !Array.isArray(data.rateLimits) || !data.rateLimits.some(limit => limit?.apiModelId === model)) {
-      throw new Error('venice_free_access_unavailable');
-    }
-  }
+const editWithVenice = async prompt => {
   const openCode = process.env.OPENCODE_EXECUTABLE || (process.env.APPDATA
     ? join(process.env.APPDATA, 'npm', 'node_modules', '@opencode', 'cli', 'bin', 'opencode.exe')
     : 'opencode');
@@ -359,7 +338,7 @@ Return only the full corrected scene in the required Markdown envelope.`;
     }
     if (useVenice) {
       try {
-        const edited = await editWithVenice(finalPrompt, { freeOnly: true });
+        const edited = await editWithVenice(finalPrompt);
         await writeFile(`${runDir}/venice-final.md`, edited, { flag: 'wx' });
         narrative = edited;
         selectedDraft = 'venice-final';
