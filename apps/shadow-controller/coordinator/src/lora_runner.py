@@ -4,7 +4,6 @@ import json
 import os
 from pathlib import Path
 import shutil
-import stat
 import sys
 import time
 import uuid
@@ -15,7 +14,7 @@ def digest(path):
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
-def publish_checkpoint(source, checkpoints, step):
+def publish_checkpoint(source, checkpoints, step, export_sha256):
     required = ("meta.json", "optimizer/optimizer.pt", "lora/lora.safetensors")
     if not all((source / name).is_file() for name in required):
         raise RuntimeError("OneTrainer did not write a complete checkpoint")
@@ -27,14 +26,9 @@ def publish_checkpoint(source, checkpoints, step):
             with path.open("r+b") as stream:
                 os.fsync(stream.fileno())
     with (source / "shadow-checkpoint.json").open("x", encoding="utf-8") as stream:
-        json.dump(files, stream)
+        json.dump({"files": files, "export_sha256": export_sha256}, stream)
         stream.flush()
         os.fsync(stream.fileno())
-    for path in source.rglob("*"):
-        if path.is_file():
-            path.chmod(path.stat().st_mode & ~stat.S_IWUSR & ~stat.S_IWGRP & ~stat.S_IWOTH)
-        elif path.is_dir():
-            path.chmod(path.stat().st_mode & ~stat.S_IWUSR & ~stat.S_IWGRP & ~stat.S_IWOTH)
     destination = checkpoints / f"{time.time_ns():020d}-step-{step}-{uuid.uuid4().hex}"
     temporary = checkpoints / f".publishing-{uuid.uuid4().hex}"
     shutil.copytree(source, temporary)
@@ -48,21 +42,16 @@ def publish_checkpoint(source, checkpoints, step):
 
 
 def find_checkpoint(checkpoints, expected_export):
-    expected = json.loads(expected_export.read_text(encoding="utf-8"))
-    expected.pop("lora_model_name", None)
+    expected_sha256 = digest(expected_export)
     for path in sorted(checkpoints.iterdir(), reverse=True):
         try:
-            files = json.loads((path / "shadow-checkpoint.json").read_text(encoding="utf-8"))
+            manifest = json.loads((path / "shadow-checkpoint.json").read_text(encoding="utf-8"))
+            files = manifest["files"]
+            if manifest["export_sha256"] != expected_sha256:
+                continue
             if not files or not all(digest(path / name) == value for name, value in files.items()):
                 continue
-            args = json.loads((path / "onetrainer_config" / "args.json").read_text(encoding="utf-8"))
-            if args.pop("lora_model_name", None):
-                args["lora_model_name"] = ""
-            expected_args = dict(expected)
-            if expected_args.pop("lora_model_name", None):
-                expected_args["lora_model_name"] = ""
-            if args == expected_args:
-                return path
+            return path
         except (OSError, ValueError):
             continue
     return None
@@ -189,7 +178,7 @@ def train(workspace, attempt):
         if not created:
             raise RuntimeError("OneTrainer checkpoint failed")
         for item in created:
-            publish_checkpoint(item, checkpoints, progress.global_step)
+            publish_checkpoint(item, checkpoints, progress.global_step, digest(workspace / "export.json"))
         last_checkpoint = find_checkpoint(checkpoints, workspace / "export.json")
         for path in list(backup_root for backup_root in root.iterdir() if backup_root.is_dir()):
             if path.name.endswith("-backup"):
