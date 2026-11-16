@@ -1,6 +1,6 @@
 # Architettura locale e cloud per la creazione di visual novel
 
-Il progetto offre due punti d’ingresso: Codex e LM Studio con Bionic. In Codex l’utente dialoga normalmente con GPT; quando chiede esplicitamente di parlare con la Regia, Codex inoltra i messaggi al modello locale e ne presenta le risposte attribuite. In Bionic l’utente conversa direttamente con la Regia. Entrambi i percorsi usano il Project File canonico e gli stessi worker. L’obiettivo generale resta generare la prima bozza di una visual novel; la modifica di visual novel esistenti è un obiettivo futuro.
+The project helps the user develop the first draft of a visual novel through Regia. Approved creative decisions are recorded in the canonical Project File. Editing existing visual novels remains a future goal.
 
 Il sistema non è stato progettato per lavorare soltanto in locale. I modelli online possono offrire capacità di ragionamento e coordinamento nettamente superiori; possono dirigere i passaggi tra i worker e stabilire quale processo locale utilizzi la VRAM in un dato momento. Quando un modello locale non raggiunge la qualità o le capacità richieste, il coordinamento può ricorrere al cloud. I modelli locali restano utili per ridurre il consumo dei crediti Codex, la dipendenza dai servizi online e i limiti sui contenuti imposti da singoli modelli cloud, secondo le regole applicabili.
 
@@ -10,89 +10,85 @@ Il progetto usa hardware di seconda mano e comprende Shadow PC nell’ambiente d
 
 ## Architettura generale
 
-La conversazione creativa standard può svolgersi in Codex, che resta il client MCP e il punto d’ingresso dell’utente. OpenCode con GPT-6 Luna coordina le richieste interne e i passaggi tra i worker. In alternativa, la Regia locale può dialogare direttamente in Bionic o, su richiesta esplicita, attraverso Codex come tramite; dopo l’approvazione della fase creativa passa il progetto al Coordinatore OpenCode. Tutte le decisioni confluiscono nello stesso Project File. Scrittore, Disegnatore e Progettista sonoro preparano i contenuti; i risultati ritornano al punto d’ingresso usato dall’utente. La programmazione richiede una scelta e un’approvazione separate.
+The user develops the project with Regia. After the user approves a production request, Regia sends the approved brief directly to the Coordinator through MCP. The Coordinator prepares the request, dispatches production, and returns the result to Regia.
 
 ```mermaid
 flowchart TD
-    U <--> X[Codex · dialogo GPT e client MCP]
-    U <--> B[Bionic · dialogo diretto]
-    X <-->|su richiesta esplicita| R[Regia]
-    B <--> R
-    R -->|richiesta fonti| PW[Project Worker]
-    F[Ink e docs selezionati] -->|sola lettura| PW
-    PW -->|fonti restituite| R
-    X --> C[OpenCode · GPT-6 Luna Coordinator]
-    R -->|handoff approvato| C
-    C --> PRODUZIONE
-    subgraph PRODUZIONE[Produzione]
-        W[Scrittore]
-        D[Disegnatore]
-        S[Progettista sonoro]
+    U[Utente] <--> R[Regia]
+    R <-->|Approved brief and result via MCP| C[Coordinatore]
+    C <-->|Production request and result| PROD
+    C -->|Completed artifacts| O[OneDrive]
+    subgraph PROD[Production]
+        W[Writer]
+        D[Designer]
+        S[Sound Designer]
     end
-    W --> C
-    D --> C
-    S --> C
-    C --> R
-    R --> P[Programmatore]
+    R -->|Separately approved implementation| P[Programmer]
 ```
 
 ### Regia
 
-La Regia locale dialoga con l’utente attraverso Bionic oppure, su richiesta esplicita, attraverso Codex. Il modello locale resta eseguito dal runtime LM Studio: il percorso Codex non richiede l’interfaccia Bionic. Nelle sessioni verificate la Regia è associata a **Qwen 3.5 9B**. Dialoga nella lingua dell’utente e aiuta a definire concept, personaggi, relazioni, ambientazioni, eventi, tono e direzione visiva e sonora.
+Regia is the creative role the user talks to in ChatGPT Desktop on the client, with Codex providing MCP access. Client-side OpenCode is a future option for the same role. Regia helps define the concept, characters, setting, tone, and visual and sound direction. It consults the canonical Project File and available sources before proposing changes, and asks the user to resolve gaps in canon or scope.
 
-```mermaid
-flowchart LR
-    U[Utente]
-    F[Files del progetto]
-    subgraph REGIA[Regia]
-        Q[Qwen 3.5 9B]
-    end
-    C[Coordinatore]
-    P[Programmatore]
-    PW[Project Worker MCP]
-    U <-->|dialogo| REGIA
-    U <-->|dialogo GPT| CX[Codex]
-    CX <-->|tramite su richiesta| REGIA
-    REGIA -->|lettura richiesta| PW
-    F -->|Ink e docs in sola lettura| PW
-    PW -->|fonti consultate| REGIA
-    REGIA -->|handoff del progetto approvato| C
-    C -->|dubbi o proposta di sviluppo| REGIA
-    REGIA -->|specifica approvata per l’implementazione| P
-```
+After approval, Regia submits the brief directly through the Shadow Controller MCP client. The authenticated relay carries the request to the paired server. Regia uses the job ID to follow production and retrieves the verified result through MCP. The Project File and production artifacts are written in English. Regia speaks the user's language in chat. The local Regia workflow is documented under [Conversazione Regia attraverso Codex](#conversazione-regia-attraverso-codex).
 
-Prima di proporre una nuova fase, la Regia deve leggere il Project File e la documentazione aggiornata del progetto, comprenderne lo stato e i progressi, e consultare i file e gli asset già disponibili. Questo le permette di conoscere personaggi, relazioni, luoghi e continuità, capire cosa è già stato realizzato e individuare contenuti riutilizzabili, evitando duplicazioni o contraddizioni. Se la documentazione non chiarisce un fatto canonico o lo stato del lavoro, la Regia lo segnala e chiede chiarimenti invece di inventarlo.
+| Area | MCP tool | Purpose |
+|---|---|---|
+| Access | `shadow_login` | Sign in through the browser. |
+| Access | `shadow_client_status` | Check local sign-in and enrollment. |
+| Access | `shadow_register_client` | Enroll this client. |
+| Access | `shadow_logout` | Clear the local sign-in. |
+| Access | `shadow_auth_token_status` | Inspect authentication token status. |
+| Access | `shadow_relay_status` | Check reachability of the paired server. |
+| Requests | `shadow_submit_job` | Submit a supported job through the generic entry point. |
+| Requests | `shadow_submit_narration` | Queue narration from a brief. |
+| Requests | `shadow_submit_narration_file` | Queue narration from a local brief file. |
+| Requests | `shadow_submit_normal_image` | Queue an image on the normal route. |
+| Requests | `shadow_submit_hot_image` | Queue an image on the hot route. |
+| Requests | `shadow_submit_anime_image` | Queue an image on the anime route. |
+| Jobs | `shadow_job_status` | Look up a job and its available result metadata. |
+| Jobs | `shadow_wait_job` | Wait for an existing job to reach a terminal state. |
+| Jobs | `shadow_list_jobs` | List jobs visible to this client. |
+| Jobs | `shadow_cancel_job` | Request cancellation. |
+| Jobs | `shadow_retry_job` | Request a retry of an eligible job. |
+| Results | `get_narration_result` | Download and verify the published scene. |
+| Results | `get_image_result` | Download and verify the published PNG. |
+| Results | `shadow_list_assets` | List available asset references. |
+| Results | `shadow_get_asset` | Retrieve a published asset. |
 
-Le decisioni canoniche vengono conservate nel Project File Markdown, scritto in inglese per essere utilizzato da tutta la pipeline. Anche gli altri output dei modelli — narrazione, dialoghi, piani, revisioni, riassunti e documentazione — sono in inglese; la conversazione diretta con l’utente segue invece la lingua che sta usando. Quando ritiene definita una fase, la Regia presenta il piano all’utente e richiede un’approvazione esplicita. Solo dopo l’approvazione passa Project File e contesto operativo al Coordinatore.
-
-Il Project Worker MCP consente alla Regia di associare la cartella di gioco scelta dall’utente e leggere in sola lettura i file Ink e i documenti Markdown sotto `docs/`. Non espone gli altri file del progetto né consente alla Regia di modificarli. Quando propone una modifica, indica le fonti consultate e il cambiamento suggerito e attende l’approvazione; la scrittura del gioco resta al Programmatore dopo il gate separato.
+Project Worker also provides read-only access to Ink and Markdown under `docs/` in the user-selected game folder. Regia requests separate approval before handing implementation to the Programmer.
 
 ### Coordinatore
 
+Shadow Controller and OpenCode make up the Coordinator on the server. Shadow Controller owns the queue, validation, dispatch, and delivery. OpenCode prepares the production prompt with the model selected by Shadow Controller.
+
+The target workflow is:
+
+1. Shadow Controller receives the request through MCP and queues it in SQLite.
+2. Shadow Controller asks OpenCode to improve the brief using Codex. If Shadow Controller identifies a policy refusal, it assigns preparation to Venice through OpenCode. Technical errors follow the normal job error path.
+3. Shadow Controller checks the prepared prompt and its settings against the brief and the production requirements. It can request one correction. A prompt that still fails validation stops the job before production.
+4. Shadow Controller sends the validated request to production and collects the final artifacts after the required stages.
+5. Shadow Controller publishes the completed result, effective prompt, and generation settings to OneDrive. Regia receives the job result and retrieves the verified files through MCP.
+
 ```mermaid
 flowchart LR
-    R[Regia]
+    R[Regia] -->|Approved brief via MCP| SC
     subgraph COORD[Coordinatore]
-        C[OpenCode · GPT-6 Luna]
+        SC[Shadow Controller]
+        DB[(SQLite queue)]
+        OC[OpenCode]
+        SC -->|Queue request| DB
+        DB -->|Next job| SC
+        SC -->|Prepare prompt or correct once| OC
+        OC -->|Prepared prompt| SC
     end
-    subgraph PRODUZIONE[Produzione]
-        W[Scrittore]
-        D[Disegnatore]
-        S[Progettista sonoro]
-    end
-    R --> COORD
-    COORD --> PRODUZIONE
-    PRODUZIONE --> COORD
-    COORD --> R
+    SC -->|Validated request| PROD[Production]
+    PROD -->|Final artifacts| SC
+    SC -->|Artifacts, prompt and settings| O[OneDrive]
+    SC -->|Verified result reference via MCP| R
 ```
 
-Il Coordinatore è OpenCode con il modello **`openai/gpt-6-luna`**. Organizza attività e attese, legge il Project File, attiva i worker MCP autorizzati e raccoglie i risultati. Il coordinamento e l’attesa dei processi locali avvengono online e non occupano la VRAM locale. Codex resta il client e il punto d’ingresso dell’utente; i processi MCP e il server non avviano direttamente la CLI Codex.
-
-OpenCode governa l’uso della VRAM attraverso i worker: fa lavorare un modello locale per volta e ne libera la memoria prima di avviare il successivo. Gestisce gli imprevisti senza cambiare le decisioni creative approvate; se serve una decisione creativa, restituisce il controllo alla conversazione d’origine, in Bionic o in Codex.
-
-Per avviare le funzioni produttive il Coordinatore usa strumenti MCP. I singoli MCP e le loro responsabilità saranno descritti in una sezione dedicata.
-
-A fine produzione, il Coordinatore restituisce un handback persistente con risultati e problemi. Nel percorso Bionic la Regia riprende nella chat originaria; nel percorso Codex il risultato torna alla conversazione Codex e può essere inoltrato alla Regia locale quando il tramite è attivo. Dopo la chiusura del ciclo creativo, il Programmatore è avviabile come attività separata con le approvazioni previste.
+**Current implementation.** Shadow Controller already queues jobs in SQLite and publishes verified image and narration results to OneDrive. Image preparation runs before generation, chooses the model by image profile, and validates settings and adapter compatibility. Narration uses Venice as a fallback during final editing, where failures beyond policy refusals can trigger it. The shared preparation policy, correction before production, and publication of prompt and settings alongside every result describe the target workflow.
 
 ### Scrittore
 
