@@ -128,6 +128,14 @@ def train(workspace, attempt):
         "concept_file_name": str(concepts_path),
         "sample_definition_file_name": str(samples_path),
         "output_model_format": "SAFETENSORS",
+        "save_every": 1,
+        "backup_after": 1,
+        "backup_after_unit": "STEP",
+        "save_every_unit": "STEP",
+        "backup_before_save": False,
+        "sample_after_unit": "NEVER",
+        "sample_after": 999999999,
+        "save_filename_prefix": "shadow-",
         "continue_last_backup": False,
         "rolling_backup": False,
         "backup_before_save": False,
@@ -151,6 +159,7 @@ def train(workspace, attempt):
             "concept_file_name": str(onetrainer_config / "concepts.json"),
             "sample_definition_file_name": str(onetrainer_config / "samples.json"),
             "continue_last_backup": True,
+            "prevent_overwrites": False,
         })
         (onetrainer_config / "args.json").write_text(json.dumps(args), encoding="utf-8")
         config.continue_last_backup = True
