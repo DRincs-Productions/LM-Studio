@@ -48,7 +48,7 @@ def publish_checkpoint(source, checkpoints, step):
 
 
 def find_checkpoint(checkpoints, expected_export):
-    expected = json.loads((expected_export).read_text(encoding="utf-8"))
+    expected = json.loads(expected_export.read_text(encoding="utf-8"))
     expected.pop("lora_model_name", None)
     for path in sorted(checkpoints.iterdir(), reverse=True):
         try:
@@ -152,6 +152,7 @@ def train(workspace, attempt):
         shutil.copytree(checkpoint, recovery_backup, dirs_exist_ok=True)
         onetrainer_config = recovery_backup / "onetrainer_config"
         args = json.loads((onetrainer_config / "args.json").read_text(encoding="utf-8"))
+        args.pop("__version", None)
         args.update({
             "workspace_dir": str(attempt),
             "cache_dir": str(workspace / "cache"),
@@ -161,6 +162,7 @@ def train(workspace, attempt):
             "continue_last_backup": True,
             "prevent_overwrites": False,
         })
+        args.pop("__version", None)
         (onetrainer_config / "args.json").write_text(json.dumps(args), encoding="utf-8")
         config.continue_last_backup = True
         config.lora_model_name = str(recovery_backup)
