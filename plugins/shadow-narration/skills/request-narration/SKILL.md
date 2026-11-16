@@ -7,8 +7,7 @@ description: Submit standard or uncensored narration to the paired Shadow Contro
 
 | Request | MCP tool | Final review |
 |---|---|---|
-| Standard narration from chat | `shadow_submit_narration` with `brief` | GPT-6 Luna (`openai/gpt-6-luna`) through OpenCode. |
-| Standard narration from a selected file | `shadow_submit_narration_file` with `filePath` | GPT-6 Luna (`openai/gpt-6-luna`) through OpenCode. |
+| Standard narration | `shadow_submit_narration` with `brief` for chat, or `shadow_submit_narration_file` with `filePath` for a selected file | GPT-6 Luna (`openai/gpt-6-luna`) through OpenCode. |
 | Explicitly requested uncensored narration | `shadow_submit_uncensored_narration` with either `brief` or `filePath` | The configured Venice Uncensored model through OpenCode (default `venice/venice-uncensored-1-2`). |
 
 Use the uncensored tool when the user asks for uncensored fiction, for example to preserve the requested intensity of adult intimacy or graphic violence. Hemmingway still writes the draft and the server still runs its scene checks. Venice does the final review directly after the free access check. For standard narration, the server tries Venice once if GPT-6 Luna refuses for policy reasons or has a technical failure. A scene validation failure by itself ends that review. If the uncensored tool reports an unsupported payload version, tell the user the server needs an update.

@@ -36,28 +36,28 @@ Run `shadow-client install-skill` on the client to install the narration and ima
 
 | Area | MCP tool | Purpose | Skills |
 |---|---|---|---|
-| Access | `shadow_login` | Sign in through the browser. | — |
-| Access | `shadow_client_status` | Check local sign-in and enrollment. | — |
-| Access | `shadow_register_client` | Enroll this client. | — |
-| Access | `shadow_logout` | Clear the local sign-in. | — |
-| Access | `shadow_auth_token_status` | Inspect authentication token status. | — |
-| Access | `shadow_relay_status` | Check reachability of the paired server. | — |
-| Requests | `shadow_submit_job` | Submit a supported job through the generic entry point. | — |
-| Requests | `shadow_submit_narration` | Queue narration from a brief. | [shadow-requests](apps/shadow-client/skills/shadow-requests/SKILL.md) |
-| Requests | `shadow_submit_narration_file` | Queue narration from a local brief file. | [shadow-requests](apps/shadow-client/skills/shadow-requests/SKILL.md) |
-| Requests | `shadow_submit_uncensored_narration` | Queue uncensored narration from a brief or file for direct Venice review. | [shadow-requests](apps/shadow-client/skills/shadow-requests/SKILL.md) |
+| Access | `shadow_login` | Sign in through the browser. | [shadow-requests](apps/shadow-client/skills/shadow-requests/SKILL.md) |
+| Access | `shadow_client_status` | Check local sign-in and enrollment. | [shadow-requests](apps/shadow-client/skills/shadow-requests/SKILL.md) |
+| Access | `shadow_register_client` | Enroll this client. | [shadow-requests](apps/shadow-client/skills/shadow-requests/SKILL.md) |
+| Access | `shadow_logout` | Clear the local sign-in. | [shadow-requests](apps/shadow-client/skills/shadow-requests/SKILL.md) |
+| Access | `shadow_auth_token_status` | Inspect authentication token status. | [shadow-requests](apps/shadow-client/skills/shadow-requests/SKILL.md) |
+| Access | `shadow_relay_status` | Check reachability of the paired server. | [shadow-requests](apps/shadow-client/skills/shadow-requests/SKILL.md) |
+| Requests | `shadow_submit_job` | Submit a supported job through the generic entry point. | [shadow-requests](apps/shadow-client/skills/shadow-requests/SKILL.md) |
+| Requests | `shadow_submit_narration` | Queue narration from a brief. | [shadow-narration-requests](apps/shadow-client/skills/shadow-narration-requests/SKILL.md) |
+| Requests | `shadow_submit_narration_file` | Queue narration from a local brief file. | [shadow-narration-requests](apps/shadow-client/skills/shadow-narration-requests/SKILL.md) |
+| Requests | `shadow_submit_uncensored_narration` | Queue uncensored narration from a brief or file for direct Venice review. | [shadow-narration-requests](apps/shadow-client/skills/shadow-narration-requests/SKILL.md) |
 | Requests | `shadow_submit_normal_image` | Queue a standard non-anime image with Krea2 Turbo. | [shadow-image-requests](apps/shadow-client/skills/shadow-image-requests/SKILL.md) |
 | Requests | `shadow_submit_hot_image` | Queue an adult non-anime image with RedCraft. | [shadow-image-requests](apps/shadow-client/skills/shadow-image-requests/SKILL.md) |
 | Requests | `shadow_submit_anime_image` | Queue an anime image with Krea2 Anime, including adult anime. | [shadow-image-requests](apps/shadow-client/skills/shadow-image-requests/SKILL.md) |
-| Jobs | `shadow_job_status` | Look up a job and its available result metadata. | — |
-| Jobs | `shadow_wait_job` | Wait for an existing job to reach a terminal state. | — |
-| Jobs | `shadow_list_jobs` | List jobs visible to this client. | — |
-| Jobs | `shadow_cancel_job` | Request cancellation. | — |
-| Jobs | `shadow_retry_job` | Request a retry of an eligible job. | — |
-| Results | `get_narration_result` | Download and verify the published scene. | [shadow-requests](apps/shadow-client/skills/shadow-requests/SKILL.md) |
+| Jobs | `shadow_job_status` | Look up a job and its available result metadata. | [shadow-requests](apps/shadow-client/skills/shadow-requests/SKILL.md) |
+| Jobs | `shadow_wait_job` | Wait for an existing job to reach a terminal state. | [shadow-requests](apps/shadow-client/skills/shadow-requests/SKILL.md) |
+| Jobs | `shadow_list_jobs` | List jobs visible to this client. | [shadow-requests](apps/shadow-client/skills/shadow-requests/SKILL.md) |
+| Jobs | `shadow_cancel_job` | Request cancellation. | [shadow-requests](apps/shadow-client/skills/shadow-requests/SKILL.md) |
+| Jobs | `shadow_retry_job` | Request a retry of an eligible job. | [shadow-requests](apps/shadow-client/skills/shadow-requests/SKILL.md) |
+| Results | `get_narration_result` | Download and verify the published scene. | [shadow-narration-requests](apps/shadow-client/skills/shadow-narration-requests/SKILL.md) |
 | Results | `get_image_result` | Download and verify the published PNG. | [shadow-image-requests](apps/shadow-client/skills/shadow-image-requests/SKILL.md) |
-| Results | `shadow_list_assets` | List available asset references. | — |
-| Results | `shadow_get_asset` | Retrieve a published asset. | — |
+| Results | `shadow_list_assets` | List available asset references. | [shadow-requests](apps/shadow-client/skills/shadow-requests/SKILL.md) |
+| Results | `shadow_get_asset` | Retrieve a published asset. | [shadow-requests](apps/shadow-client/skills/shadow-requests/SKILL.md) |
 
 For any image tool, request a transparent background in the brief. Shadow Controller removes the background and returns a transparent PNG.
 
@@ -528,7 +528,8 @@ Test Writer isolato Hemmingway–Cydonia del 25 ottobre 2026: tre coppie di run 
 | Skill | Where | Purpose |
 | --- | --- | --- |
 | Narration | Server | Supplies the English scene format and NCF cue instructions. See [Narration skill](skills/narration/SKILL.md). |
-| [Shadow Requests](apps/shadow-client/skills/shadow-requests/SKILL.md) | Client | Routes standard and uncensored narration through Shadow Controller and retrieves verified scene files using MCP. Install with `shadow-client install-skill`. |
+| [Shadow Requests](apps/shadow-client/skills/shadow-requests/SKILL.md) | Client | Starts the shared workflow and routes requests to the narration or image skill. Install all three with `shadow-client install-skill`. |
+| [Shadow Narration Requests](apps/shadow-client/skills/shadow-narration-requests/SKILL.md) | Client | Routes standard and uncensored narration through Shadow Controller and retrieves verified scene files using MCP. Install with `shadow-client install-skill`. |
 
 ### Remote narration
 
@@ -547,7 +548,7 @@ flowchart LR
     O -->|Download and verify via MCP| A
 ```
 
-For standard requests, GPT-6 Luna is the first final editor through OpenCode. For `shadow_submit_uncensored_narration`, the client sends narration payload version 2 and Shadow Controller routes final editing directly to Venice after the free access check. This mode requires an updated MCP client and server. The selected editor receives the brief, available canon, draft and validation outcomes. In standard mode, a policy refusal or technical failure triggers one Venice fallback through OpenCode, subject to the free access check. An invalid edited scene alone does not trigger fallback. The Coordinator retains the latest usable draft if the edit fails. The manifest identifies the Writer model in `writer`, the requested route in `reviewMode` as `standard` or `unfiltered`, and the selected final editor in `reviewer` as `opencode`, `venice`, or `none`. Draft checks remain visible in stage diagnostics. A missing canonical text is recorded as a limitation: `projectSha256` identifies the revision but does not itself let the server read or validate project contents. The narration worker selects Hemmingway directly. Configure `SHADOW_LM_API_BASE_URL`, `lms`, OpenCode authenticated with OpenAI and Venice, and `rclone` on the server. The writer instance is unloaded after the full review cycle; cleanup failures appear in the result. The JSON references the English scene on OneDrive only after upload and byte verification. The client uses MCP to download and verify the file before analysis. Asset production is separate. See the client [Shadow Requests skill](apps/shadow-client/skills/shadow-requests/SKILL.md).
+For standard requests, GPT-6 Luna is the first final editor through OpenCode. For `shadow_submit_uncensored_narration`, the client sends narration payload version 2 and Shadow Controller routes final editing directly to Venice after the free access check. This mode requires an updated MCP client and server. The selected editor receives the brief, available canon, draft and validation outcomes. In standard mode, a policy refusal or technical failure triggers one Venice fallback through OpenCode, subject to the free access check. An invalid edited scene alone does not trigger fallback. The Coordinator retains the latest usable draft if the edit fails. The manifest identifies the Writer model in `writer`, the requested route in `reviewMode` as `standard` or `unfiltered`, and the selected final editor in `reviewer` as `opencode`, `venice`, or `none`. Draft checks remain visible in stage diagnostics. A missing canonical text is recorded as a limitation: `projectSha256` identifies the revision but does not itself let the server read or validate project contents. The narration worker selects Hemmingway directly. Configure `SHADOW_LM_API_BASE_URL`, `lms`, OpenCode authenticated with OpenAI and Venice, and `rclone` on the server. The writer instance is unloaded after the full review cycle; cleanup failures appear in the result. The JSON references the English scene on OneDrive only after upload and byte verification. The client uses MCP to download and verify the file before analysis. Asset production is separate. See the client [Shadow Narration Requests skill](apps/shadow-client/skills/shadow-narration-requests/SKILL.md).
 
 The fixed client-driven narration test prompts are [normal](test/normal_narration.txt), [hot](test/hot_narration.txt), [cyberpunk](test/cyperpunk_narration.txt), and [three strangers at a bar](test/bar_three_strangers.txt). Codex submits the selected fixtures through Shadow Controller MCP, waits for completion, retrieves the verified OneDrive result, and returns the scene as a file. The exact run, recovery, and read-only server/OneDrive diagnostic procedure is in [AGENTS.md](AGENTS.md#test-workflow).
 

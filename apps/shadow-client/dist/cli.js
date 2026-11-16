@@ -42,6 +42,7 @@ async function main() {
     const codexHome = process.env.CODEX_HOME || join(homedir(), ".codex");
     const files = [
       ["shadow-requests", "SKILL.md"],
+      ["shadow-narration-requests", "SKILL.md"],
       ["shadow-image-requests", "SKILL.md"]
     ];
     const selectedSkill = process.argv[3];

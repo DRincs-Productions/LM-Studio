@@ -58,6 +58,7 @@ jobs:
             'dist/cli.js',
             'dist/server.js',
             'skills/shadow-requests/SKILL.md',
+            'skills/shadow-narration-requests/SKILL.md',
             'skills/shadow-image-requests/SKILL.md'
           ];
           const missing = required.filter(file => !files.has(file));
