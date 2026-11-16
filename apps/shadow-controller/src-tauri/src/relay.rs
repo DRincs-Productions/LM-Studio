@@ -107,6 +107,7 @@ async fn supervise(data_dir: PathBuf, relay_base: String, stop: Arc<AtomicBool>)
             &credentials.id_token,
             &credentials.uid,
             &store,
+            &data_dir,
             Arc::clone(&stop),
         )
         .await;
@@ -126,6 +127,7 @@ async fn connect_and_serve(
     id_token: &str,
     uid: &str,
     store: &JobStore,
+    data_dir: &std::path::Path,
     stop: Arc<AtomicBool>,
 ) -> Result<(), String> {
     let mut request = endpoint
@@ -173,7 +175,7 @@ async fn connect_and_serve(
                     Message::Text(text) => {
                         if text.len() > MAX_MESSAGE_BYTES { return Err("relay message exceeds size limit".to_owned()); }
                         let message: Value = serde_json::from_str(&text).map_err(|_| "relay sent invalid JSON".to_owned())?;
-                        let mut reply = handle_request(store, uid, &message);
+                        let mut reply = handle_request(store, data_dir, uid, &message);
                         if let Some(object) = reply.as_object_mut() {
                             object.insert("uid".to_owned(), Value::String(uid.to_owned()));
                             if let Some(client_id) = message.get("clientId").and_then(Value::as_str) {
@@ -209,7 +211,7 @@ async fn connect_and_serve(
     }
 }
 
-fn handle_request(store: &JobStore, uid: &str, message: &Value) -> Value {
+fn handle_request(store: &JobStore, data_dir: &std::path::Path, uid: &str, message: &Value) -> Value {
     let message_id = message.get("messageId").and_then(Value::as_str);
     let reply_to = message_id.map(str::to_owned);
     if message.get("version").and_then(Value::as_u64) != Some(1)
@@ -233,6 +235,15 @@ fn handle_request(store: &JobStore, uid: &str, message: &Value) -> Value {
         Some("job.retry") => retry_job(store, uid, client_id, message_id, message),
         Some("asset.list") => list_assets(store, uid, client_id, message_id, message),
         Some("asset.get") => get_asset(store, uid, client_id, message_id, message),
+        Some(kind) if kind.starts_with("lora.") => {
+            match store.lora_request(data_dir, uid, client_id, &kind[5..], message) {
+                Ok(result) => json!({
+                    "version": 1, "type": "lora.result", "messageId": Uuid::new_v4().to_string(),
+                    "replyTo": message_id, "result": result
+                }),
+                Err(error) => error_reply(Some(message_id.to_owned()), "lora_request_failed", &error.to_string(), false),
+            }
+        }
         _ => error_reply(Some(message_id.to_owned()), "invalid_payload", "Unsupported client request.", false),
     }
 }

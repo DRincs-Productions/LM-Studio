@@ -136,6 +136,32 @@ function createServer(): McpServer {
     }
   });
 
+  server.registerTool("lora_import", {
+    description: "Import a OneTrainer JSON export from the paired server's lora-inbox without starting it.",
+    inputSchema: z.object({ fileName: z.string().min(1).max(120), requestId: z.string().uuid() }),
+  }, async ({ fileName, requestId }) => relayToolCall({
+    version: 1, type: "lora.import", messageId: randomUUID(), fileName, requestId,
+  }));
+  server.registerTool("lora_list", {
+    description: "List your LoRA training jobs on the paired server.",
+    inputSchema: z.object({}),
+  }, async () => relayToolCall({ version: 1, type: "lora.list", messageId: randomUUID() }));
+  for (const [action, description] of Object.entries({
+    status: "Read LoRA job state and diagnostics.",
+    attach: "Make a LoRA job eligible for automatic idle training.",
+    detach: "Remove a LoRA job from scheduling and preserve its checkpoints.",
+    start: "Enable training for an attached LoRA job.",
+    pause: "Pause a LoRA job until explicitly resumed.",
+    resume: "Enable an attached LoRA job to resume from its latest checkpoint.",
+  })) {
+    server.registerTool(`lora_${action}`, {
+      description,
+      inputSchema: z.object({ jobId: z.string().uuid() }),
+    }, async ({ jobId }) => relayToolCall({
+      version: 1, type: `lora.${action}`, messageId: randomUUID(), jobId,
+    }));
+  }
+
   const narrationInput = z.object({
     projectId: z.string().uuid(),
     projectSha256: z.string().regex(/^[a-f0-9]{64}$/),

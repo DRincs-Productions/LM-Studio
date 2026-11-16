@@ -1,5 +1,6 @@
 use std::{path::Path, sync::Mutex};
 
+pub mod lora;
 pub mod runtime;
 
 use chrono::{SecondsFormat, Utc};
@@ -9,7 +10,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 use uuid::Uuid;
 
-const SCHEMA_VERSION: i64 = 3;
+const SCHEMA_VERSION: i64 = 4;
 const INITIAL_SCHEMA: &str = include_str!("../migrations/0001_initial.sql");
 const SINGLE_ACTIVE_JOB_MIGRATION: &str = include_str!("../migrations/0002_single_active_job.sql");
 const MANUAL_RETRY_MIGRATION: &str = include_str!("../migrations/0003_manual_retry.sql");
@@ -160,10 +161,14 @@ pub fn valid_image_payload(payload: &serde_json::Value) -> bool {
                 && ((u16::from_str_radix(&color[1..3], 16).unwrap_or(0) * 299
                     + u16::from_str_radix(&color[3..5], 16).unwrap_or(0) * 587
                     + u16::from_str_radix(&color[5..7], 16).unwrap_or(0) * 114)
-                    / 1000 >= 160)
-                && !["#000000", "#ff0000", "#ff4500", "#ff6600", "#ff8000", "#ffa500", "#00ff00", "#00ffff", "#ff00ff"]
-                    .iter()
-                    .any(|disallowed| color.eq_ignore_ascii_case(disallowed))
+                    / 1000
+                    >= 160)
+                && ![
+                    "#000000", "#ff0000", "#ff4500", "#ff6600", "#ff8000", "#ffa500", "#00ff00",
+                    "#00ffff", "#ff00ff",
+                ]
+                .iter()
+                .any(|disallowed| color.eq_ignore_ascii_case(disallowed))
         })
     }) {
         return false;
@@ -313,6 +318,12 @@ impl JobStore {
             let transaction = connection.unchecked_transaction()?;
             transaction.execute_batch(MANUAL_RETRY_MIGRATION)?;
             transaction.pragma_update(None, "user_version", 3)?;
+            transaction.commit()?;
+        }
+        if version < 4 {
+            let transaction = connection.unchecked_transaction()?;
+            transaction.execute_batch(include_str!("../migrations/0004_lora.sql"))?;
+            transaction.pragma_update(None, "user_version", 4)?;
             transaction.commit()?;
         }
         Ok(Self {

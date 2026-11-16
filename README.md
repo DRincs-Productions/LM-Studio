@@ -67,6 +67,8 @@ Project Worker also provides read-only access to Ink and Markdown under `docs/` 
 
 Shadow Controller and OpenCode make up the Coordinator on the server. Shadow Controller owns the queue, validation, dispatch, and delivery. OpenCode prepares the production prompt with the model selected by Shadow Controller.
 
+Shadow Controller also schedules background LoRA training. OneTrainer prepares the configuration and runs training without a window. Foreground requests take priority, and training resumes from a verified checkpoint when the foreground queue clears.
+
 The target workflow is:
 
 1. Shadow Controller receives the request through MCP and queues it in SQLite.
@@ -91,6 +93,8 @@ flowchart LR
     PROD -->|Final artifacts| SC
     SC -->|Artifacts, prompt and settings| O[OneDrive]
     SC -->|Verified result reference via MCP| R
+    SC -->|Schedule and pause training| OT[OneTrainer]
+    OT -->|Checkpoints and completed LoRA| SC
 ```
 
 ### Scrittore
@@ -588,6 +592,14 @@ The client exposes `shadow_submit_normal_image`, `shadow_submit_hot_image`, and 
 #### Signing in a Shadow client
 
 Before a Codex client can reach its paired Shadow Controller server, install the published package with `npm install --global shadow-controller-mcp-client`, then run `shadow-client login`. This opens the hosted HTTPS Firebase sign-in page in the system browser and returns the temporary sign-in to the client over a one-time localhost callback. It then enrolls the client's public key with the signed-in account. Verify with `shadow-client status`, then use the `shadow-controller` MCP tool `shadow_relay_status` to confirm the paired server is online. The MCP `shadow_login` tool performs the same sign-in and enrollment from Codex. If enrollment was interrupted, run `shadow-client register` or `shadow_register_client` and check status again. Do not change relay URLs or credentials to resolve a sign-in failure; use `shadow_auth_token_status` and the documented recovery flow first. Publish package updates by pushing a `lib-v<version>` tag that matches both client package manifests; the GitHub Actions workflow and required npm secret are documented in the [client package guide](apps/shadow-client/README.md#publishing-a-release).
+
+### Background LoRA training
+
+On the paired Windows server, configure LoRA training in OneTrainer and use **Export Training**. Save the JSON under `lora-inbox` in the Coordinator data directory, beside `coordinator.sqlite3`. Use absolute paths for the model and datasets on the server. The runner uses `C:\AI\OneTrainer` by default. Set `SHADOW_ONETRAINER_DIR` if the installation is elsewhere.
+
+Use `lora_import` with the export filename and a request UUID. The imported job is detached. `lora_attach` makes it eligible for idle training. Use `lora_list` or `lora_status` to inspect it, `lora_pause` to hold it across restarts, `lora_start` or `lora_resume` to release the hold, and `lora_detach` to remove it from scheduling. These tools require compatible builds of the client, relay and controller.
+
+The controller runs one training process at below normal CPU priority. It checks available RAM, GPU memory and disk space before dispatch, and checks RAM and disk space while training. It gives the process up to 60 seconds to checkpoint and release its resources when a foreground request arrives. It keeps two verified checkpoints, with periodic saves about every five minutes. A forced stop may lose work since the last verified checkpoint. Training logs and the final adapter are stored under `lora/<jobId>` in the Coordinator data directory.
 
 The queue supports explicit, owner-authorized retries as new linked jobs, and verified narration results through job-scoped asset metadata and client-side download/hash verification. If the Coordinator restarts while a job is running, it verifies that tracked child processes have exited, completes any recorded Writer cleanup, preserves the interrupted attempt under `runs/recovered`, and automatically queues a fresh attempt. A still-live child or unverified cleanup keeps dispatch paused. Restart recovery may repeat model calls and republishes only after producing and verifying a new final scene. Windows CI run [42261872495](https://github.com/DRincs-Productions/LM-Studio/actions/runs/42261872495) passed the Coordinator tests, Tauri check and debug build, plus client and relay builds/tests. The Cloudflare Worker and its SQLite-backed Durable Object are active. The enrolled MCP client authenticated to the paired Coordinator 0.1.15 and received its job list through the public relay. End-to-end narration through the configured models and OneDrive is tracked separately.
 

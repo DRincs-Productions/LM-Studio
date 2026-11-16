@@ -168,11 +168,18 @@ pub fn run_service_with_startup(
     };
     let store = JobStore::open(data_dir.join("coordinator.sqlite3"))?;
     store.mark_running_jobs_interrupted()?;
+    store.recover_lora(data_dir)?;
+    fs::create_dir_all(data_dir.join("lora-inbox"))?;
     on_started();
     let mut dispatch_blocked = false;
+    let mut lora = crate::lora::Scheduler::default();
 
     loop {
         if lease.stop_requested()? {
+            if lora.tick(data_dir, &store, true, true)? {
+                thread::sleep(Duration::from_millis(250));
+                continue;
+            }
             return Ok(());
         }
         if let Err(error) = recover_interrupted_jobs(data_dir, &store) {
@@ -190,8 +197,9 @@ pub fn run_service_with_startup(
             );
         }
         dispatch_blocked = blocked_now;
-        if blocked_now {
-            thread::sleep(Duration::from_secs(1));
+        let foreground = blocked_now || store.next_queued()?.is_some();
+        if lora.tick(data_dir, &store, foreground, false)? || blocked_now {
+            thread::sleep(Duration::from_millis(250));
         } else {
             match store.run_next(|job, store| execute_opencode_job(data_dir, job, store, &lease)) {
                 Ok(Some(_)) => continue,
