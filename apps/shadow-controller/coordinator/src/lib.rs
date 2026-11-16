@@ -951,7 +951,9 @@ fn validate_request(request: &SubmitRequest) -> Result<(), StoreError> {
     if request.operation.len() > 100 {
         return Err(StoreError::InvalidRequest("operation is too long"));
     }
-    if request.payload_version != 1 {
+    if request.payload_version != 1
+        && !(request.operation == "narrative.generate" && request.payload_version == 2)
+    {
         return Err(StoreError::InvalidRequest("unsupported payload version"));
     }
     if request

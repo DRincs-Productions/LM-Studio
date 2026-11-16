@@ -45,9 +45,10 @@ Run `shadow-client install-skill` on the client to install the narration and ima
 | Requests | `shadow_submit_job` | Submit a supported job through the generic entry point. | — |
 | Requests | `shadow_submit_narration` | Queue narration from a brief. | [shadow-requests](apps/shadow-client/skills/shadow-requests/SKILL.md) |
 | Requests | `shadow_submit_narration_file` | Queue narration from a local brief file. | [shadow-requests](apps/shadow-client/skills/shadow-requests/SKILL.md) |
-| Requests | `shadow_submit_normal_image` | Queue an image on the normal route. | [shadow-image-requests](apps/shadow-client/skills/shadow-image-requests/SKILL.md) |
-| Requests | `shadow_submit_hot_image` | Queue an image on the hot route. | [shadow-image-requests](apps/shadow-client/skills/shadow-image-requests/SKILL.md) |
-| Requests | `shadow_submit_anime_image` | Queue an image on the anime route. | [shadow-image-requests](apps/shadow-client/skills/shadow-image-requests/SKILL.md) |
+| Requests | `shadow_submit_uncensored_narration` | Queue uncensored narration from a brief or file for direct Venice review. | [shadow-requests](apps/shadow-client/skills/shadow-requests/SKILL.md) |
+| Requests | `shadow_submit_normal_image` | Queue a standard non-anime image with Krea2 Turbo. | [shadow-image-requests](apps/shadow-client/skills/shadow-image-requests/SKILL.md) |
+| Requests | `shadow_submit_hot_image` | Queue an adult non-anime image with RedCraft. | [shadow-image-requests](apps/shadow-client/skills/shadow-image-requests/SKILL.md) |
+| Requests | `shadow_submit_anime_image` | Queue an anime image with Krea2 Anime, including adult anime. | [shadow-image-requests](apps/shadow-client/skills/shadow-image-requests/SKILL.md) |
 | Jobs | `shadow_job_status` | Look up a job and its available result metadata. | — |
 | Jobs | `shadow_wait_job` | Wait for an existing job to reach a terminal state. | — |
 | Jobs | `shadow_list_jobs` | List jobs visible to this client. | — |
@@ -57,6 +58,8 @@ Run `shadow-client install-skill` on the client to install the narration and ima
 | Results | `get_image_result` | Download and verify the published PNG. | [shadow-image-requests](apps/shadow-client/skills/shadow-image-requests/SKILL.md) |
 | Results | `shadow_list_assets` | List available asset references. | — |
 | Results | `shadow_get_asset` | Retrieve a published asset. | — |
+
+For any image tool, request a transparent background in the brief. Shadow Controller removes the background and returns a transparent PNG.
 
 Project Worker also provides read-only access to Ink and Markdown under `docs/` in the user-selected game folder. Regia requests separate approval before handing implementation to the Programmer.
 
@@ -99,7 +102,8 @@ flowchart TD
     C[Shadow Controller] -->|Brief and available canon| W[Writer]
     W -->|Draft| V[Draft checks]
     V -->|Issues, up to five revisions| W
-    V -->|Draft and check outcomes| E[GPT-6 Luna through OpenCode]
+    V -->|Standard request| E[GPT-6 Luna through OpenCode]
+    V -->|Unfiltered request| F[Venice through OpenCode]
     E -->|Policy refusal or technical error| F[Venice through OpenCode]
     E -->|Edited scene| C
     F -->|Edited scene| C
@@ -109,13 +113,13 @@ flowchart TD
 
 1. Shadow Controller sends the brief and available canon to the Writer.
 2. Hemmingway drafts the scene. Deterministic checks flag issues and can send the draft back for up to five revisions.
-3. GPT-6 Luna edits the latest draft through OpenCode. Shadow Controller tries Venice once after a policy refusal or technical failure, subject to the free access check. A scene that fails validation does not trigger Venice. If no edit succeeds, Shadow Controller records the error and retains the latest usable draft.
+3. Standard requests go to GPT-6 Luna through OpenCode, with one Venice fallback for a policy refusal or technical failure. Regia uses `shadow_submit_uncensored_narration` when the user requests uncensored narration. Venice performs the final edit. Both Venice paths require free access. A GPT edit that only fails scene validation ends the review. If an edit fails, Shadow Controller records the error and retains the latest draft if it passes validation.
 4. Shadow Controller validates the selected scene, publishes it to OneDrive, and returns the reference and SHA-256 for verified retrieval through MCP.
 
 | Role | Model | Skills |
 |---|---|---|
 | Writer, Shadow and Bionic | Hemmingway 1 Abliterated Extreme | [narration](skills/narration/SKILL.md), [expressive-sounds](skills/expressive-sounds/SKILL.md) for Shadow |
-| Fallback final editor | Venice Uncensored through OpenCode | [narration](skills/narration/SKILL.md), [expressive-sounds](skills/expressive-sounds/SKILL.md), plus the installed scene-craft, revision-continuity and line-editing skills |
+| Unfiltered and fallback final editor | Venice Uncensored through OpenCode | [narration](skills/narration/SKILL.md), [expressive-sounds](skills/expressive-sounds/SKILL.md), plus the installed scene-craft, revision-continuity and line-editing skills |
 | Primary final editor | GPT-6 Luna through OpenCode | [narration](skills/narration/SKILL.md), [expressive-sounds](skills/expressive-sounds/SKILL.md), plus the installed scene-craft, revision-continuity and line-editing skills |
 
 Hemmingway was selected after comparing narrative models for prose quality and adherence to the brief. The comparison includes the candidates, test results, and limitations. [Narrative model comparison](docs/CONFRONTO-MODELLI-NARRAZIONE.md)
@@ -524,7 +528,7 @@ Test Writer isolato Hemmingway–Cydonia del 25 ottobre 2026: tre coppie di run 
 | Skill | Where | Purpose |
 | --- | --- | --- |
 | Narration | Server | Supplies the English scene format and NCF cue instructions. See [Narration skill](skills/narration/SKILL.md). |
-| [Shadow Requests](apps/shadow-client/skills/shadow-requests/SKILL.md) | Client | Routes narrative requests through Shadow Controller and retrieves verified scene files using MCP. Install with `shadow-client install-skill`. |
+| [Shadow Requests](apps/shadow-client/skills/shadow-requests/SKILL.md) | Client | Routes standard and uncensored narration through Shadow Controller and retrieves verified scene files using MCP. Install with `shadow-client install-skill`. |
 
 ### Remote narration
 
@@ -543,7 +547,7 @@ flowchart LR
     O -->|Download and verify via MCP| A
 ```
 
-GPT-6 Luna is always the first final editor through OpenCode. It receives the brief, available canon, draft and validation outcomes. A policy refusal or technical failure triggers one Venice fallback through OpenCode, subject to the free access check. An invalid edited scene alone does not trigger fallback. The Coordinator retains the latest usable draft if the edit fails. The manifest identifies the Writer model in `writer` and the selected final editor in `reviewer` as `opencode`, `venice`, or `none`. Draft checks remain visible in stage diagnostics. A missing canonical text is recorded as a limitation: `projectSha256` identifies the revision but does not itself let the server read or validate project contents. The narration worker selects Hemmingway directly. Configure `SHADOW_LM_API_BASE_URL`, `lms`, OpenCode authenticated with OpenAI and Venice, and `rclone` on the server. The writer instance is unloaded after the full review cycle; cleanup failures appear in the result. The JSON references the English scene on OneDrive only after upload and byte verification. The client uses MCP to download and verify the file before analysis. Asset production is separate. See the client [Shadow Requests skill](apps/shadow-client/skills/shadow-requests/SKILL.md).
+For standard requests, GPT-6 Luna is the first final editor through OpenCode. For `shadow_submit_uncensored_narration`, the client sends narration payload version 2 and Shadow Controller routes final editing directly to Venice after the free access check. This mode requires an updated MCP client and server. The selected editor receives the brief, available canon, draft and validation outcomes. In standard mode, a policy refusal or technical failure triggers one Venice fallback through OpenCode, subject to the free access check. An invalid edited scene alone does not trigger fallback. The Coordinator retains the latest usable draft if the edit fails. The manifest identifies the Writer model in `writer`, the requested route in `reviewMode` as `standard` or `unfiltered`, and the selected final editor in `reviewer` as `opencode`, `venice`, or `none`. Draft checks remain visible in stage diagnostics. A missing canonical text is recorded as a limitation: `projectSha256` identifies the revision but does not itself let the server read or validate project contents. The narration worker selects Hemmingway directly. Configure `SHADOW_LM_API_BASE_URL`, `lms`, OpenCode authenticated with OpenAI and Venice, and `rclone` on the server. The writer instance is unloaded after the full review cycle; cleanup failures appear in the result. The JSON references the English scene on OneDrive only after upload and byte verification. The client uses MCP to download and verify the file before analysis. Asset production is separate. See the client [Shadow Requests skill](apps/shadow-client/skills/shadow-requests/SKILL.md).
 
 The fixed client-driven narration test prompts are [normal](test/normal_narration.txt), [hot](test/hot_narration.txt), [cyberpunk](test/cyperpunk_narration.txt), and [three strangers at a bar](test/bar_three_strangers.txt). Codex submits the selected fixtures through Shadow Controller MCP, waits for completion, retrieves the verified OneDrive result, and returns the scene as a file. The exact run, recovery, and read-only server/OneDrive diagnostic procedure is in [AGENTS.md](AGENTS.md#test-workflow).
 

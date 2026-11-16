@@ -243,12 +243,12 @@ fn submit_job(store: &JobStore, uid: &str, client_id: &str, message_id: &str, me
         return error_reply(Some(message_id.to_owned()), "invalid_payload", "requestId must be a UUID.", false);
     }
     let payload_version = message.get("payloadVersion").and_then(Value::as_u64).unwrap_or(1);
-    if payload_version != 1 {
-        return error_reply(Some(message_id.to_owned()), "unsupported_version", "Unsupported payload version.", false);
-    }
     let Some(operation) = message.pointer("/payload/operation").and_then(Value::as_str) else {
         return error_reply(Some(message_id.to_owned()), "invalid_payload", "An operation is required.", false);
     };
+    if payload_version != 1 && !(operation == "narrative.generate" && payload_version == 2) {
+        return error_reply(Some(message_id.to_owned()), "unsupported_version", "Unsupported payload version.", false);
+    }
     let Some(params) = message.pointer("/payload/params").filter(|value| value.is_object()) else {
         return error_reply(Some(message_id.to_owned()), "invalid_payload", "Operation parameters must be an object.", false);
     };
@@ -273,6 +273,9 @@ fn submit_job(store: &JobStore, uid: &str, client_id: &str, message_id: &str, me
                 sanitized.insert(key.to_owned(), value.clone());
             }
         }
+        if payload_version == 2 {
+            sanitized.insert("reviewMode".to_owned(), json!("unfiltered"));
+        }
         let payload = Value::Object(sanitized);
         if serde_json::to_vec(&payload).is_ok_and(|encoded| encoded.len() > 48 * 1024) {
             return error_reply(Some(message_id.to_owned()), "invalid_payload", "Narration fields exceed the supported size limit.", false);
@@ -284,7 +287,7 @@ fn submit_job(store: &JobStore, uid: &str, client_id: &str, message_id: &str, me
         client_id: client_id.to_owned(),
         request_id: request_id.unwrap().to_owned(),
         operation: operation.to_owned(),
-        payload_version: 1,
+        payload_version: payload_version as u32,
         payload: sanitized_payload,
         retry_of_job_id: None,
     }) {

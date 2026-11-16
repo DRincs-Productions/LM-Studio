@@ -6,6 +6,7 @@ import { join } from 'node:path';
 
 const input = JSON.parse(await readFile(process.argv[2], 'utf8'));
 const { jobId, requestId, payload } = input;
+const reviewMode = payload.reviewMode ?? 'standard';
 const runDir = process.argv[3];
 const remotePath = `imagecloud:NarrationWorker/final/${jobId}/scene.md`;
 const stages = [];
@@ -65,7 +66,7 @@ const run = (exe, args, { input: stdin, timeout = 300_000, max = 4 * 1024 * 1024
   });
   if (stdin) child.stdin.end(stdin); else child.stdin.end();
 });
-const manifest = (status, extra = {}) => ({ schemaVersion: 1, jobId, requestId, status, narrativeRemotePath: null, narrativeSha256: null, projectSha256: payload.projectSha256, selectedDraft: null, writer: null, reviewer: 'none', stages, ...extra });
+const manifest = (status, extra = {}) => ({ schemaVersion: 1, jobId, requestId, status, narrativeRemotePath: null, narrativeSha256: null, projectSha256: payload.projectSha256, selectedDraft: null, writer: null, reviewer: 'none', reviewMode, stages, ...extra });
 const save = async value => writeFile(`${runDir}/result-manifest.json`, JSON.stringify(value, null, 2));
 const clip = value => String(value ?? '').slice(0, 40_000);
 const safeFailure = error => {
@@ -332,38 +333,41 @@ Return only the full corrected scene in the required Markdown envelope.`;
     };
     try { await writeFile(`${runDir}/opencode.json`, JSON.stringify(openCodeConfig, null, 2), { flag: 'wx' }); }
     catch (error) { if (error?.code !== 'EEXIST') throw error; }
-    try {
-      await writeFile(openCodePromptPath, finalPrompt, { flag: 'wx' });
-      const stdout = openCodeText((await run(openCodeExecutable, ['--standalone', 'run', '--model', openCodeModel, '--agent', 'reviewer', '--format', 'json', '--file', openCodePromptPath, 'Return only the full corrected English Markdown scene.'], { timeout: 900_000, max: 4 * 1024 * 1024, label: 'opencode-final' }).catch(error => {
+    let useVenice = reviewMode === 'unfiltered';
+    if (!useVenice) {
+      try {
+        await writeFile(openCodePromptPath, finalPrompt, { flag: 'wx' });
+        const stdout = openCodeText((await run(openCodeExecutable, ['--standalone', 'run', '--model', openCodeModel, '--agent', 'reviewer', '--format', 'json', '--file', openCodePromptPath, 'Return only the full corrected English Markdown scene.'], { timeout: 900_000, max: 4 * 1024 * 1024, label: 'opencode-final' }).catch(error => {
+          const reason = safeFailure(error);
+          throw new Error(reason.startsWith('process_') ? reason : 'opencode_failed');
+        })).stdout);
+        const edited = unwrapSceneMarkdown(stdout);
+        if (!edited) throw new Error('opencode_empty_response');
+        if (!artifactValid(edited) && modelRefused(edited)) throw new Error('opencode_refusal');
+        if (!artifactValid(edited) || sceneIssues(edited).length) throw new Error('opencode_artifact_invalid');
+        narrative = edited;
+        selectedDraft = 'opencode-final';
+        await writeFile(`${runDir}/opencode-final.md`, narrative, { flag: 'wx' });
+        await record({ stage: 'opencode', outcome: 'succeeded', attempts: 1, model: openCodeModel });
+      } catch (error) {
         const reason = safeFailure(error);
-        throw new Error(reason.startsWith('process_') ? reason : 'opencode_failed');
-      })).stdout);
-      const edited = unwrapSceneMarkdown(stdout);
-      if (!edited) throw new Error('opencode_empty_response');
-      if (!artifactValid(edited) && modelRefused(edited)) throw new Error('opencode_refusal');
-      if (!artifactValid(edited) || sceneIssues(edited).length) throw new Error('opencode_artifact_invalid');
-      narrative = edited;
-      selectedDraft = 'opencode-final';
-      await writeFile(`${runDir}/opencode-final.md`, narrative, { flag: 'wx' });
-      await record({ stage: 'opencode', outcome: 'succeeded', attempts: 1, model: openCodeModel });
-    } catch (error) {
-      const reason = safeFailure(error);
-      warnings.push({ code: reason, message: reason });
-      await record({ stage: 'opencode', outcome: 'error', attempts: 1, errorCode: reason, reason, model: openCodeModel });
-      const useVenice = ['opencode_refusal', 'opencode_empty_response', 'process_timeout', 'process_output_limit', 'opencode_failed'].includes(reason)
-        || /^process_exit_-?\d+$/.test(reason);
-      if (useVenice) {
-        try {
-          const edited = await editWithVenice(finalPrompt, { freeOnly: true });
-          await writeFile(`${runDir}/venice-final.md`, edited, { flag: 'wx' });
-          narrative = edited;
-          selectedDraft = 'venice-final';
-          await record({ stage: 'venice', outcome: 'succeeded', attempts: 1, model: veniceEditorModel });
-        } catch (fallbackError) {
-          const fallbackReason = safeFailure(fallbackError);
-          warnings.push({ code: fallbackReason, message: `Venice final edit failed: ${fallbackReason}` });
-          await record({ stage: 'venice', outcome: 'error', attempts: 1, errorCode: fallbackReason, reason: fallbackReason, model: veniceEditorModel });
-        }
+        warnings.push({ code: reason, message: reason });
+        await record({ stage: 'opencode', outcome: 'error', attempts: 1, errorCode: reason, reason, model: openCodeModel });
+        useVenice = ['opencode_refusal', 'opencode_empty_response', 'process_timeout', 'process_output_limit', 'opencode_failed'].includes(reason)
+          || /^process_exit_-?\d+$/.test(reason);
+      }
+    }
+    if (useVenice) {
+      try {
+        const edited = await editWithVenice(finalPrompt, { freeOnly: true });
+        await writeFile(`${runDir}/venice-final.md`, edited, { flag: 'wx' });
+        narrative = edited;
+        selectedDraft = 'venice-final';
+        await record({ stage: 'venice', outcome: 'succeeded', attempts: 1, model: veniceEditorModel });
+      } catch (error) {
+        const reason = safeFailure(error);
+        warnings.push({ code: reason, message: `Venice final edit failed: ${reason}` });
+        await record({ stage: 'venice', outcome: 'error', attempts: 1, errorCode: reason, reason, model: veniceEditorModel });
       }
     }
   }

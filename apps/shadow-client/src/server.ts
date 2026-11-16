@@ -142,7 +142,7 @@ function createServer(): McpServer {
     metadata: z.record(z.string(), z.json()).optional(),
     requestId: z.string().uuid().optional(),
   });
-  const submitNarration = async (brief: string, values: z.infer<typeof narrationInput>) => {
+  const submitNarration = async (brief: string, values: z.infer<typeof narrationInput>, payloadVersion: 1 | 2 = 1) => {
     if (Buffer.byteLength(brief, "utf8") > 12000) return errorResult(new Error("Narration briefs are limited to 12,000 UTF-8 bytes."));
     const stableRequestId = values.requestId ?? randomUUID();
     const payload = narrativePayload.parse({
@@ -154,7 +154,7 @@ function createServer(): McpServer {
     try {
       const response = await callRelay({
         version: 1, type: "job.submit", messageId: randomUUID(), requestId: stableRequestId,
-        payloadVersion: 1, payload: { operation: "narrative.generate", params: payload },
+        payloadVersion, payload: { operation: "narrative.generate", params: payload },
       });
       if (response.type === "error") return errorResult(new Error(errorMessage(response.error)));
       return jsonResult({ requestId: stableRequestId, response });
@@ -168,20 +168,33 @@ function createServer(): McpServer {
     inputSchema: narrationInput.extend({ brief: z.string().trim().min(1).max(12000) }),
   }, async ({ brief, ...values }) => submitNarration(brief, values));
 
-  server.registerTool("shadow_submit_narration_file", {
-    description: "Read the explicitly selected local Markdown/text request inside this MCP tool and queue its contents for server narration without returning or analysing the file contents in chat. Use shadow_wait_job, then get_narration_result before analysing the returned scene.",
-    inputSchema: narrationInput.extend({ filePath: z.string().trim().min(1).max(2048) }),
-  }, async ({ filePath, ...values }) => {
+  const narrationFileInput = narrationInput.extend({ filePath: z.string().trim().min(1).max(2048) });
+  const submitNarrationFile = async ({ filePath, ...values }: z.infer<typeof narrationFileInput>, payloadVersion: 1 | 2 = 1) => {
     try {
       const bytes = await readFile(filePath);
       if (!bytes.length || bytes.length > 12000) return errorResult(new Error("Narration request files must contain 1–12,000 bytes."));
       const brief = new TextDecoder("utf-8", { fatal: true }).decode(bytes).trim();
       if (!brief) return errorResult(new Error("The selected narration request file is empty."));
-      return submitNarration(brief, values);
+      return submitNarration(brief, values, payloadVersion);
     } catch (error) {
       return errorResult(new Error(`Could not submit the selected narration file: ${errorMessage(error)}`));
     }
-  });
+  };
+
+  server.registerTool("shadow_submit_narration_file", {
+    description: "Read the explicitly selected local Markdown/text request inside this MCP tool and queue its contents for server narration without returning or analysing the file contents in chat. Use shadow_wait_job, then get_narration_result before analysing the returned scene.",
+    inputSchema: narrationFileInput,
+  }, async values => submitNarrationFile(values));
+
+  server.registerTool("shadow_submit_uncensored_narration", {
+    description: "Queue an explicitly requested uncensored narration brief or selected UTF-8 file for direct final review by Venice Uncensored through OpenCode. Use shadow_wait_job and get_narration_result.",
+    inputSchema: narrationInput.extend({
+      brief: z.string().trim().min(1).max(12000).optional(),
+      filePath: narrationFileInput.shape.filePath.optional(),
+    }).refine(({ brief, filePath }) => Boolean(brief) !== Boolean(filePath), "Provide a brief or a prompt file."),
+  }, async ({ brief, filePath, ...values }) => filePath
+    ? submitNarrationFile({ ...values, filePath }, 2)
+    : submitNarration(brief!, values, 2));
 
   const imageInput = z.strictObject({
     brief: imageText.optional(),

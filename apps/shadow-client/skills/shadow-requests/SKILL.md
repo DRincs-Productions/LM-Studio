@@ -1,24 +1,18 @@
 ---
 name: shadow-requests
-description: Submit narrative and other creative requests to the paired Shadow Controller server, then retrieve and verify returned files through its MCP tools before reviewing them.
+description: Submit standard or uncensored narration to the paired Shadow Controller and retrieve the verified scene.
 ---
 
-# Shadow Requests
+# Shadow Narration Requests
 
-Use the local Shadow Controller MCP tools to route a request to the paired server. The server coordinates production; the client submits requests and receives files.
+| Request | MCP tool | Final review |
+|---|---|---|
+| Standard narration from chat | `shadow_submit_narration` with `brief` | GPT-6 Luna (`openai/gpt-6-luna`) through OpenCode. |
+| Standard narration from a selected file | `shadow_submit_narration_file` with `filePath` | GPT-6 Luna (`openai/gpt-6-luna`) through OpenCode. |
+| Explicitly requested uncensored narration | `shadow_submit_uncensored_narration` with either `brief` or `filePath` | The configured Venice Uncensored model through OpenCode (default `venice/venice-uncensored-1-2`). |
 
-## Narrative requests
+Use the uncensored tool when the user asks for uncensored fiction, for example to preserve the requested intensity of adult intimacy or graphic violence. Hemmingway still writes the draft and the server still runs its scene checks. Venice does the final review directly after the free access check. For standard narration, the server tries Venice once if GPT-6 Luna refuses for policy reasons or has a technical failure. A scene validation failure by itself ends that review. If the uncensored tool reports an unsupported payload version, tell the user the server needs an update.
 
-For a request given in chat, call `shadow_submit_narration` with the project UUID, the SHA-256 of the selected project revision, and the user's request as `brief`. Pass canon in `metadata.canon` only when the user supplied or selected that canon and it is actually available to the client. Do not invent a hash or claim the server validated the project revision from its hash alone.
+Supply the project UUID and SHA-256 of the selected project revision. Pass available, authorized canon in `metadata.canon`. Never invent a project ID or revision hash. For a selected file, pass its path and let the MCP tool read it. For a chat brief, preserve the required beats, constraints, and ending. The server returns an English scene.
 
-For a selected request file, call `shadow_submit_narration_file` with its path, project UUID, revision SHA-256, and optional metadata. The MCP tool reads and transmits the file directly. Do not open or quote the file in chat before submission. Keep request metadata limited to project material needed by the server.
-
-After submission, use the returned request ID with `shadow_wait_job` or `shadow_job_status`. Do not resubmit because of a timeout or disconnect; query the same request ID. When the server finishes, call `get_narration_result` with the job ID. It downloads the OneDrive reference through the MCP client, verifies the SHA-256, and returns a local file path. Only then read and analyse the downloaded scene. Report review errors or warnings from the job result; do not treat a failed reviewer as approval.
-
-The server returns English narrative and may include Visual, Music, SFX, or Animation cues. Those cues are text directions; they do not mean assets were created. Asset generation remains a separate request. Regia is a separate Bionic planning conversation described in [Handoff 09](../../../handoffs/09-bionic-regia.md).
-
-## Other requests
-
-Use `shadow_submit_job` with `operation: "codex.execute"` for generic tasks intended for the server-side OpenCode GPT-6 Luna Coordinator. The operation name is retained for protocol compatibility. Use the job ID or request ID to poll; do not submit the same action again automatically.
-
-Use `shadow_retry_job` only after the user explicitly requests a retry for a job in the `failed` state. Preserve a `retryRequestId` when checking an uncertain retry: query it with `shadow_job_status` before asking for another run. Interrupted jobs are not eligible because the previous outcome may be uncertain.
+Use the returned job or request ID with `shadow_wait_job`. After a timeout or disconnect, query the same ID with `shadow_job_status`. On completion, call `get_narration_result` to download the scene from OneDrive and verify its SHA-256. Return the verified file and report any review warnings. The scene can include narrative cues for future asset production.
