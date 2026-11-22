@@ -30,13 +30,24 @@ async function relayStatus() {
   });
 }
 async function callRelay(message, timeoutMs = DEFAULT_TIMEOUT_MS) {
+  return withRelay((socket) => exchange(socket, message, timeoutMs));
+}
+async function callRelaySequence(messages) {
+  return withRelay(async (socket) => {
+    let last;
+    for (const message of messages) {
+      last = await exchange(socket, message, DEFAULT_TIMEOUT_MS);
+      if (last.type === "error") break;
+    }
+    if (!last) throw new Error("No relay requests to send.");
+    return last;
+  });
+}
+function exchange(socket, message, timeoutMs) {
   const messageId = message.messageId;
   if (!messageId) throw new Error("Relay request is missing a messageId.");
-  return withRelay(async (socket) => {
-    const reply = waitForMessage(socket, (candidate) => candidate.replyTo === messageId && candidate.type !== "job.progress", timeoutMs);
-    sendJson(socket, message);
-    return reply;
-  });
+  sendJson(socket, message);
+  return waitForMessage(socket, (candidate) => candidate.replyTo === messageId && candidate.type !== "job.progress", timeoutMs);
 }
 async function withRelay(operation) {
   const credential = readCredential();
@@ -315,18 +326,22 @@ function createServer() {
         await file.close();
       }
       const sha256 = createHash("sha256").update(image).digest("hex");
-      let result;
-      for (let offset = 0; offset < image.length; offset += 24e3) {
-        result = await characterCall("chunk", {
-          ...fields,
-          sha256,
-          size: image.length,
-          offset,
-          chunk: image.subarray(offset, offset + 24e3).toString("hex")
-        });
-        if ("isError" in result && result.isError) return result;
+      function* chunks() {
+        for (let offset = 0; offset < image.length; offset += 24e3) {
+          yield {
+            version: 1,
+            type: "lora.character_chunk",
+            messageId: randomUUID(),
+            ...fields,
+            sha256,
+            size: image.length,
+            offset,
+            chunk: image.subarray(offset, offset + 24e3).toString("hex")
+          };
+        }
       }
-      return result;
+      const response = await callRelaySequence(chunks());
+      return response.type === "error" ? errorResult(new Error(errorMessage(response.error))) : jsonResult(response);
     } catch (error) {
       return errorResult(error);
     }

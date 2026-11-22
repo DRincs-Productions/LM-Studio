@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 import { promisify } from "node:util";
 import { clientStatus, enrollClient, getClientIdToken, login, logout } from "./auth.js";
-import { callRelay, relayStatus, type RelayMessage } from "./relay-client.js";
+import { callRelay, callRelaySequence, relayStatus, type RelayMessage } from "./relay-client.js";
 
 const narrativePayload = z.object({
   projectId: z.string().uuid(),
@@ -160,14 +160,14 @@ function createServer(): McpServer {
         await file.close();
       }
       const sha256 = createHash("sha256").update(image).digest("hex");
-      let result;
-      for (let offset = 0; offset < image.length; offset += 24000) {
-        result = await characterCall("chunk", {
-          ...fields, sha256, size: image.length, offset, chunk: image.subarray(offset, offset + 24000).toString("hex"),
-        });
-        if ("isError" in result && result.isError) return result;
+      function* chunks(): Iterable<RelayMessage> {
+        for (let offset = 0; offset < image.length; offset += 24000) {
+          yield { version: 1, type: "lora.character_chunk", messageId: randomUUID(),
+            ...fields, sha256, size: image.length, offset, chunk: image.subarray(offset, offset + 24000).toString("hex") };
+        }
       }
-      return result!;
+      const response = await callRelaySequence(chunks());
+      return response.type === "error" ? errorResult(new Error(errorMessage(response.error))) : jsonResult(response);
     } catch (error) { return errorResult(error); }
   });
   server.registerTool("lora_remove_character_image", {

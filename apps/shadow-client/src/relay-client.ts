@@ -30,13 +30,26 @@ export async function relayStatus(): Promise<void> {
 }
 
 export async function callRelay(message: RelayMessage, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<RelayMessage> {
+  return withRelay(socket => exchange(socket, message, timeoutMs));
+}
+
+export async function callRelaySequence(messages: Iterable<RelayMessage>): Promise<RelayMessage> {
+  return withRelay(async socket => {
+    let last: RelayMessage | undefined;
+    for (const message of messages) {
+      last = await exchange(socket, message, DEFAULT_TIMEOUT_MS);
+      if (last.type === "error") break;
+    }
+    if (!last) throw new Error("No relay requests to send.");
+    return last;
+  });
+}
+
+function exchange(socket: WebSocket, message: RelayMessage, timeoutMs: number): Promise<RelayMessage> {
   const messageId = message.messageId;
   if (!messageId) throw new Error("Relay request is missing a messageId.");
-  return withRelay(async (socket) => {
-    const reply = waitForMessage(socket, (candidate) => candidate.replyTo === messageId && candidate.type !== "job.progress", timeoutMs);
-    sendJson(socket, message);
-    return reply;
-  });
+  sendJson(socket, message);
+  return waitForMessage(socket, (candidate) => candidate.replyTo === messageId && candidate.type !== "job.progress", timeoutMs);
 }
 
 async function withRelay<T>(operation: (socket: WebSocket, ready: RelayMessage) => Promise<T>): Promise<T> {
