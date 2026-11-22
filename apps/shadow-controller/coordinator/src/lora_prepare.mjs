@@ -12,23 +12,30 @@ function command(executable, args, timeout) {
   return run(executable, args, { timeout, windowsHide: true });
 }
 
-await command(python, ['-c', `
+const normalized = await command(python, ['-c', `
 from PIL import Image, ImageOps
 import sys
 with Image.open(sys.argv[1], formats=['PNG', 'JPEG', 'WEBP']) as image:
     if image.width * image.height > 16000000:
         raise ValueError('Image exceeds 16 megapixels')
-    ImageOps.exif_transpose(image).convert('RGBA').save('source.png')
+    normalized = ImageOps.exif_transpose(image).convert('RGBA')
+    normalized.save('source.png')
+    print(normalized.getchannel('A').getextrema() == (0, 255))
 `, path.join(root, 'source')], 30_000);
-await command(python, [path.resolve(path.dirname(worker), 'transparent.py'),
-  'source.png', 'cutout.png', 'preview.png',
-  process.env.SHADOW_REMBG_STANDARD_MODEL || 'isnet-general-use'], 300_000);
+if (normalized.stdout.trim() === 'True') {
+  await copyFile('source.png', 'cutout.png');
+} else {
+  await command(python, [path.resolve(path.dirname(worker), 'transparent.py'),
+    'source.png', 'cutout.png', 'preview.png',
+    process.env.SHADOW_REMBG_STANDARD_MODEL || 'isnet-general-use'], 300_000);
+}
 await command(python, ['-c', `
 from PIL import Image
 with Image.open('cutout.png') as image:
     with Image.open('source.png') as source:
         from PIL import ImageChops
-        mask = ImageChops.multiply(image.getchannel('A'), source.getchannel('A'))
+        alpha = source.getchannel('A')
+        mask = alpha if alpha.getextrema() == (0, 255) else ImageChops.multiply(image.getchannel('A'), alpha)
     if mask.getextrema() != (0,255):
         raise ValueError('Mask must contain foreground and background')
     mask.save('mask.png')
