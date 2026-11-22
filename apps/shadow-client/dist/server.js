@@ -13,7 +13,7 @@ import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import * as z from "zod/v4";
 import { createHash, randomUUID } from "crypto";
 import { execFile } from "child_process";
-import { mkdir, mkdtemp, readFile, writeFile } from "fs/promises";
+import { open, mkdir, mkdtemp, readFile, writeFile } from "fs/promises";
 import { join } from "path";
 import { homedir } from "os";
 import { promisify } from "util";
@@ -292,6 +292,53 @@ function createServer() {
       return errorResult(new Error(`${errorMessage(error)} Request ID: ${stableRequestId}. Query this ID before submitting again.`));
     }
   });
+  const characterCall = (action, fields) => relayToolCall({ version: 1, type: "lora.character_" + action, messageId: randomUUID(), ...fields });
+  server.registerTool("lora_create_character_job", {
+    description: "Create an editable Krea 2 character LoRA draft.",
+    inputSchema: z.object({ name: z.string(), trigger: z.string(), requestId: z.string().uuid() })
+  }, async (fields) => characterCall("create", fields));
+  server.registerTool("lora_add_character_image", {
+    description: "Upload one local character image and its Italian description. Reuse requestId to retry.",
+    inputSchema: z.object({ jobId: z.string().uuid(), requestId: z.string().uuid(), filePath: z.string(), description: z.string() })
+  }, async ({ filePath, ...fields }) => {
+    try {
+      const file = await open(filePath, "r");
+      let image;
+      try {
+        const stat = await file.stat();
+        if (!stat.isFile() || stat.size === 0 || stat.size > 20 * 1024 * 1024) {
+          throw new Error("Choose an image file between 1 byte and 20 MiB");
+        }
+        image = Buffer.alloc(stat.size);
+        if ((await file.read(image)).bytesRead !== image.length) throw new Error("Image changed during upload");
+      } finally {
+        await file.close();
+      }
+      const sha256 = createHash("sha256").update(image).digest("hex");
+      let result;
+      for (let offset = 0; offset < image.length; offset += 24e3) {
+        result = await characterCall("chunk", {
+          ...fields,
+          sha256,
+          size: image.length,
+          offset,
+          chunk: image.subarray(offset, offset + 24e3).toString("hex")
+        });
+        if ("isError" in result && result.isError) return result;
+      }
+      return result;
+    } catch (error) {
+      return errorResult(error);
+    }
+  });
+  server.registerTool("lora_remove_character_image", {
+    description: "Remove a reference from an editable LoRA draft.",
+    inputSchema: z.object({ jobId: z.string().uuid(), imageId: z.string().uuid() })
+  }, async ({ jobId, imageId }) => characterCall("remove", { jobId, requestId: imageId }));
+  server.registerTool("lora_submit_character_job", {
+    description: "Approve and freeze a prepared dataset for low priority LoRA training.",
+    inputSchema: z.object({ jobId: z.string().uuid() })
+  }, async (fields) => characterCall("submit", fields));
   server.registerTool("lora_import", {
     description: "Import a OneTrainer JSON export from the paired server's lora-inbox without starting it.",
     inputSchema: z.object({ fileName: z.string().min(1).max(120), requestId: z.string().uuid() })
@@ -316,12 +363,13 @@ function createServer() {
   })) {
     server.registerTool(`lora_${action}`, {
       description,
-      inputSchema: z.object({ jobId: z.string().uuid() })
-    }, async ({ jobId }) => relayToolCall({
+      inputSchema: z.object({ jobId: z.string().uuid(), imageId: z.string().uuid().optional() })
+    }, async ({ jobId, imageId }) => relayToolCall({
       version: 1,
       type: `lora.${action}`,
       messageId: randomUUID(),
-      jobId
+      jobId,
+      imageId
     }));
   }
   const narrationInput = z.object({

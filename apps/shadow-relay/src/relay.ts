@@ -31,6 +31,7 @@ const MESSAGE_LIMIT_BYTES = 64 * 1024;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const CLIENT_REQUEST_TYPES = new Set([
   "job.submit", "job.status", "job.list", "job.cancel", "job.retry", "asset.list", "asset.get",
+  "lora.character_create", "lora.character_chunk", "lora.character_remove", "lora.character_submit",
   "lora.import", "lora.list", "lora.status", "lora.attach", "lora.detach", "lora.start", "lora.pause", "lora.resume",
 ]);
 const SERVER_RESPONSE_TYPES = new Set([

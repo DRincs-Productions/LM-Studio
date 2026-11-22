@@ -12,6 +12,9 @@ use uuid::Uuid;
 
 use crate::{JobStore, StoreError, timestamp};
 
+#[path = "lora_character.rs"]
+mod character;
+
 const STATUS_FIELDS: &str = "id, attached_at, paused, state, detail";
 
 impl JobStore {
@@ -27,6 +30,9 @@ impl JobStore {
             .connection
             .lock()
             .map_err(|_| StoreError::LockPoisoned)?;
+        if action.starts_with("character_") {
+            return character::request(&connection, data, uid, client, action, message);
+        }
         if action == "list" {
             let mut query = connection.prepare(&format!(
                 "SELECT {STATUS_FIELDS} FROM lora_jobs WHERE uid=?1 AND client_id=?2 ORDER BY rowid DESC LIMIT 50"
@@ -102,7 +108,7 @@ impl JobStore {
             _ => return Err(StoreError::InvalidRequest("Unknown LoRA action")),
         };
         if let Some(update) = update {
-            let mut condition = format!("{filter} AND state!='completed'");
+            let mut condition = format!("{filter} AND state NOT IN ('completed','draft')");
             if matches!(action, "start" | "resume") {
                 condition.push_str(" AND attached_at IS NOT NULL");
             }
@@ -126,6 +132,31 @@ impl JobStore {
             )
             .optional()?
             .ok_or(StoreError::JobNotFound)?;
+        let mut job = job;
+        if action == "status" {
+            let config: Option<String> = connection
+                .query_row(
+                    "SELECT config FROM lora_jobs WHERE id=?1 AND file_name='character'",
+                    [&id],
+                    |r| r.get(0),
+                )
+                .optional()?;
+            if let Some(config) = config {
+                let config: Value = serde_json::from_str(&config)?;
+                let images = config["images"].as_object().unwrap();
+                if message["imageId"].is_string() {
+                    let key = uuid_field(message, "imageId")?;
+                    job["image"] = images.get(&key).cloned().ok_or(StoreError::JobNotFound)?;
+                } else {
+                    job["images"] = json!(
+                        images
+                            .iter()
+                            .map(|(key, value)| json!({"imageId":key,"state":value["state"]}))
+                            .collect::<Vec<_>>()
+                    );
+                }
+            }
+        }
         Ok(json!({"job": job}))
     }
 
@@ -134,6 +165,10 @@ impl JobStore {
             .connection
             .lock()
             .map_err(|_| StoreError::LockPoisoned)?;
+        connection.execute("UPDATE lora_jobs SET config=(SELECT json_set(lora_jobs.config,'$.images',
+            json_group_object(key,json(CASE WHEN json_extract(value,'$.state')='preparing'
+                THEN json_set(value,'$.state','pending') ELSE value END))) FROM json_each(lora_jobs.config,'$.images'))
+            WHERE state='draft'", [])?;
         let mut query =
             connection.prepare("SELECT id FROM lora_jobs WHERE state IN ('running','pausing')")?;
         let ids = query
@@ -257,6 +292,8 @@ mod tests {
 pub(crate) struct Scheduler {
     active: Option<Attempt>,
     next_probe: Option<Instant>,
+    preparation: Option<(Attempt, String)>,
+    last_upload_cleanup: Option<Instant>,
 }
 
 struct Attempt {
@@ -276,6 +313,32 @@ impl Scheduler {
         foreground: bool,
         stopping: bool,
     ) -> Result<bool, crate::runtime::RuntimeError> {
+        #[cfg(windows)]
+        if let Some((attempt, sample)) = &mut self.preparation {
+            if let Some(status) = attempt.worker.try_wait()? {
+                let caption = status
+                    .success()
+                    .then(|| fs::read_to_string(attempt.path.join("caption.txt")).ok())
+                    .flatten();
+                let (state, detail) = if let Some(caption) = caption.as_deref() {
+                    ("ready", Some(caption))
+                } else if status.code() == Some(75) {
+                    ("pending", None)
+                } else {
+                    (
+                        "failed",
+                        Some("Image preparation failed. See the server preparation log."),
+                    )
+                };
+                character::preparation_state(store, &attempt.id, sample, state, detail)?;
+                self.preparation = None;
+            } else {
+                if foreground || stopping {
+                    attempt._job.terminate()?;
+                }
+                return Ok(true);
+            }
+        }
         if let Some(attempt) = &mut self.active {
             if let Some(status) = attempt.worker.try_wait()? {
                 let output = data
@@ -340,6 +403,33 @@ impl Scheduler {
         }
         if foreground || stopping || !cfg!(windows) {
             return Ok(false);
+        }
+        if self
+            .last_upload_cleanup
+            .is_none_or(|last| last.elapsed() >= Duration::from_secs(300))
+        {
+            character::expire_uploads(store, data)?;
+            self.last_upload_cleanup = Some(Instant::now());
+        }
+        #[cfg(windows)]
+        if let Some((id, sample, trigger, description)) = character::pending(store)? {
+            if character::preparation_state(store, &id, &sample, "preparing", None)? {
+                match launch_preparation(data, &id, &sample, &trigger, &description) {
+                    Ok(attempt) => {
+                        self.preparation = Some((attempt, sample));
+                        return Ok(true);
+                    }
+                    Err(_) => {
+                        character::preparation_state(
+                            store,
+                            &id,
+                            &sample,
+                            "failed",
+                            Some("Cannot launch image preparation"),
+                        )?;
+                    }
+                }
+            }
         }
         let candidate: Option<(String, String)> = store.connection.lock().map_err(|_| StoreError::LockPoisoned)?
             .query_row("SELECT id,config FROM lora_jobs WHERE state='waiting' AND attached_at IS NOT NULL AND paused=0 ORDER BY attached_at,rowid LIMIT 1",
@@ -440,7 +530,12 @@ fn launch(data: &Path, id: &str, config: &str) -> io::Result<Attempt> {
     fs::create_dir_all(&workspace)?;
     let path = workspace.join(Uuid::new_v4().to_string());
     fs::create_dir(&path)?;
-    fs::write(workspace.join("export.json"), config)?;
+    let parsed: Value = serde_json::from_str(config)?;
+    let export = parsed.get("training").map(Value::to_string);
+    fs::write(
+        workspace.join("export.json"),
+        export.as_deref().unwrap_or(config),
+    )?;
     let runner = path.join("runner.py");
     fs::write(&runner, include_str!("lora_runner.py"))?;
     let log = File::create(path.join("training.log"))?;
@@ -536,4 +631,54 @@ mod windows_job {
             Ok(())
         }
     }
+}
+
+#[cfg(windows)]
+fn launch_preparation(
+    data: &Path,
+    id: &str,
+    sample: &str,
+    trigger: &str,
+    description: &str,
+) -> io::Result<Attempt> {
+    use std::os::windows::process::CommandExt;
+
+    let root = data
+        .canonicalize()?
+        .join("lora")
+        .join(id)
+        .join("samples")
+        .join(sample);
+    let path = root.join(Uuid::new_v4().to_string());
+    fs::create_dir(&path)?;
+    fs::write(
+        path.join("request.json"),
+        serde_json::to_vec(&json!({
+            "root":root,"sample":sample,"trigger":trigger,"description":description
+        }))?,
+    )?;
+    fs::write(path.join("prepare.mjs"), include_str!("lora_prepare.mjs"))?;
+    let log = File::create(path.join("preparation.log"))?;
+    let job = windows_job::Job::new()?;
+    let mut worker = python(&trainer_home());
+    // Hold the launcher on stdin until it belongs to the job object.
+    let mut worker = worker.current_dir(&path).args(["-c",
+        "import subprocess,sys; sys.exit(subprocess.call(['node','prepare.mjs']) if sys.stdin.buffer.read(1)==b'1' else 74)"])
+        .creation_flags(0x0800_4000)
+        .stdin(Stdio::piped()).stdout(log.try_clone()?).stderr(log).spawn()?;
+    if let Err(error) = job
+        .assign(&worker)
+        .and_then(|_| worker.stdin.take().unwrap().write_all(b"1"))
+    {
+        let _ = worker.kill();
+        let _ = worker.wait();
+        return Err(error);
+    }
+    Ok(Attempt {
+        id: id.to_owned(),
+        path,
+        worker,
+        deadline: None,
+        _job: job,
+    })
 }

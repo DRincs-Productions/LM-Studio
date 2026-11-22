@@ -67,7 +67,7 @@ Project Worker also provides read-only access to Ink and Markdown under `docs/` 
 
 Shadow Controller and OpenCode make up the Coordinator on the server. Shadow Controller owns the queue, validation, dispatch, and delivery. OpenCode prepares the production prompt with the model selected by Shadow Controller.
 
-Shadow Controller also schedules background LoRA training. OneTrainer prepares the configuration and runs training without a window. Foreground requests take priority, and training resumes from a verified checkpoint when the foreground queue clears.
+Shadow Controller also schedules background LoRA training. Shadow Controller can prepare character references and captions before handing the approved dataset to OneTrainer, which runs training without a window. Foreground requests take priority, and training resumes from a verified checkpoint when the foreground queue clears.
 
 The target workflow is:
 
@@ -594,6 +594,12 @@ The client exposes `shadow_submit_normal_image`, `shadow_submit_hot_image`, and 
 Before a Codex client can reach its paired Shadow Controller server, install the published package with `npm install --global shadow-controller-mcp-client`, then run `shadow-client login`. This opens the hosted HTTPS Firebase sign-in page in the system browser and returns the temporary sign-in to the client over a one-time localhost callback. It then enrolls the client's public key with the signed-in account. Verify with `shadow-client status`, then use the `shadow-controller` MCP tool `shadow_relay_status` to confirm the paired server is online. The MCP `shadow_login` tool performs the same sign-in and enrollment from Codex. If enrollment was interrupted, run `shadow-client register` or `shadow_register_client` and check status again. Do not change relay URLs or credentials to resolve a sign-in failure; use `shadow_auth_token_status` and the documented recovery flow first. Publish package updates by pushing a `lib-v<version>` tag that matches both client package manifests; the GitHub Actions workflow and required npm secret are documented in the [client package guide](apps/shadow-client/README.md#publishing-a-release).
 
 ### Background LoRA training
+
+For a Krea 2 RAW character adapter, call `lora_create_character_job` with a name, trigger token and request UUID. Use `lora_add_character_image` once per reference with its local path, an Italian description and a unique request UUID. Reuse that UUID if an upload is interrupted. The paired server prepares a character mask and uses OpenCode to write an English caption from the cutout and description. Use `lora_status` to list image IDs and states, or supply `imageId` to read a sample's caption or error. Remove failed or unsuitable references with `lora_remove_character_image` and upload replacements with fresh UUIDs.
+
+The server operator provides `krea2-character-template.json` beside `coordinator.sqlite3`. Use a OneTrainer export with `model_type` set to `KREA_2`, `training_method` set to `LORA`, and an absolute `base_model_name` pointing to the local Krea 2 RAW Diffusers directory. The server supplies the dataset and masks. Submit with `lora_submit_character_job` after reviewing the prepared samples. Submission freezes the dataset and enrolls the job in the existing idle scheduler.
+
+Historical test reports and artifacts previously stored under `production-tests` were archived on the original Windows workstation at `C:\Users\Shadow\LM-Studio-production-tests-2026-11-22`. The ignored `production-tests` directory remains available for new runs.
 
 On the paired Windows server, configure LoRA training in OneTrainer and use **Export Training**. Save the JSON under `lora-inbox` in the Coordinator data directory, beside `coordinator.sqlite3`. Use absolute paths for the model and datasets on the server. The runner uses `C:\AI\OneTrainer` by default. Set `SHADOW_ONETRAINER_DIR` if the installation is elsewhere.
 
