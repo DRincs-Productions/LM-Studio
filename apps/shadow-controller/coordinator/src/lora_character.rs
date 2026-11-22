@@ -1,7 +1,57 @@
 use super::*;
 use sha2::{Digest, Sha256};
+use std::io::{Seek, SeekFrom};
 
 const MAX_IMAGE: usize = 20 * 1024 * 1024;
+
+#[cfg(test)]
+#[test]
+fn character_drafts_accept_idempotent_chunks_only_from_the_owner() {
+    let store = JobStore::open_in_memory().unwrap();
+    let root = std::env::temp_dir().join(format!("character-lora-{}", Uuid::new_v4()));
+    let create = json!({"name":"Character","trigger":"test_subject","requestId":Uuid::new_v4()});
+    let job = store
+        .lora_request(&root, "account", "owner", "character_create", &create)
+        .unwrap();
+    let id = &job["jobId"];
+    let mut message = json!({"jobId":id,"requestId":Uuid::new_v4(),"description":"Capelli corti",
+        "size":3,"sha256":format!("{:x}",Sha256::digest(b"abc")),"offset":0,"chunk":"6162"});
+    let upload = |owner, message: &Value| {
+        store.lora_request(&root, "account", owner, "character_chunk", message)
+    };
+    assert!(upload("other", &message).is_err());
+    for _ in 0..2 {
+        assert_eq!(
+            upload("owner", &message).unwrap()["image"]["state"],
+            "uploading"
+        );
+    }
+    message["offset"] = json!(2);
+    message["chunk"] = json!("63");
+    assert_eq!(
+        upload("owner", &message).unwrap()["image"]["state"],
+        "pending"
+    );
+    assert!(
+        store
+            .lora_request(
+                &root,
+                "account",
+                "owner",
+                "character_submit",
+                &json!({"jobId":id})
+            )
+            .is_err()
+    );
+    store
+        .lora_request(&root, "account", "owner", "character_remove", &message)
+        .unwrap();
+    let job_dir = root.join("lora").join(id.as_str().unwrap());
+    fs::remove_dir(job_dir.join("samples")).unwrap();
+    fs::remove_dir(job_dir).unwrap();
+    fs::remove_dir(root.join("lora")).unwrap();
+    fs::remove_dir(root).unwrap();
+}
 
 pub(super) fn request(
     connection: &rusqlite::Connection,
@@ -81,11 +131,12 @@ pub(super) fn request(
                 fs::copy(root.join(sample).join(&name), dataset.join(&name)).map_err(io_error)?;
             }
         }
-        training["concepts"] = json!([{"enabled":true,"name":config["name"],"path":dataset,
+        training["concepts"] = json!([{"enabled":true,"name":config["name"],"path":dataset,"seed":42,
             "include_subdirectories":false,"text":{"prompt_source":"sample"}}]);
         training["masked_training"] = json!(true);
         training["unmasked_probability"] = json!(0);
         training["unmasked_weight"] = json!(0);
+        training["masked_prior_preservation_weight"] = json!(0);
         config["training"] = training;
         connection.execute(
             "UPDATE lora_jobs SET state='waiting',attached_at=?2,paused=0,config=?3 WHERE id=?1",
@@ -159,10 +210,10 @@ pub(super) fn request(
                 return Err(invalid("Missing preceding image chunk"));
             }
             if offset < length {
-                let prior = fs::read(&source).map_err(io_error)?;
-                if prior.get(offset as usize..offset as usize + bytes.len())
-                    != Some(bytes.as_slice())
-                {
+                let mut file = File::open(&source).map_err(io_error)?;
+                file.seek(SeekFrom::Start(offset)).map_err(io_error)?;
+                let mut prior = vec![0; bytes.len()];
+                if file.read_exact(&mut prior).is_err() || prior != bytes {
                     return Err(StoreError::IdempotencyConflict);
                 }
             } else {
