@@ -320,7 +320,7 @@ def train(workspace, attempt):
             return
         if pause_file.exists() or time.monotonic() >= next_checkpoint:
             commands.backup()
-            next_checkpoint = time.monotonic() + 300 if checkpoint else 0
+            next_checkpoint = time.monotonic() + 300
 
     trainer._GenericTrainer__backup = backup
     callbacks.set_on_update_train_progress(progress)
