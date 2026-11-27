@@ -6,11 +6,11 @@ use std::{
     time::{Duration, Instant},
 };
 
-use rusqlite::{params, OptionalExtension};
-use serde_json::{json, Value};
+use rusqlite::{OptionalExtension, params};
+use serde_json::{Value, json};
 use uuid::Uuid;
 
-use crate::{timestamp, JobStore, StoreError};
+use crate::{JobStore, StoreError, timestamp};
 
 #[path = "lora_character.rs"]
 mod character;
@@ -159,10 +159,12 @@ impl JobStore {
                         }
                     }
                 } else {
-                    job["images"] = json!(images
-                        .iter()
-                        .map(|(key, value)| json!({"imageId":key,"state":value["state"]}))
-                        .collect::<Vec<_>>());
+                    job["images"] = json!(
+                        images
+                            .iter()
+                            .map(|(key, value)| json!({"imageId":key,"state":value["state"]}))
+                            .collect::<Vec<_>>()
+                    );
                 }
             }
         }
@@ -263,9 +265,11 @@ mod tests {
             job
         );
         let key = json!({"jobId":job["job"]["jobId"]});
-        assert!(store
-            .lora_request(&root, "uid", "other", "attach", &key)
-            .is_err());
+        assert!(
+            store
+                .lora_request(&root, "uid", "other", "attach", &key)
+                .is_err()
+        );
         let attached = store
             .lora_request(&root, "uid", "owner", "attach", &key)
             .unwrap();
@@ -588,9 +592,9 @@ mod windows_job {
     use windows_sys::Win32::{
         Foundation::{CloseHandle, HANDLE},
         System::JobObjects::{
-            AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
-            SetInformationJobObject, TerminateJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
-            JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+            AssignProcessToJobObject, CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+            JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JobObjectExtendedLimitInformation,
+            SetInformationJobObject, TerminateJobObject,
         },
     };
 

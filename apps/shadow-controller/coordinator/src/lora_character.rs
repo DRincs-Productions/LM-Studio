@@ -32,15 +32,17 @@ fn character_drafts_accept_idempotent_chunks_only_from_the_owner() {
         upload("owner", &message).unwrap()["image"]["state"],
         "pending"
     );
-    assert!(store
-        .lora_request(
-            &root,
-            "account",
-            "owner",
-            "character_submit",
-            &json!({"jobId":id})
-        )
-        .is_err());
+    assert!(
+        store
+            .lora_request(
+                &root,
+                "account",
+                "owner",
+                "character_submit",
+                &json!({"jobId":id})
+            )
+            .is_err()
+    );
     store
         .lora_request(&root, "account", "owner", "character_remove", &message)
         .unwrap();
