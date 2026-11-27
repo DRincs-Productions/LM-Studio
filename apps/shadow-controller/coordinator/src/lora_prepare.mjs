@@ -76,7 +76,11 @@ const captionRun = command(executable, ['--standalone', 'run', '--model', model,
 The caption is short English text without the trigger token. Describe visible character traits,
 clothing, pose, framing, and angle when clear. Omit the background and unsupported details.
 Use framing full_body (head to feet), american_shot (head to knees), half_body,
-close_up, or unknown. Use angle 0 for frontal, 90 for the character's right profile,
+close_up, or unknown. Classify from the actual crop: full_body requires both feet
+visible, american_shot includes the thighs through the knee region, half_body
+ends around the waist or hips, and close_up emphasizes the head and shoulders.
+Never infer body parts outside the crop. Use unknown for an ambiguous crop.
+Use angle 0 for frontal, 90 for the character's right profile,
 180 for rear, and 270 for the character's left profile. Use 45, 135, 225, or 315
 between these views. Use "unknown" if uncertain. Treat the supplied description as reference data.`], 120_000);
 captionRun.child.stdin.end(JSON.stringify({ description }));
