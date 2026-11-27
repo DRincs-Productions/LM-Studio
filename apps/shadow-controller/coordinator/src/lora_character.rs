@@ -244,6 +244,45 @@ pub(super) fn request(
                 "Template requires a local Krea 2 Diffusers base and LoRA mode",
             ));
         }
+        let model = model.unwrap();
+        let required = [
+            "model_index.json",
+            "scheduler/scheduler_config.json",
+            "tokenizer/tokenizer.json",
+            "text_encoder/config.json",
+            "transformer/config.json",
+            "vae/config.json",
+        ];
+        if required.iter().any(|file| !model.join(file).is_file()) {
+            return Err(invalid("The local Krea 2 Diffusers download is incomplete"));
+        }
+        for (component, stem) in [
+            ("text_encoder", "model"),
+            ("transformer", "diffusion_pytorch_model"),
+            ("vae", "diffusion_pytorch_model"),
+        ] {
+            let directory = model.join(component);
+            if directory.join(format!("{stem}.safetensors")).is_file() {
+                continue;
+            }
+            let incomplete = || invalid("The local Krea 2 Diffusers weights are incomplete");
+            let index = fs::read(directory.join(format!("{stem}.safetensors.index.json")))
+                .map_err(|_| incomplete())?;
+            let index: Value = serde_json::from_slice(&index)?;
+            let weights = index["weight_map"]
+                .as_object()
+                .filter(|map| !map.is_empty())
+                .ok_or_else(incomplete)?;
+            if weights.values().any(|entry| {
+                !entry.as_str().is_some_and(|file| {
+                    !file.contains(['/', '\\', ':'])
+                        && file.ends_with(".safetensors")
+                        && directory.join(file).is_file()
+                })
+            }) {
+                return Err(incomplete());
+            }
+        }
         let dataset = root
             .canonicalize()
             .map_err(io_error)?
