@@ -143,6 +143,13 @@ impl JobStore {
                 .optional()?;
             if let Some(config) = config {
                 let config: Value = serde_json::from_str(&config)?;
+                if let Some(revision) = config["revision"].as_u64() {
+                    job["revision"] = json!(revision);
+                    let workspace = training_workspace(data, &id, revision);
+                    if let Ok(progress) = fs::read_to_string(workspace.join("progress.json")) {
+                        job["progress"] = serde_json::from_str(&progress)?;
+                    }
+                }
                 let images = config["images"].as_object().unwrap();
                 if message["imageId"].is_string() {
                     let key = uuid_field(message, "imageId")?;

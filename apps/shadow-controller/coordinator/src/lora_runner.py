@@ -268,13 +268,21 @@ def train(workspace, attempt):
         if pause_file.exists():
             commands.stop()
 
-    def progress(train_progress, *_):
+    def progress(train_progress, batches, total_epochs):
         nonlocal next_checkpoint, last_boundary
         epoch_boundary = (
             epoch_backups and train_progress.epoch > 0 and train_progress.epoch_step == 0
             and train_progress.epoch != last_boundary
         )
         if epoch_boundary:
+            snapshot = attempt / "progress.json"
+            snapshot.write_text(json.dumps({
+                "epoch": train_progress.epoch,
+                "globalStep": train_progress.global_step,
+                "batchesInEpoch": batches,
+                "totalEpochs": total_epochs,
+            }), encoding="utf-8")
+            snapshot.replace(workspace / "progress.json")
             backup(train_progress)
             candidates = workspace / "epoch-candidates"
             candidates.mkdir(exist_ok=True)
