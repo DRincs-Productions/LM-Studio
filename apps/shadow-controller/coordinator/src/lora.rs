@@ -408,6 +408,31 @@ impl Scheduler {
                     attempt.worker.kill()?;
                 }
             } else {
+                if !foreground && !stopping && eligible {
+                    let transition: Option<String> = store.connection.lock()
+                        .map_err(|_| StoreError::LockPoisoned)?
+                        .query_row(
+                            "SELECT CASE
+                               WHEN EXISTS (SELECT 1 FROM json_each(config,'$.images') WHERE json_extract(value,'$.state')='pending') THEN 'prepare-at-epoch'
+                               WHEN NOT EXISTS (SELECT 1 FROM json_each(config,'$.images') WHERE json_extract(value,'$.state')!='ready')
+                                 AND json_array_length(config,'$.activeImages') < (SELECT count(*) FROM json_each(config,'$.images')) THEN 'revision-at-epoch'
+                               ELSE NULL END
+                             FROM lora_jobs WHERE id=?1 AND file_name='character' AND json_type(config,'$.characterId')='text'",
+                            [&attempt.id], |row| row.get::<_, Option<String>>(0),
+                        ).optional().map_err(StoreError::from)?.flatten();
+                    let signal = attempt.path.join("epoch-transition");
+                    if let Some(transition) = transition {
+                        if fs::read_to_string(&signal).ok().as_deref() != Some(&transition) {
+                            fs::write(&signal, transition)?;
+                        }
+                    } else {
+                        if let Err(error) = fs::remove_file(signal) {
+                            if error.kind() != io::ErrorKind::NotFound {
+                                return Err(error.into());
+                            }
+                        }
+                    }
+                }
                 let pressure = !foreground
                     && !stopping
                     && eligible

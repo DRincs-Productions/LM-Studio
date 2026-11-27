@@ -266,6 +266,7 @@ def train(workspace, attempt):
     next_checkpoint = time.monotonic() + 300 if checkpoint else 0
     epoch_backups = os.environ.get("SHADOW_LORA_EPOCH_BACKUPS") == "1"
     last_boundary = None
+    finalize_revision = False
 
 
     def backup(progress, print_msg=True):
@@ -282,7 +283,7 @@ def train(workspace, attempt):
             commands.stop()
 
     def progress(train_progress, batches, total_epochs):
-        nonlocal next_checkpoint, last_boundary
+        nonlocal next_checkpoint, last_boundary, finalize_revision
         epoch_boundary = (
             epoch_backups and train_progress.epoch > 0 and train_progress.epoch_step == 0
             and train_progress.epoch != last_boundary
@@ -317,6 +318,13 @@ def train(workspace, attempt):
                 temporary.replace(candidate)
             last_boundary = train_progress.epoch
             next_checkpoint = time.monotonic() + 300
+            try:
+                transition = (attempt / "epoch-transition").read_text(encoding="utf-8")
+            except FileNotFoundError:
+                transition = ""
+            if transition in ("prepare-at-epoch", "revision-at-epoch") and not pause_file.exists():
+                finalize_revision = transition == "revision-at-epoch"
+                commands.stop()
             return
         if pause_file.exists() or time.monotonic() >= next_checkpoint:
             commands.backup()
@@ -336,7 +344,7 @@ def train(workspace, attempt):
     if pause_file.exists():
         return 75
     trainer.train()
-    if commands.get_stop_command():
+    if commands.get_stop_command() and not finalize_revision:
         return 75
     trainer.end()
     if not output.is_file() and checkpoint and epoch_backups:
