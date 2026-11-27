@@ -14,7 +14,7 @@ def digest(path):
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
-def publish_checkpoint(source, checkpoints, step, export_sha256):
+def publish_checkpoint(source, checkpoints, progress, export_sha256):
     required = ("meta.json", "optimizer/optimizer.pt", "lora/lora.safetensors")
     if not all((source / name).is_file() for name in required):
         raise RuntimeError("OneTrainer did not write a complete checkpoint")
@@ -26,10 +26,16 @@ def publish_checkpoint(source, checkpoints, step, export_sha256):
             with path.open("r+b") as stream:
                 os.fsync(stream.fileno())
     with (source / "shadow-checkpoint.json").open("x", encoding="utf-8") as stream:
-        json.dump({"files": files, "export_sha256": export_sha256}, stream)
+        json.dump({
+            "files": files,
+            "export_sha256": export_sha256,
+            "epoch": progress.epoch,
+            "epoch_step": progress.epoch_step,
+            "global_step": progress.global_step,
+        }, stream)
         stream.flush()
         os.fsync(stream.fileno())
-    destination = checkpoints / f"{time.time_ns():020d}-step-{step}-{uuid.uuid4().hex}"
+    destination = checkpoints / f"{time.time_ns():020d}-step-{progress.global_step}-{uuid.uuid4().hex}"
     source.rename(destination)
     for old in sorted((item for item in checkpoints.iterdir() if not item.name.startswith(".")), reverse=True)[2:]:
         shutil.rmtree(old)
@@ -159,7 +165,7 @@ def train(workspace, attempt):
         if not created:
             raise RuntimeError("OneTrainer checkpoint failed")
         for item in created:
-            publish_checkpoint(item, checkpoints, progress.global_step, digest(workspace / "export.json"))
+            publish_checkpoint(item, checkpoints, progress, digest(workspace / "export.json"))
         if pause_file.exists():
             commands.stop()
 

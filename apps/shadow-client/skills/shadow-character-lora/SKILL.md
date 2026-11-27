@@ -5,7 +5,7 @@ description: Stage attached character reference images on OneDrive for a Shadow 
 
 # Stage character references
 
-Check `shadow_client_status` and `shadow_relay_status`. Use the editable draft job ID supplied by the user, or create a draft with `lora_create_character_job` using the character name and trigger. Preserve the returned job ID.
+Check `shadow_client_status` and `shadow_relay_status`. Resolve the character with `lora_create_character_job` using the character ID, name, stable trigger, and a fresh request UUID. Reuse the returned job ID. A legacy editable draft can also be addressed directly by its job ID.
 
 Call `lora_stage_character_batch` with the draft job ID, a fresh request UUID, and the local paths of the attached images. Assign each image a fresh UUID. Include the user's optional notes without inventing visible details. Reuse the same request and image UUIDs on retry.
 
