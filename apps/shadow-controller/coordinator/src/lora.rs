@@ -557,6 +557,10 @@ fn launch(data: &Path, id: &str, config: &str) -> io::Result<Attempt> {
         .arg(workspace)
         .arg(&path)
         .env("CUDA_VISIBLE_DEVICES", "0")
+        .env(
+            "SHADOW_LORA_EPOCH_BACKUPS",
+            if export.is_some() { "1" } else { "0" },
+        )
         .stdin(Stdio::piped())
         .stdout(log.try_clone()?)
         .stderr(log)

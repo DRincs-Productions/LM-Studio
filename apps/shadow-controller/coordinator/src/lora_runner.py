@@ -146,6 +146,8 @@ def train(workspace, attempt):
     trainer._GenericTrainer__needs_save = lambda progress: False
     pause_file = attempt / "pause"
     next_checkpoint = time.monotonic() + 300 if checkpoint else 0
+    epoch_backups = os.environ.get("SHADOW_LORA_EPOCH_BACKUPS") == "1"
+    last_boundary = None
 
 
     def backup(progress, print_msg=True):
@@ -161,8 +163,17 @@ def train(workspace, attempt):
         if pause_file.exists():
             commands.stop()
 
-    def progress(*_):
-        nonlocal next_checkpoint
+    def progress(train_progress, *_):
+        nonlocal next_checkpoint, last_boundary
+        epoch_boundary = (
+            epoch_backups and train_progress.epoch > 0 and train_progress.epoch_step == 0
+            and train_progress.epoch != last_boundary
+        )
+        if epoch_boundary:
+            backup(train_progress)
+            last_boundary = train_progress.epoch
+            next_checkpoint = time.monotonic() + 300
+            return
         if pause_file.exists() or time.monotonic() >= next_checkpoint:
             commands.backup()
             next_checkpoint = time.monotonic() + 300 if checkpoint else 0
