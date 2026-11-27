@@ -179,7 +179,7 @@ impl JobStore {
         connection.execute("UPDATE lora_jobs SET config=(SELECT json_set(lora_jobs.config,'$.images',
             json_group_object(key,json(CASE WHEN json_extract(value,'$.state')='preparing'
                 THEN json_set(value,'$.state','pending') ELSE value END))) FROM json_each(lora_jobs.config,'$.images'))
-            WHERE state='draft'", [])?;
+            WHERE file_name='character'", [])?;
         let mut query =
             connection.prepare("SELECT id FROM lora_jobs WHERE state IN ('running','pausing')")?;
         let ids = query

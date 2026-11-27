@@ -169,7 +169,9 @@ pub(super) fn request(
         "SELECT state,config FROM lora_jobs WHERE id=?1 AND uid=?2 AND client_id=?3 AND file_name='character'",
         params![id,uid,client], |r| Ok((r.get(0)?,r.get(1)?))).optional()?.ok_or(StoreError::JobNotFound)?;
     let mut config: Value = serde_json::from_str(&serialized)?;
-    if state != "draft" {
+    let accepts_followup = config["characterId"].is_string()
+        && (action == "character_batch" || action == "character_remove");
+    if state != "draft" && !accepts_followup {
         if action == "character_submit" {
             return Ok(json!({"jobId":id,"state":state}));
         }
@@ -332,7 +334,9 @@ pub(super) fn request(
         training["unmasked_probability"] = json!(0);
         training["unmasked_weight"] = json!(0);
         training["masked_prior_preservation_weight"] = json!(0);
+        let active_images = json!(images.keys().collect::<Vec<_>>());
         config["training"] = training;
+        config["activeImages"] = active_images;
         connection.execute(
             "UPDATE lora_jobs SET state='waiting',attached_at=?2,paused=0,config=?3 WHERE id=?1",
             params![id, timestamp(), config.to_string()],
@@ -341,6 +345,14 @@ pub(super) fn request(
     }
     let sample = uuid_field(message, "requestId")?;
     let dir = root.join(&sample);
+    if action == "character_remove"
+        && state != "draft"
+        && config["activeImages"]
+            .as_array()
+            .is_none_or(|active| active.iter().any(|id| id == &sample))
+    {
+        return Err(invalid("An active training reference cannot be removed"));
+    }
     let images = config["images"].as_object_mut().unwrap();
     if action == "character_remove" {
         if images
@@ -454,7 +466,7 @@ pub(super) fn pending(
         .map_err(|_| StoreError::LockPoisoned)?;
     let mut query = connection.prepare(
         "SELECT j.id,i.key,j.config FROM lora_jobs j,json_each(j.config,'$.images') i
-         WHERE j.state='draft' AND json_extract(i.value,'$.state')='pending' ORDER BY j.rowid LIMIT 1")?;
+         WHERE j.file_name='character' AND json_extract(i.value,'$.state')='pending' ORDER BY j.rowid LIMIT 1")?;
     let row = query
         .query_row([], |r| {
             Ok((
@@ -490,7 +502,7 @@ pub(super) fn preparation_state(
     let path = format!("$.images.\"{sample}\"");
     let changed = connection.execute(
         "UPDATE lora_jobs SET config=json_set(config,?2||'.state',?3,?2||'.caption',?4,?2||'.error',?5)
-         WHERE id=?1 AND state='draft' AND json_type(config,?2)='object'",
+         WHERE id=?1 AND file_name='character' AND json_type(config,?2)='object'",
         params![id,path,state,detail.filter(|_|state=="ready"),detail.filter(|_|state=="failed")])?;
     Ok(changed != 0)
 }
