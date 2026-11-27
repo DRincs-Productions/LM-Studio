@@ -41,13 +41,20 @@ def publish_checkpoint(source, checkpoints, progress, export_sha256):
         shutil.rmtree(old)
 
 
-def find_checkpoint(checkpoints, expected_export):
-    expected_sha256 = digest(expected_export)
+def find_checkpoint(checkpoints, expected_sha256, *, epoch_boundary=False):
     for path in sorted(checkpoints.iterdir(), reverse=True):
         try:
             manifest = json.loads((path / "shadow-checkpoint.json").read_text(encoding="utf-8"))
             files = manifest["files"]
             if manifest["export_sha256"] != expected_sha256:
+                continue
+            if epoch_boundary and not (
+                manifest.get("epoch_step") == 0
+                and isinstance(manifest.get("epoch"), int) and manifest["epoch"] > 0
+                and isinstance(manifest.get("global_step"), int) and manifest["global_step"] > 0
+            ):
+                continue
+            if not {"meta.json", "optimizer/optimizer.pt", "lora/lora.safetensors"} <= files.keys():
                 continue
             if not files or not all(digest(path / name) == value for name, value in files.items()):
                 continue
@@ -134,7 +141,7 @@ def train(workspace, attempt):
         "cloud": {"enabled": False},
         "multi_gpu": False,
     }, migrate=False)
-    checkpoint = find_checkpoint(checkpoints, workspace / "export.json")
+    checkpoint = find_checkpoint(checkpoints, digest(workspace / "export.json"))
     backup_dir = attempt / "backup"
     backup_dir.mkdir(exist_ok=True)
     if checkpoint:
