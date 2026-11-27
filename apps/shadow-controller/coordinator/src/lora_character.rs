@@ -6,6 +6,49 @@ const MAX_IMAGE: usize = 20 * 1024 * 1024;
 
 #[cfg(test)]
 #[test]
+fn onedrive_batch_replays_and_deduplicates_without_cross_owner_access() {
+    let store = JobStore::open_in_memory().unwrap();
+    let root = std::env::temp_dir().join(format!("character-batch-{}", Uuid::new_v4()));
+    let draft = store
+        .lora_request(
+            &root,
+            "account",
+            "owner",
+            "character_create",
+            &json!({"name":"Character","trigger":"batch_subject","requestId":Uuid::new_v4()}),
+        )
+        .unwrap();
+    let image = Uuid::new_v4();
+    let mut batch = json!({
+        "jobId":draft["jobId"],"requestId":Uuid::new_v4(),
+        "files":[{"imageId":image,"sha256":"a".repeat(64),"size":12,"description":""}]
+    });
+    let register = |owner, message: &Value| {
+        store.lora_request(&root, "account", owner, "character_batch", message)
+    };
+    let first = register("owner", &batch).unwrap();
+    assert_eq!(first["imageIds"], json!([image]));
+    assert_eq!(register("owner", &batch).unwrap(), first);
+    assert!(register("other", &batch).is_err());
+    batch["files"][0]["size"] = json!(13);
+    assert!(matches!(
+        register("owner", &batch),
+        Err(StoreError::IdempotencyConflict)
+    ));
+    batch["requestId"] = json!(Uuid::new_v4());
+    batch["files"][0]["imageId"] = json!(Uuid::new_v4());
+    batch["files"][0]["size"] = json!(12);
+    assert_eq!(register("owner", &batch).unwrap(), first);
+    assert_eq!(pending(&store).unwrap().unwrap().1, image.to_string());
+    let job_path = root.join("lora").join(draft["jobId"].as_str().unwrap());
+    fs::remove_dir(job_path.join("samples")).unwrap();
+    fs::remove_dir(job_path).unwrap();
+    fs::remove_dir(root.join("lora")).unwrap();
+    fs::remove_dir(root).unwrap();
+}
+
+#[cfg(test)]
+#[test]
 fn character_drafts_accept_idempotent_chunks_only_from_the_owner() {
     let store = JobStore::open_in_memory().unwrap();
     let root = std::env::temp_dir().join(format!("character-lora-{}", Uuid::new_v4()));
