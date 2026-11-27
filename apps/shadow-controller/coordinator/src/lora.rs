@@ -180,13 +180,17 @@ impl JobStore {
             json_group_object(key,json(CASE WHEN json_extract(value,'$.state')='preparing'
                 THEN json_set(value,'$.state','pending') ELSE value END))) FROM json_each(lora_jobs.config,'$.images'))
             WHERE file_name='character'", [])?;
-        let mut query =
-            connection.prepare("SELECT id FROM lora_jobs WHERE state IN ('running','pausing')")?;
+        let mut query = connection
+            .prepare("SELECT id,config FROM lora_jobs WHERE state IN ('running','pausing')")?;
         let ids = query
-            .query_map([], |row| row.get::<_, String>(0))?
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })?
             .collect::<Result<Vec<_>, _>>()?;
-        for id in ids {
-            let output = data.join("lora").join(&id).join("model.safetensors");
+        for (id, config) in ids {
+            let config: Value = serde_json::from_str(&config)?;
+            let output = training_workspace(data, &id, config["revision"].as_u64().unwrap_or(0))
+                .join("model.safetensors");
             let (state, detail) = if output.is_file() {
                 ("completed", output.display().to_string())
             } else {
@@ -352,10 +356,7 @@ impl Scheduler {
         }
         if let Some(attempt) = &mut self.active {
             if let Some(status) = attempt.worker.try_wait()? {
-                let output = data
-                    .join("lora")
-                    .join(&attempt.id)
-                    .join("model.safetensors");
+                let output = attempt.path.parent().unwrap().join("model.safetensors");
                 let (state, detail) = if output.is_file() {
                     ("completed", output.display().to_string())
                 } else if status.code() == Some(75) {
@@ -535,13 +536,23 @@ if starting:
         .is_ok_and(|status| status.success())
 }
 
+fn training_workspace(data: &Path, id: &str, revision: u64) -> PathBuf {
+    let root = data.join("lora").join(id);
+    if revision == 0 {
+        root
+    } else {
+        root.join(format!("revision-{revision}"))
+    }
+}
+
 #[cfg(windows)]
 fn launch(data: &Path, id: &str, config: &str) -> io::Result<Attempt> {
-    let workspace = data.canonicalize()?.join("lora").join(id);
+    let data = data.canonicalize()?;
+    let parsed: Value = serde_json::from_str(config)?;
+    let workspace = training_workspace(&data, id, parsed["revision"].as_u64().unwrap_or(0));
     fs::create_dir_all(&workspace)?;
     let path = workspace.join(Uuid::new_v4().to_string());
     fs::create_dir(&path)?;
-    let parsed: Value = serde_json::from_str(config)?;
     let export = parsed.get("training").map(Value::to_string);
     fs::write(
         workspace.join("export.json"),
@@ -557,6 +568,13 @@ fn launch(data: &Path, id: &str, config: &str) -> io::Result<Attempt> {
         .arg(workspace)
         .arg(&path)
         .env("CUDA_VISIBLE_DEVICES", "0")
+        .env(
+            "SHADOW_LORA_PARENT_WORKSPACE",
+            parsed["parentRevision"]
+                .as_u64()
+                .map(|revision| training_workspace(&data, id, revision))
+                .unwrap_or_default(),
+        )
         .env(
             "SHADOW_LORA_EPOCH_BACKUPS",
             if export.is_some() { "1" } else { "0" },

@@ -169,9 +169,11 @@ pub(super) fn request(
         "SELECT state,config FROM lora_jobs WHERE id=?1 AND uid=?2 AND client_id=?3 AND file_name='character'",
         params![id,uid,client], |r| Ok((r.get(0)?,r.get(1)?))).optional()?.ok_or(StoreError::JobNotFound)?;
     let mut config: Value = serde_json::from_str(&serialized)?;
+    let continuation =
+        state == "completed" && config["characterId"].is_string() && action == "character_submit";
     let accepts_followup = config["characterId"].is_string()
         && (action == "character_batch" || action == "character_remove");
-    if state != "draft" && !accepts_followup {
+    if state != "draft" && !accepts_followup && !continuation {
         if action == "character_submit" {
             return Ok(json!({"jobId":id,"state":state}));
         }
@@ -263,6 +265,13 @@ pub(super) fn request(
     }
     if action == "character_submit" {
         let images = config["images"].as_object().unwrap();
+        if continuation
+            && config["activeImages"]
+                .as_array()
+                .is_some_and(|active| active.len() == images.len())
+        {
+            return Ok(json!({"jobId":id,"state":state}));
+        }
         if images.is_empty() || images.values().any(|s| s["state"] != "ready") {
             return Err(invalid("Every image must be prepared before submission"));
         }
@@ -335,6 +344,13 @@ pub(super) fn request(
         training["unmasked_weight"] = json!(0);
         training["masked_prior_preservation_weight"] = json!(0);
         let active_images = json!(images.keys().collect::<Vec<_>>());
+        if config["characterId"].is_string() {
+            let previous = config["revision"].as_u64().unwrap_or(0);
+            config["revision"] = json!(previous + 1);
+            if continuation {
+                config["parentRevision"] = json!(previous);
+            }
+        }
         config["training"] = training;
         config["activeImages"] = active_images;
         connection.execute(

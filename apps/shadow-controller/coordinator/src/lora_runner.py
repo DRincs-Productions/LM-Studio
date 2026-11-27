@@ -81,6 +81,21 @@ def train(workspace, attempt):
     torch.cuda.set_per_process_memory_fraction(0.9, 0)
 
     exported = json.loads((workspace / "export.json").read_text(encoding="utf-8"))
+    previous = os.environ.get("SHADOW_LORA_PARENT_WORKSPACE")
+    parent_checkpoint = None
+    parent_progress = None
+    if previous:
+        parent = Path(previous)
+        prior_export = parent / "export.json"
+        prior = json.loads(prior_export.read_text(encoding="utf-8"))
+        # A dataset revision may change concepts, but not optimizer or model settings.
+        training_settings = lambda settings: {key: value for key, value in settings.items() if key != "concepts"}
+        if training_settings(exported) != training_settings(prior):
+            raise ValueError("Dataset continuation requires unchanged training settings")
+        parent_checkpoint = find_checkpoint(parent / "checkpoints", digest(prior_export), epoch_boundary=True)
+        if parent_checkpoint is None:
+            raise RuntimeError("No verified parent epoch checkpoint supports dataset continuation")
+        parent_progress = json.loads((parent_checkpoint / "shadow-checkpoint.json").read_text(encoding="utf-8"))
     # OneTrainer's pack export embeds concepts and samples. Keep canonical copies
     # inside the workspace because its backup writer persists these paths.
     concepts = exported.get("concepts")
@@ -97,6 +112,8 @@ def train(workspace, attempt):
     exported["sample_definition_file_name"] = str(samples_path)
     config = TrainConfig.default_values()
     config.from_dict(exported)
+    if parent_progress:
+        config.epochs += parent_progress["epoch"]
     if config.training_method.name != "LORA":
         raise ValueError("Select LoRA training in OneTrainer")
     enabled_concepts = [concept for concept in (config.concepts or []) if concept.enabled]
@@ -150,6 +167,9 @@ def train(workspace, attempt):
         print(f"Resuming from {checkpoint.name}", flush=True)
     elif any(checkpoints.iterdir()):
         raise RuntimeError("No verified recovery checkpoint remains")
+    elif parent_checkpoint:
+        config.lora_model_name = str(parent_checkpoint)
+        print(f"Continuing with a fresh dataset cache from {parent_checkpoint.name}", flush=True)
     commands = TrainCommands()
     callbacks = TrainCallbacks()
     trainer = create.create_trainer(config, callbacks, commands)
@@ -196,6 +216,12 @@ def train(workspace, attempt):
     if pause_file.exists():
         return 75
     trainer.start()
+    if parent_checkpoint and not checkpoint:
+        loaded = trainer.model.train_progress
+        if (loaded.epoch, loaded.epoch_step, loaded.global_step) != (
+            parent_progress["epoch"], 0, parent_progress["global_step"]
+        ) or trainer.model.optimizer is None or not trainer.model.optimizer.state:
+            raise RuntimeError("OneTrainer did not restore full progress and optimizer state")
     if pause_file.exists():
         return 75
     trainer.train()

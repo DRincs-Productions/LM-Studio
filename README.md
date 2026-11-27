@@ -595,6 +595,8 @@ Before a Codex client can reach its paired Shadow Controller server, install the
 
 ### Background LoRA training
 
+A stable character ID links later uploads to the same character. When the current session completes, submit the ready follow-up images to queue a new dataset revision. Each revision has a separate training workspace and cache. Continuation requires a verified full checkpoint at the parent revision's epoch boundary and matching training settings. The runner checks the restored progress and optimizer before training on the expanded dataset.
+
 An enrolled client can stage a batch of local attachments with `lora_stage_character_batch` for an editable draft. The client uploads the image bytes to the configured OneDrive inbox and sends the authenticated relay only the IDs, notes, sizes and hashes. The Coordinator downloads and verifies each image before preparation. Install the bundled Codex workflow with `shadow-client install-skill shadow-character-lora`. Both hosts need access to the configured `imagecloud:` remote.
 
 Character preparation sends the cutout to Venice through OpenCode. Set `SHADOW_LORA_VENICE_MODEL` to override the configured image review model for this task. Captions describe the visible character in English and omit the background. The per-image status exposes camera data for newly prepared samples. Framing is full body, American shot, half body, or close-up. Angle is measured in 45-degree increments from frontal toward the character's right. Unclear values are recorded as unknown.
