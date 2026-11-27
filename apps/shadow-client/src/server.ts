@@ -141,7 +141,8 @@ function createServer(): McpServer {
     relayToolCall({ version: 1, type: "lora.character_" + action, messageId: randomUUID(), ...fields });
   server.registerTool("lora_create_character_job", {
     description: "Create an editable Krea 2 character LoRA draft.",
-    inputSchema: z.object({ name: z.string(), trigger: z.string(), requestId: z.string().uuid() }),
+    inputSchema: z.object({ name: z.string(), trigger: z.string(), requestId: z.string().uuid(),
+      characterId: z.string().regex(/^[a-zA-Z0-9_-]{1,80}$/).optional() }),
   }, async fields => characterCall("create", fields));
   server.registerTool("lora_stage_character_batch", {
     description: "Stage a batch of local character references on OneDrive for an editable LoRA draft.",

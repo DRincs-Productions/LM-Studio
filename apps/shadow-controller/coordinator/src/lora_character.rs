@@ -119,7 +119,35 @@ pub(super) fn request(
                     && s.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
             })
             .ok_or(invalid("Invalid trigger token"))?;
-        let config = json!({"name":name,"trigger":token,"images":{}});
+        let character_id = if let Some(value) = message.get("characterId") {
+            Some(
+                value
+                    .as_str()
+                    .filter(|id| {
+                        (1..=80).contains(&id.len())
+                            && id
+                                .bytes()
+                                .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+                    })
+                    .ok_or(invalid("Invalid character ID"))?,
+            )
+        } else {
+            None
+        };
+        if let Some(character_id) = character_id {
+            let existing: Option<(String, String)> = connection.query_row(
+                "SELECT id,config FROM lora_jobs WHERE uid=?1 AND client_id=?2 AND file_name='character' AND json_extract(config,'$.characterId')=?3",
+                params![uid,client,character_id], |row| Ok((row.get(0)?,row.get(1)?))
+            ).optional()?;
+            if let Some((id, config)) = existing {
+                let config: Value = serde_json::from_str(&config)?;
+                if config["trigger"] != token {
+                    return Err(StoreError::IdempotencyConflict);
+                }
+                return Ok(json!({"jobId":id,"characterId":character_id}));
+            }
+        }
+        let config = json!({"name":name,"trigger":token,"images":{},"characterId":character_id});
         let id = Uuid::new_v4().to_string();
         connection.execute("INSERT OR IGNORE INTO lora_jobs(id,uid,client_id,request_id,file_name,config,state) VALUES (?1,?2,?3,?4,'character',?5,'draft')",
             params![id,uid,client,request,config.to_string()])?;
@@ -127,10 +155,14 @@ pub(super) fn request(
             "SELECT id,file_name,config FROM lora_jobs WHERE uid=?1 AND client_id=?2 AND request_id=?3",
             params![uid,client,request], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?)))?;
         let stored: Value = serde_json::from_str(&stored)?;
-        if stored_name != "character" || stored["name"] != name || stored["trigger"] != token {
+        if stored_name != "character"
+            || stored["name"] != name
+            || stored["trigger"] != token
+            || stored["characterId"] != json!(character_id)
+        {
             return Err(StoreError::IdempotencyConflict);
         }
-        return Ok(json!({"jobId":id}));
+        return Ok(json!({"jobId":id,"characterId":character_id}));
     }
     let id = uuid_field(message, "jobId")?;
     let (state, serialized): (String,String) = connection.query_row(
