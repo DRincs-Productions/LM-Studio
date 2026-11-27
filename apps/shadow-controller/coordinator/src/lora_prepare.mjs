@@ -74,8 +74,10 @@ const captionRun = command(executable, ['--standalone', 'run', '--model', model,
   '--format', 'json', '--file', path.resolve('caption-reference.png'), '--',
   `Return a single JSON object with caption, framing, and angle.
 The caption is one short English line without the trigger token, ideally under 18 words.
-Include only framing, camera angle, pose, and facial expression. Omit any uncertain detail.
-Do not describe identity, appearance, hair, clothing, accessories, lighting, or background.
+Include framing, camera angle, pose, and facial expression. Omit any uncertain detail.
+Treat identity and usual appearance as fixed. Describe a visible outfit or object only when
+the client notes explicitly identify it as a departure from the character's usual look.
+Keep that exception brief. Omit all other appearance details, lighting, and background.
 Use framing full_body (head to feet), american_shot (head to knees), half_body,
 close_up, or unknown. Classify from the actual crop: full_body requires both feet
 visible, american_shot includes the thighs through the knee region, half_body
