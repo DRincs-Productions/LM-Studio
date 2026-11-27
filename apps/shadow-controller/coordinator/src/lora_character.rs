@@ -103,6 +103,59 @@ pub(super) fn request(
     let root = data.join("lora").join(&id).join("samples");
     let io_error = |_| invalid("Cannot access character dataset");
     fs::create_dir_all(&root).map_err(io_error)?;
+    if action == "character_batch" {
+        let batch = uuid_field(message, "requestId")?;
+        let files = message["files"].as_array()
+            .filter(|files| (1..=20).contains(&files.len()))
+            .ok_or(invalid("Provide 1 to 20 character references"))?;
+        if let Some(prior) = config.get("batches").and_then(|batches| batches.get(&batch)) {
+            if prior["files"] != message["files"] {
+                return Err(StoreError::IdempotencyConflict);
+            }
+            return Ok(json!({"jobId":id,"imageIds":prior["imageIds"]}));
+        }
+        let images = config["images"].as_object_mut().unwrap();
+        let mut accepted = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        for file in files {
+            let sample = uuid_field(file, "imageId")?;
+            if !seen.insert(sample.clone()) {
+                return Err(invalid("Image IDs must be distinct"));
+            }
+            let hash = file["sha256"].as_str()
+                .filter(|hash| hash.len() == 64 && hash.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)))
+                .ok_or(invalid("Invalid image hash"))?;
+            let size = file["size"].as_u64().filter(|size| (1..=MAX_IMAGE as u64).contains(size))
+                .ok_or(invalid("Image exceeds the upload limit"))?;
+            let description = file["description"].as_str().filter(|text| text.len() <= 4000)
+                .ok_or(invalid("Invalid image description"))?;
+            if let Some(prior) = images.get(&sample) {
+                if prior["sha256"] != hash || prior["size"] != size || prior["description"] != description || prior["batch"] != batch {
+                    return Err(StoreError::IdempotencyConflict);
+                }
+                accepted.push(sample);
+                continue;
+            }
+            if let Some((existing, _)) = images.iter().find(|(_, image)| image["sha256"] == hash && image["state"] != "failed" && image["state"] != "uploading") {
+                accepted.push(existing.clone());
+                continue;
+            }
+            if images.len() >= 100 {
+                return Err(invalid("Dataset exceeds 100 images"));
+            }
+            images.insert(sample.clone(), json!({
+                "state":"pending","description":description,"sha256":hash,"size":size,
+                "batch":batch,"updated":unix_now()
+            }));
+            accepted.push(sample);
+        }
+        if config.get("batches").is_none() {
+            config["batches"] = json!({});
+        }
+        config["batches"][&batch] = json!({"files":files,"imageIds":accepted});
+        connection.execute("UPDATE lora_jobs SET config=?2 WHERE id=?1", params![id,config.to_string()])?;
+        return Ok(json!({"jobId":id,"imageIds":accepted}));
+    }
     if action == "character_submit" {
         let images = config["images"].as_object().unwrap();
         if images.is_empty() || images.values().any(|s| s["state"] != "ready") {
@@ -252,7 +305,7 @@ pub(super) fn request(
 }
 pub(super) fn pending(
     store: &JobStore,
-) -> Result<Option<(String, String, String, String)>, StoreError> {
+) -> Result<Option<(String, String, String, Value)>, StoreError> {
     let connection = store
         .connection
         .lock()
@@ -275,10 +328,7 @@ pub(super) fn pending(
             id,
             sample.clone(),
             config["trigger"].as_str().unwrap().to_owned(),
-            config["images"][&sample]["description"]
-                .as_str()
-                .unwrap()
-                .to_owned(),
+            config["images"][&sample].clone(),
         ))
     })
     .transpose()

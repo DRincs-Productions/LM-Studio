@@ -43,7 +43,8 @@ async function main() {
     const files = [
       ["shadow-requests", "SKILL.md"],
       ["shadow-narration-requests", "SKILL.md"],
-      ["shadow-image-requests", "SKILL.md"]
+      ["shadow-image-requests", "SKILL.md"],
+      ["shadow-character-lora", "SKILL.md"]
     ];
     const selectedSkill = process.argv[3];
     if (selectedSkill && !files.some(([skill]) => skill === selectedSkill)) {

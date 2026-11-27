@@ -147,6 +147,13 @@ impl JobStore {
                 if message["imageId"].is_string() {
                     let key = uuid_field(message, "imageId")?;
                     job["image"] = images.get(&key).cloned().ok_or(StoreError::JobNotFound)?;
+                    if job["image"]["state"] == "ready" {
+                        let camera_path = data.join("lora").join(&id).join("samples")
+                            .join(&key).join(format!("{key}.camera.json"));
+                        if let Ok(camera) = fs::read_to_string(camera_path) {
+                            job["image"]["camera"] = serde_json::from_str(&camera)?;
+                        }
+                    }
                 } else {
                     job["images"] = json!(
                         images
@@ -412,9 +419,9 @@ impl Scheduler {
             self.last_upload_cleanup = Some(Instant::now());
         }
         #[cfg(windows)]
-        if let Some((id, sample, trigger, description)) = character::pending(store)? {
+        if let Some((id, sample, trigger, image)) = character::pending(store)? {
             if character::preparation_state(store, &id, &sample, "preparing", None)? {
-                match launch_preparation(data, &id, &sample, &trigger, &description) {
+                match launch_preparation(data, &id, &sample, &trigger, &image) {
                     Ok(attempt) => {
                         self.preparation = Some((attempt, sample));
                         return Ok(true);
@@ -639,7 +646,7 @@ fn launch_preparation(
     id: &str,
     sample: &str,
     trigger: &str,
-    description: &str,
+    image: &Value,
 ) -> io::Result<Attempt> {
     use std::os::windows::process::CommandExt;
 
@@ -654,7 +661,8 @@ fn launch_preparation(
     fs::write(
         path.join("request.json"),
         serde_json::to_vec(&json!({
-            "root":root,"sample":sample,"trigger":trigger,"description":description
+            "root":root,"sample":sample,"trigger":trigger,"description":image["description"],
+            "jobId":id,"batch":image["batch"],"sha256":image["sha256"],"size":image["size"]
         }))?,
     )?;
     fs::write(path.join("prepare.mjs"), include_str!("lora_prepare.mjs"))?;

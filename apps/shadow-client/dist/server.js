@@ -13,7 +13,8 @@ import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import * as z from "zod/v4";
 import { createHash, randomUUID } from "crypto";
 import { execFile } from "child_process";
-import { open, mkdir, mkdtemp, readFile, writeFile } from "fs/promises";
+import { open, mkdir, mkdtemp, readFile, rm, writeFile } from "fs/promises";
+import { tmpdir } from "os";
 import { join } from "path";
 import { homedir } from "os";
 import { promisify } from "util";
@@ -308,6 +309,56 @@ function createServer() {
     description: "Create an editable Krea 2 character LoRA draft.",
     inputSchema: z.object({ name: z.string(), trigger: z.string(), requestId: z.string().uuid() })
   }, async (fields) => characterCall("create", fields));
+  server.registerTool("lora_stage_character_batch", {
+    description: "Stage a batch of local character references on OneDrive for an editable LoRA draft.",
+    inputSchema: z.object({
+      jobId: z.string().uuid(),
+      requestId: z.string().uuid(),
+      files: z.array(z.object({
+        imageId: z.string().uuid(),
+        filePath: z.string().min(1),
+        description: z.string().optional()
+      })).min(1).max(20)
+    })
+  }, async ({ jobId, requestId, files }) => {
+    const staging = await mkdtemp(join(tmpdir(), "shadow-lora-"));
+    try {
+      if (new Set(files.map((file) => file.imageId)).size !== files.length) {
+        throw new Error("Image IDs must be distinct");
+      }
+      const manifest = [];
+      for (const { imageId, filePath, description = "" } of files) {
+        if (Buffer.byteLength(description) > 1e3) throw new Error("Image notes exceed 1000 bytes");
+        const source = await open(filePath, "r");
+        let bytes;
+        try {
+          const stat = await source.stat();
+          if (!stat.isFile() || stat.size < 1 || stat.size > 20 * 1024 * 1024) {
+            throw new Error("Choose a regular image file between 1 byte and 20 MiB");
+          }
+          bytes = Buffer.alloc(stat.size);
+          if ((await source.read(bytes)).bytesRead !== bytes.length) throw new Error("Image changed during staging");
+        } finally {
+          await source.close();
+        }
+        const sha256 = createHash("sha256").update(bytes).digest("hex");
+        const local = join(staging, imageId);
+        await writeFile(local, bytes, { flag: "wx" });
+        await promisify(execFile)(process.env.SHADOW_RCLONE_EXECUTABLE || "rclone", [
+          "copyto",
+          "--immutable",
+          local,
+          `imagecloud:LoRAWorker/inbox/${jobId}/${requestId}/${imageId}-${sha256}`
+        ], { timeout: 12e4, windowsHide: true });
+        manifest.push({ imageId, sha256, size: bytes.length, description });
+      }
+      return await characterCall("batch", { jobId, requestId, files: manifest });
+    } catch (error) {
+      return errorResult(error);
+    } finally {
+      await rm(staging, { recursive: true, force: true });
+    }
+  });
   server.registerTool("lora_add_character_image", {
     description: "Upload one local character image and its Italian description. Reuse requestId to retry.",
     inputSchema: z.object({ jobId: z.string().uuid(), requestId: z.string().uuid(), filePath: z.string(), description: z.string() })

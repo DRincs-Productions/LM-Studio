@@ -146,6 +146,8 @@ When a required compiler, SDK, or tool is unavailable locally, use the repositor
 
 ### Character LoRA smoke test
 
+For the OneDrive transport check, stage both fixtures in one `lora_stage_character_batch` request on an editable draft. Use fresh request and image UUIDs. Replay the exact manifest with the same UUIDs and confirm that the server returns the same image IDs. In a separate batch, verify that an identical image is deduplicated. Confirm each prepared image exposes a Venice caption and camera metadata through `lora_status`. Preserve the transfer and preparation evidence in the run manifest.
+
 Use the two transparent references in [test/ch_lora](test/ch_lora): `ch_lora_01_fullbody.png` and `ch_lora_02_threequarter.png`. The original renders and checkerboard previews in `source/` are for inspection.
 
 1. Check `shadow_client_status` and `shadow_relay_status`. Verify compatible client, relay, and server builds, a working OneTrainer installation, and a local Krea 2 RAW Diffusers directory. Verify that `krea2-character-template.json` beside `coordinator.sqlite3` is a OneTrainer KREA_2 LORA export pointing to that directory.

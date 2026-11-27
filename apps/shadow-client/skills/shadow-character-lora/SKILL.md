@@ -1,0 +1,12 @@
+---
+name: shadow-character-lora
+description: Stage attached character reference images on OneDrive for a Shadow Controller LoRA draft.
+---
+
+# Stage character references
+
+Check `shadow_client_status` and `shadow_relay_status`. Use the editable draft job ID supplied by the user, or create a draft with `lora_create_character_job` using the character name and trigger. Preserve the returned job ID.
+
+Call `lora_stage_character_batch` with the draft job ID, a fresh request UUID, and the local paths of the attached images. Assign each image a fresh UUID. Include the user's optional notes without inventing visible details. Reuse the same request and image UUIDs on retry.
+
+Use `lora_status` to check every returned image ID. Confirm that the English captions describe the character and omit the background. Report preparation errors with the job and image IDs. Submit the draft with `lora_submit_character_job` when the user has authorized training and all references are ready.

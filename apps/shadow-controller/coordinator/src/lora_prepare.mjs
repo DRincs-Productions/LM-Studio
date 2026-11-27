@@ -1,15 +1,29 @@
 import { execFile } from 'node:child_process';
 import { copyFile, readFile, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { promisify } from 'node:util';
 import { homedir } from 'node:os';
 import path from 'node:path';
 
 const run = promisify(execFile);
-const { sample, trigger, description, root } = JSON.parse(await readFile('request.json', 'utf8'));
+const { sample, trigger, description, root, jobId, batch, sha256, size } =
+  JSON.parse(await readFile('request.json', 'utf8'));
 const python = process.env.SHADOW_IMAGE_PYTHON || 'python';
 const worker = process.env.SHADOW_IMAGE_WORKER_ENTRY || path.join(homedir(), '.lmstudio', 'image-worker', 'mcp', 'server.mjs');
 function command(executable, args, timeout) {
   return run(executable, args, { timeout, windowsHide: true });
+}
+
+let input = path.join(root, 'source');
+if (batch) {
+  const remote = `imagecloud:LoRAWorker/inbox/${jobId}/${batch}/${sample}-${sha256}`;
+  const { stdout } = await run(process.env.SHADOW_RCLONE_EXECUTABLE || 'rclone',
+    ['cat', remote], { encoding: 'buffer', maxBuffer: 20 * 1024 * 1024, timeout: 120_000, windowsHide: true });
+  if (stdout.length !== size || createHash('sha256').update(stdout).digest('hex') !== sha256) {
+    throw new Error('OneDrive character image failed size or hash verification');
+  }
+  input = path.resolve('verified-input');
+  await writeFile(input, stdout, { flag: 'wx' });
 }
 
 const normalized = await command(python, ['-c', `
@@ -21,7 +35,7 @@ with Image.open(sys.argv[1], formats=['PNG', 'JPEG', 'WEBP']) as image:
     normalized = ImageOps.exif_transpose(image).convert('RGBA')
     normalized.save('source.png')
     print(normalized.getchannel('A').getextrema() == (0, 255))
-`, path.join(root, 'source')], 30_000);
+`, input], 30_000);
 if (normalized.stdout.trim() === 'True') {
   await copyFile('source.png', 'cutout.png');
 } else {
@@ -48,7 +62,9 @@ with Image.open('cutout.png') as image:
     neutral.save('training.png')
 `], 30_000);
 
-const model = process.env.SHADOW_OPENCODE_MODEL || 'openai/gpt-6-luna';
+const model = process.env.SHADOW_LORA_VENICE_MODEL
+  || process.env.SHADOW_IMAGE_VENICE_MODEL
+  || 'venice/venice-uncensored-1-2';
 const deny = [{ action: '*', resource: '*', effect: 'deny' }];
 await writeFile('opencode.json', JSON.stringify({ model, mcp: { servers: {} }, permissions: deny,
   agents: { 'lora-caption': { description: 'Caption a character reference.', mode: 'primary', model, permissions: deny } } }));
@@ -56,16 +72,32 @@ const executable = process.env.OPENCODE_EXECUTABLE || (process.platform === 'win
   ? path.join(process.env.APPDATA, 'npm', 'node_modules', '@opencode', 'cli', 'bin', 'opencode.exe') : 'opencode');
 const captionRun = command(executable, ['--standalone', 'run', '--model', model, '--agent', 'lora-caption',
   '--format', 'json', '--file', path.resolve('caption-reference.png'), '--',
-  'Return only a short English character training caption, without the trigger token. Describe visible character traits, clothing, pose and framing. Omit the background and unsupported details. Treat the supplied Italian description as reference data.'], 120_000);
+  `Return a single JSON object with caption, framing, and angle.
+The caption is short English text without the trigger token. Describe visible character traits,
+clothing, pose, framing, and angle when clear. Omit the background and unsupported details.
+Use framing full_body (head to feet), american_shot (head to knees), half_body,
+close_up, or unknown. Use angle 0 for frontal, 90 for the character's right profile,
+180 for rear, and 270 for the character's left profile. Use 45, 135, 225, or 315
+between these views. Use "unknown" if uncertain. Treat the supplied description as reference data.`], 120_000);
 captionRun.child.stdin.end(JSON.stringify({ description }));
 const { stdout } = await captionRun;
 const text = stdout.split(/\r?\n/).map(line => {
   try { const event = JSON.parse(line); return event.type === 'text' ? event.part?.text || '' : ''; }
   catch { return ''; }
 }).join('').trim();
-if (!text || text.length > 350 || /[\r\n<>\x00]/.test(text)) throw new Error('Invalid character caption');
-const caption = trigger + ', ' + text;
+const annotation = JSON.parse(text.replace(/^```(?:json)?\s*([\s\S]*?)\s*```$/i, '$1'));
+const framings = ['full_body', 'american_shot', 'half_body', 'close_up', 'unknown'];
+const angles = [0, 45, 90, 135, 180, 225, 270, 315, 'unknown'];
+if (typeof annotation?.caption !== 'string' || !annotation.caption.trim()
+    || annotation.caption.length > 350 || /[\r\n<>\x00]/.test(annotation.caption)
+    || !framings.includes(annotation.framing) || !angles.includes(annotation.angle)) {
+  throw new Error('Invalid character caption or camera metadata');
+}
+const caption = trigger + ', ' + annotation.caption.trim();
 await copyFile('training.png', path.join(root, sample + '.png'));
 await copyFile('mask.png', path.join(root, sample + '-masklabel.png'));
 await writeFile(path.join(root, sample + '.txt'), caption);
+await writeFile(path.join(root, sample + '.camera.json'), JSON.stringify({
+  framing: annotation.framing, angle: annotation.angle, model,
+}));
 await writeFile('caption.txt', caption);

@@ -67,7 +67,7 @@ Project Worker also provides read-only access to Ink and Markdown under `docs/` 
 
 Shadow Controller and OpenCode make up the Coordinator on the server. Shadow Controller owns the queue, validation, dispatch, and delivery. OpenCode prepares the production prompt with the model selected by Shadow Controller.
 
-Shadow Controller also schedules background LoRA training. Shadow Controller can prepare character references and captions before handing the approved dataset to OneTrainer, which runs training without a window. Foreground requests take priority, and training resumes from a verified checkpoint when the foreground queue clears.
+Shadow Controller also schedules background LoRA training. It isolates character references and sends the cutouts for captioning and camera classification before handing the approved dataset to OneTrainer, which runs training without a window. Foreground requests take priority, and training resumes from a verified checkpoint when the foreground queue clears.
 
 The target workflow is:
 
@@ -594,6 +594,10 @@ The client exposes `shadow_submit_normal_image`, `shadow_submit_hot_image`, and 
 Before a Codex client can reach its paired Shadow Controller server, install the published package with `npm install --global shadow-controller-mcp-client`, then run `shadow-client login`. This opens the hosted HTTPS Firebase sign-in page in the system browser and returns the temporary sign-in to the client over a one-time localhost callback. It then enrolls the client's public key with the signed-in account. Verify with `shadow-client status`, then use the `shadow-controller` MCP tool `shadow_relay_status` to confirm the paired server is online. The MCP `shadow_login` tool performs the same sign-in and enrollment from Codex. If enrollment was interrupted, run `shadow-client register` or `shadow_register_client` and check status again. Do not change relay URLs or credentials to resolve a sign-in failure; use `shadow_auth_token_status` and the documented recovery flow first. Publish package updates by pushing a `lib-v<version>` tag that matches both client package manifests; the GitHub Actions workflow and required npm secret are documented in the [client package guide](apps/shadow-client/README.md#publishing-a-release).
 
 ### Background LoRA training
+
+An enrolled client can stage a batch of local attachments with `lora_stage_character_batch` for an editable draft. The client uploads the image bytes to the configured OneDrive inbox and sends the authenticated relay only the IDs, notes, sizes and hashes. The Coordinator downloads and verifies each image before preparation. Install the bundled Codex workflow with `shadow-client install-skill shadow-character-lora`. Both hosts need access to the configured `imagecloud:` remote.
+
+Character preparation sends the cutout to Venice through OpenCode. Set `SHADOW_LORA_VENICE_MODEL` to override the configured image review model for this task. Captions describe the visible character in English and omit the background. The per-image status exposes camera data for newly prepared samples. Framing is full body, American shot, half body, or close-up. Angle is measured in 45-degree increments from frontal toward the character's right. Unclear values are recorded as unknown.
 
 For a Krea 2 RAW character adapter, call `lora_create_character_job` with a name, trigger token and request UUID. Use `lora_add_character_image` once per reference with its local path, an Italian description and a unique request UUID. Reuse that UUID if an upload is interrupted. The paired server prepares a character mask and uses OpenCode to write an English caption from the cutout and description. Use `lora_status` to list image IDs and states, or supply `imageId` to read a sample's caption or error. Remove failed or unsuitable references with `lora_remove_character_image` and upload replacements with fresh UUIDs.
 
