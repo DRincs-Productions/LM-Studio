@@ -149,6 +149,12 @@ impl JobStore {
                     if let Ok(progress) = fs::read_to_string(workspace.join("progress.json")) {
                         job["progress"] = serde_json::from_str(&progress)?;
                     }
+                    if let Some(root) = workspace.parent() {
+                        if let Ok(receipt) = fs::read_to_string(root.join("published-version.json"))
+                        {
+                            job["publishedVersion"] = serde_json::from_str(&receipt)?;
+                        }
+                    }
                 }
                 let images = config["images"].as_object().unwrap();
                 if message["imageId"].is_string() {

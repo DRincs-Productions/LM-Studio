@@ -84,6 +84,14 @@ def publish_epoch_adapters(workspace, attempt, trigger):
             if digest(local) != digest(downloaded):
                 raise RuntimeError("Published LoRA version failed SHA-256 verification")
             downloaded.unlink()
+        receipt = json.loads(manifest.read_text(encoding="utf-8"))
+        receipt["remoteDirectory"] = remote
+        temporary_receipt = attempt / "published-version.json"
+        with temporary_receipt.open("w", encoding="utf-8") as stream:
+            json.dump(receipt, stream)
+            stream.flush()
+            os.fsync(stream.fileno())
+        temporary_receipt.replace(workspace.parent / "published-version.json")
 
 
 def publish_checkpoint(source, checkpoints, progress, export_sha256):
