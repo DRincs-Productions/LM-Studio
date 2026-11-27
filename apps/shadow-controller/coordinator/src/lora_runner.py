@@ -204,6 +204,24 @@ def train(workspace, attempt):
         )
         if epoch_boundary:
             backup(train_progress)
+            candidates = workspace / "epoch-candidates"
+            candidates.mkdir(exist_ok=True)
+            candidate = candidates / f"epoch-{train_progress.epoch:06d}-step-{train_progress.global_step:010d}.safetensors"
+            if not candidate.exists():
+                temporary = attempt / f"candidate-{uuid.uuid4().hex}.safetensors"
+                trainer.model_saver.save(
+                    model=trainer.model,
+                    model_type=config.model_type,
+                    output_model_format=config.output_model_format,
+                    output_model_destination=str(temporary),
+                    dtype=config.output_dtype.torch_dtype(),
+                )
+                with safe_open(temporary, framework="pt") as adapter:
+                    if not adapter.keys():
+                        raise RuntimeError("OneTrainer exported an empty epoch adapter")
+                with temporary.open("r+b") as stream:
+                    os.fsync(stream.fileno())
+                temporary.replace(candidate)
             last_boundary = train_progress.epoch
             next_checkpoint = time.monotonic() + 300
             return
