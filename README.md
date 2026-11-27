@@ -595,7 +595,7 @@ Before a Codex client can reach its paired Shadow Controller server, install the
 
 ### Background LoRA training
 
-A stable character ID links later uploads to the same character. When the current session completes, submit the ready follow-up images to queue a new dataset revision. Each revision has a separate training workspace and cache. Continuation requires a verified full checkpoint at the parent revision's epoch boundary and matching training settings. The runner checks the restored progress and optimizer before training on the expanded dataset.
+A stable character ID links later uploads to the same character. For an attached and unpaused character, the scheduler queues a new dataset revision once the current session completes and all follow-up references are ready. Each revision has a separate training workspace and cache. Continuation requires a verified full checkpoint at the parent revision's epoch boundary and matching training settings. The runner checks the restored progress and optimizer before training on the expanded dataset.
 
 At each completed epoch, the runner saves a local adapter candidate. After training releases its model, the runner tests each candidate through local inference and requires a nonzero LoRA tensor count. It assigns verified candidates consecutive minor versions starting at `0.1`, copies the adapter and version manifest to the configured OneDrive output path, and downloads both files to verify their SHA-256. The local candidate and inference evidence remain available for diagnosis if publication fails.
 

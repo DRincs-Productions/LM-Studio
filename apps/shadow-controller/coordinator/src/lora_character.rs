@@ -504,6 +504,39 @@ pub(super) fn pending(
     .transpose()
 }
 
+pub(super) fn activate_ready_followup(store: &JobStore, data: &Path) -> Result<(), StoreError> {
+    let connection = store
+        .connection
+        .lock()
+        .map_err(|_| StoreError::LockPoisoned)?;
+    let candidate = connection.query_row(
+        "SELECT id,uid,client_id FROM lora_jobs
+         WHERE file_name='character' AND state='completed' AND attached_at IS NOT NULL AND paused=0
+           AND json_type(config,'$.characterId')='text'
+           AND json_array_length(config,'$.activeImages') < (SELECT count(*) FROM json_each(config,'$.images'))
+           AND NOT EXISTS (SELECT 1 FROM json_each(config,'$.images') WHERE json_extract(value,'$.state') != 'ready')
+           AND coalesce(detail,'') NOT LIKE 'Dataset continuation blocked:%'
+         ORDER BY rowid LIMIT 1",
+        [], |row| Ok((row.get::<_, String>(0)?,row.get::<_, String>(1)?,row.get::<_, String>(2)?))
+    ).optional()?;
+    if let Some((id, uid, client)) = candidate {
+        if let Err(error) = request(
+            &connection,
+            data,
+            &uid,
+            &client,
+            "character_submit",
+            &json!({"jobId":id}),
+        ) {
+            connection.execute(
+                "UPDATE lora_jobs SET detail=?2 WHERE id=?1",
+                params![id, format!("Dataset continuation blocked: {error}")],
+            )?;
+        }
+    }
+    Ok(())
+}
+
 pub(super) fn preparation_state(
     store: &JobStore,
     id: &str,

@@ -443,6 +443,7 @@ impl Scheduler {
                 }
             }
         }
+        character::activate_ready_followup(store, data)?;
         let candidate: Option<(String, String)> = store.connection.lock().map_err(|_| StoreError::LockPoisoned)?
             .query_row("SELECT id,config FROM lora_jobs WHERE state='waiting' AND attached_at IS NOT NULL AND paused=0 ORDER BY attached_at,rowid LIMIT 1",
                 [], |row| Ok((row.get(0)?, row.get(1)?))).optional().map_err(StoreError::from)?;
