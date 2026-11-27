@@ -58,7 +58,7 @@ def publish_epoch_adapters(workspace, attempt, trigger):
     for candidate in candidates:
         key = f"{workspace.name}/{candidate.name}"
         sha256 = digest(candidate)
-        records = sorted(versions.glob("*.json"), key=lambda path: int(path.stem.split(".")[1]))
+        records = sorted(versions.glob("*.json"), key=lambda path: tuple(map(int, path.stem.split("."))))
         existing = next((p for p in records if json.loads(p.read_text(encoding="utf-8"))["candidate"] == key), None)
         if existing:
             manifest = existing
@@ -66,8 +66,13 @@ def publish_epoch_adapters(workspace, attempt, trigger):
                 raise RuntimeError("A versioned adapter candidate changed")
         else:
             tensors = verify_adapter(candidate, attempt / candidate.stem, trigger)
-            minor = int(records[-1].stem.split(".")[1]) + 1 if records else 1
-            manifest = versions / f"0.{minor}.json"
+            major, minor = map(int, records[-1].stem.split(".")) if records else (0, 0)
+            promote = os.environ.get("SHADOW_LORA_MAJOR_VERSION") == "1" and not any(
+                json.loads(path.read_text(encoding="utf-8"))["candidate"].startswith(workspace.name + "/")
+                for path in records
+            )
+            version = f"{major + 1}.0" if promote else f"{major}.{minor + 1}"
+            manifest = versions / f"{version}.json"
             temporary = attempt / f"version-{uuid.uuid4().hex}.json"
             with temporary.open("x", encoding="utf-8") as stream:
                 json.dump({"version": manifest.stem, "candidate": key, "sha256": sha256,

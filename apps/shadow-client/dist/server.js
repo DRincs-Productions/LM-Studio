@@ -410,6 +410,10 @@ function createServer() {
     description: "Approve and freeze a prepared dataset for low priority LoRA training.",
     inputSchema: z.object({ jobId: z.string().uuid() })
   }, async (fields) => characterCall("submit", fields));
+  server.registerTool("lora_promote_character_version", {
+    description: "Mark the next dataset revision's first verified adapter as a new major version.",
+    inputSchema: z.object({ jobId: z.string().uuid() })
+  }, async (fields) => characterCall("promote", fields));
   server.registerTool("lora_import", {
     description: "Import a OneTrainer JSON export from the paired server's lora-inbox without starting it.",
     inputSchema: z.object({ fileName: z.string().min(1).max(120), requestId: z.string().uuid() })

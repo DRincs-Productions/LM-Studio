@@ -169,6 +169,30 @@ pub(super) fn request(
         "SELECT state,config FROM lora_jobs WHERE id=?1 AND uid=?2 AND client_id=?3 AND file_name='character'",
         params![id,uid,client], |r| Ok((r.get(0)?,r.get(1)?))).optional()?.ok_or(StoreError::JobNotFound)?;
     let mut config: Value = serde_json::from_str(&serialized)?;
+    if action == "character_promote" {
+        if state != "completed" || !config["characterId"].is_string() {
+            return Err(invalid(
+                "Major promotion requires a completed character revision",
+            ));
+        }
+        let revision = config["revision"]
+            .as_u64()
+            .ok_or(invalid("Missing character revision"))?;
+        if !data
+            .join("lora")
+            .join(&id)
+            .join("published-version.json")
+            .is_file()
+        {
+            return Err(invalid("No verified adapter has been published"));
+        }
+        config["majorRevision"] = json!(revision + 1);
+        connection.execute(
+            "UPDATE lora_jobs SET config=?2 WHERE id=?1",
+            params![id, config.to_string()],
+        )?;
+        return Ok(json!({"jobId":id,"majorRevision":revision+1}));
+    }
     let continuation =
         state == "completed" && config["characterId"].is_string() && action == "character_submit";
     let accepts_followup = config["characterId"].is_string()

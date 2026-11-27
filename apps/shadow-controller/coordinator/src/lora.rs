@@ -583,6 +583,14 @@ fn launch(data: &Path, id: &str, config: &str) -> io::Result<Attempt> {
         .arg(&path)
         .env("CUDA_VISIBLE_DEVICES", "0")
         .env(
+            "SHADOW_LORA_MAJOR_VERSION",
+            if parsed["majorRevision"].is_u64() && parsed["majorRevision"] == parsed["revision"] {
+                "1"
+            } else {
+                "0"
+            },
+        )
+        .env(
             "SHADOW_LORA_VERSION_TRIGGER",
             if parsed["revision"].is_u64() {
                 parsed["trigger"].as_str().unwrap_or("")
