@@ -3,7 +3,9 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
+import subprocess
 import sys
 import time
 import uuid
@@ -12,6 +14,40 @@ import uuid
 def digest(path):
     with path.open("rb") as stream:
         return hashlib.file_digest(stream, "sha256").hexdigest()
+
+
+def verify_adapter(candidate, evidence, trigger):
+    """Generate a local probe and require explicit adapter application evidence."""
+    from PIL import Image
+
+    worker = Path(os.environ.get("SHADOW_IMAGE_WORKER_ENTRY",
+                                Path.home() / ".lmstudio/image-worker/mcp/server.mjs"))
+    models = Path(os.environ.get("IMAGE_WORKER_ROOT", r"C:\AI\image-worker")) / "models"
+    shared = Path(os.environ.get("IMAGE_WORKER_SHARED_MODELS",
+                                Path.home() / "AppData/Local/Comfy-Desktop/ComfyUI-Shared/models"))
+    raw = Path(os.environ.get("SHADOW_LORA_INFERENCE_MODEL", models / "krea2_raw_fp8_scaled.safetensors"))
+    evidence.mkdir()
+    probe = evidence / "probe.png"
+    log = evidence / "inference.log"
+    with log.open("xb") as stream:
+        result = subprocess.run([
+            str(worker.parent.parent / "bin/sd-cli.exe"), "--diffusion-model", str(raw),
+            "--llm", str(shared / "text_encoders/qwen3vl_4b_fp8_scaled.safetensors"),
+            "--vae", str(shared / "vae/qwen_image_vae.safetensors"),
+            "--lora-model-dir", str(candidate.parent), "--lora-apply-mode", "at_runtime",
+            "-p", f"Portrait of {trigger} <lora:{candidate.stem}:1>",
+            "-W", "512", "-H", "512", "--steps", "12", "--cfg-scale", "1",
+            "--seed", "314159", "--backend", "cuda0", "-o", str(probe),
+        ], stdout=stream, stderr=subprocess.STDOUT, timeout=300)
+    matches = re.findall(r"\(\s*(\d+)\s*/\s*(\d+)\s*\)\s*LoRA tensors have been applied",
+                         log.read_text(encoding="utf-8", errors="replace"), re.IGNORECASE)
+    if result.returncode or not matches or any(int(applied) < 1 for applied, _ in matches):
+        raise RuntimeError("Inference did not verify adapter application")
+    with Image.open(probe, formats=["PNG"]) as image:
+        if image.size != (512, 512):
+            raise RuntimeError("Inference probe has unexpected dimensions")
+        image.verify()
+    return [{"applied": int(applied), "total": int(total)} for applied, total in matches]
 
 
 def publish_checkpoint(source, checkpoints, progress, export_sha256):
