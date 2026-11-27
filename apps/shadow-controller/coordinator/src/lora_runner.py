@@ -50,6 +50,42 @@ def verify_adapter(candidate, evidence, trigger):
     return [{"applied": int(applied), "total": int(total)} for applied, total in matches]
 
 
+def publish_epoch_adapters(workspace, attempt, trigger):
+    versions = workspace.parent / "versions"
+    versions.mkdir(exist_ok=True)
+    rclone = os.environ.get("SHADOW_RCLONE_EXECUTABLE", "rclone")
+    candidates = sorted((workspace / "epoch-candidates").glob("*.safetensors"))
+    for candidate in candidates:
+        key = f"{workspace.name}/{candidate.name}"
+        sha256 = digest(candidate)
+        records = sorted(versions.glob("*.json"), key=lambda path: int(path.stem.split(".")[1]))
+        existing = next((p for p in records if json.loads(p.read_text(encoding="utf-8"))["candidate"] == key), None)
+        if existing:
+            manifest = existing
+            if json.loads(manifest.read_text(encoding="utf-8"))["sha256"] != sha256:
+                raise RuntimeError("A versioned adapter candidate changed")
+        else:
+            tensors = verify_adapter(candidate, attempt / candidate.stem, trigger)
+            minor = int(records[-1].stem.split(".")[1]) + 1 if records else 1
+            manifest = versions / f"0.{minor}.json"
+            temporary = attempt / f"version-{uuid.uuid4().hex}.json"
+            with temporary.open("x", encoding="utf-8") as stream:
+                json.dump({"version": manifest.stem, "candidate": key, "sha256": sha256,
+                           "bytes": candidate.stat().st_size, "tensors": tensors}, stream)
+                stream.flush()
+                os.fsync(stream.fileno())
+            temporary.rename(manifest)
+        remote = f"imagecloud:LoRAWorker/final/{workspace.parent.name}/{manifest.stem}"
+        for local, name in ((candidate, "model.safetensors"), (manifest, "manifest.json")):
+            target = f"{remote}/{name}"
+            subprocess.run([rclone, "copyto", "--immutable", str(local), target], check=True, timeout=180)
+            downloaded = attempt / f"verify-{uuid.uuid4().hex}"
+            subprocess.run([rclone, "copyto", target, str(downloaded)], check=True, timeout=180)
+            if digest(local) != digest(downloaded):
+                raise RuntimeError("Published LoRA version failed SHA-256 verification")
+            downloaded.unlink()
+
+
 def publish_checkpoint(source, checkpoints, progress, export_sha256):
     required = ("meta.json", "optimizer/optimizer.pt", "lora/lora.safetensors")
     if not all((source / name).is_file() for name in required):
@@ -282,6 +318,17 @@ def train(workspace, attempt):
     if commands.get_stop_command():
         return 75
     trainer.end()
+    if not output.is_file() and checkpoint and epoch_backups:
+        saved = json.loads((checkpoint / "shadow-checkpoint.json").read_text(encoding="utf-8"))
+        if saved.get("epoch") == config.epochs and saved.get("epoch_step") == 0:
+            candidate = workspace / "epoch-candidates" / (
+                f"epoch-{saved['epoch']:06d}-step-{saved['global_step']:010d}.safetensors"
+            )
+            if candidate.is_file():
+                shutil.copyfile(candidate, output)
+    trigger = os.environ.get("SHADOW_LORA_VERSION_TRIGGER")
+    if trigger:
+        publish_epoch_adapters(workspace, attempt, trigger)
     if not output.is_file():
         raise RuntimeError("OneTrainer completed without writing its final adapter")
     with safe_open(output, framework="pt") as model:
