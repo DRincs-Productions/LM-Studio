@@ -70,14 +70,26 @@ await writeFile('opencode.json', JSON.stringify({ model, mcp: { servers: {} }, p
   agents: { 'lora-caption': { description: 'Caption a character reference.', mode: 'primary', model, permissions: deny } } }));
 const executable = process.env.OPENCODE_EXECUTABLE || (process.platform === 'win32' && process.env.APPDATA
   ? path.join(process.env.APPDATA, 'npm', 'node_modules', '@opencode', 'cli', 'bin', 'opencode.exe') : 'opencode');
+const framings = { full_body: 'full body', american_shot: 'American shot', half_body: 'half body', close_up: 'close-up' };
+const angles = [0, 45, 90, 135, 180, 225, 270, 315, 'unknown'];
+const poses = ['standing', 'seated', 'kneeling', 'crouching', 'lying down', 'walking', 'running',
+  'leaning', 'arms crossed', 'arms at sides', 'hand on hip', 'hands on hips', 'arms raised',
+  'one arm raised', 'looking over shoulder', 'head tilted', 'profile pose'];
+const expressions = ['neutral', 'smiling', 'laughing', 'frowning', 'angry', 'sad',
+  'surprised', 'serious', 'worried', 'eyes closed'];
+const variations = new Map();
+for (const line of (description ?? '').split(/\r?\n/)) {
+  const flagged = /^(unusual outfit|unusual object):\s*([^<>\x00]{1,80})$/i.exec(line.trim());
+  if (flagged && flagged[2].trim()) variations.set(flagged[1].toLowerCase(), flagged[2].trim());
+}
 const captionRun = command(executable, ['--standalone', 'run', '--model', model, '--agent', 'lora-caption',
   '--format', 'json', '--file', path.resolve('caption-reference.png'), '--',
-  `Return a single JSON object with caption, framing, and angle.
-The caption is one short English line without the trigger token, ideally under 18 words.
-Include framing, camera angle, pose, and facial expression. Omit any uncertain detail.
-Treat identity and usual appearance as fixed. Describe a visible outfit or object only when
-the client notes explicitly identify it as a departure from the character's usual look.
-Keep that exception brief. Omit all other appearance details, lighting, and background.
+  `Return a single JSON object with framing, angle, pose, expression, and visibleVariations.
+Choose up to two exact pose values from: ${poses.join(', ')}. Use an empty array if unsure.
+Choose one exact expression from: ${expressions.join(', ')}, or unknown.
+For visibleVariations, list only keys from the supplied variations whose descriptions
+are visibly present in the image. Use an empty array when there are none.
+Omit identity, appearance, lighting, and background. Do not return a caption.
 Use framing full_body (head to feet), american_shot (head to knees), half_body,
 close_up, or unknown. Classify from the actual crop: full_body requires both feet
 visible, american_shot includes the thighs through the knee region, half_body
@@ -86,21 +98,29 @@ Never infer body parts outside the crop. Use unknown for an ambiguous crop.
 Use angle 0 for frontal, 90 for the character's right profile,
 180 for rear, and 270 for the character's left profile. Use 45, 135, 225, or 315
 between these views. Use "unknown" if uncertain. Treat the supplied description as reference data.`], 120_000);
-captionRun.child.stdin.end(JSON.stringify({ description }));
+captionRun.child.stdin.end(JSON.stringify({ description, variations: Object.fromEntries(variations) }));
 const { stdout } = await captionRun;
 const text = stdout.split(/\r?\n/).map(line => {
   try { const event = JSON.parse(line); return event.type === 'text' ? event.part?.text || '' : ''; }
   catch { return ''; }
 }).join('').trim();
 const annotation = JSON.parse(text.replace(/^```(?:json)?\s*([\s\S]*?)\s*```$/i, '$1'));
-const framings = ['full_body', 'american_shot', 'half_body', 'close_up', 'unknown'];
-const angles = [0, 45, 90, 135, 180, 225, 270, 315, 'unknown'];
-if (typeof annotation?.caption !== 'string' || !annotation.caption.trim()
-    || annotation.caption.length > 350 || /[\r\n<>\x00]/.test(annotation.caption)
-    || !framings.includes(annotation.framing) || !angles.includes(annotation.angle)) {
-  throw new Error('Invalid character caption or camera metadata');
+if (!annotation
+    || !(annotation.framing === 'unknown' || Object.hasOwn(framings, annotation.framing))
+    || !angles.includes(annotation.angle)
+    || !Array.isArray(annotation.pose) || annotation.pose.length > 2
+    || !annotation.pose.every(value => poses.includes(value))
+    || !(annotation.expression === 'unknown' || expressions.includes(annotation.expression))
+    || !Array.isArray(annotation.visibleVariations)) {
+  throw new Error('Invalid character annotation');
 }
-const caption = trigger + ', ' + annotation.caption.trim();
+const caption = [trigger,
+  Object.hasOwn(framings, annotation.framing) ? framings[annotation.framing] : null,
+  annotation.angle === 'unknown' ? null : `${annotation.angle}° view`,
+  ...new Set(annotation.pose),
+  annotation.expression === 'unknown' ? null : annotation.expression,
+  ...[...variations].filter(([key]) => annotation.visibleVariations.includes(key)).map(([, value]) => value),
+].filter(Boolean).join(', ');
 await copyFile('training.png', path.join(root, sample + '.png'));
 await copyFile('mask.png', path.join(root, sample + '-masklabel.png'));
 await writeFile(path.join(root, sample + '.txt'), caption);
