@@ -445,7 +445,11 @@ impl Scheduler {
                         store,
                         &attempt.id,
                         "pausing",
-                        "Saving training progress and releasing resources",
+                        if pressure {
+                            "Pausing because available RAM or disk space is below the training limit"
+                        } else {
+                            "Saving training progress and releasing resources"
+                        },
                     )?;
                 }
             }
