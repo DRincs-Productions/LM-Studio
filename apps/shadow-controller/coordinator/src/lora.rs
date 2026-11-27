@@ -737,6 +737,7 @@ fn launch_preparation(
         .join(id)
         .join("samples")
         .join(sample);
+    fs::create_dir_all(&root)?;
     let path = root.join(Uuid::new_v4().to_string());
     fs::create_dir(&path)?;
     fs::write(
