@@ -70,7 +70,11 @@ await writeFile('opencode.json', JSON.stringify({ model, mcp: { servers: {} }, p
   agents: { 'lora-caption': { description: 'Caption a character reference.', mode: 'primary', model, permissions: deny } } }));
 const executable = process.env.OPENCODE_EXECUTABLE || (process.platform === 'win32' && process.env.APPDATA
   ? path.join(process.env.APPDATA, 'npm', 'node_modules', '@opencode', 'cli', 'bin', 'opencode.exe') : 'opencode');
-const framings = { full_body: 'full body', american_shot: 'American shot', half_body: 'half body', close_up: 'close-up' };
+const framings = {
+  full_body: 'full body', american_shot: 'American shot', half_body: 'half body',
+  close_up: 'close-up', hands_close_up: 'hands close-up', eyes_close_up: 'eyes close-up',
+  feet_close_up: 'feet close-up', detail: 'detail shot',
+};
 const angles = [0, 45, 90, 135, 180, 225, 270, 315, 'unknown'];
 const poses = ['standing', 'seated', 'kneeling', 'crouching', 'lying down', 'walking', 'running',
   'leaning', 'arms crossed', 'arms at sides', 'hand on hip', 'hands on hips', 'arms raised',
@@ -79,7 +83,7 @@ const expressions = ['neutral', 'smiling', 'laughing', 'frowning', 'angry', 'sad
   'surprised', 'serious', 'worried', 'eyes closed'];
 const variations = new Map();
 for (const line of (description ?? '').split(/\r?\n/)) {
-  const flagged = /^(unusual outfit|unusual object):\s*([^<>\x00]{1,80})$/i.exec(line.trim());
+  const flagged = /^(unusual outfit|unusual object|unusual feature):\s*([^<>\x00]{1,80})$/i.exec(line.trim());
   if (flagged && flagged[2].trim()) variations.set(flagged[1].toLowerCase(), flagged[2].trim());
 }
 const captionRun = command(executable, ['--standalone', 'run', '--model', model, '--agent', 'lora-caption',
@@ -91,7 +95,10 @@ For visibleVariations, list only keys from the supplied variations whose descrip
 are visibly present in the image. Use an empty array when there are none.
 Omit identity, appearance, lighting, and background. Do not return a caption.
 Use framing full_body (head to feet), american_shot (head to knees), half_body,
-close_up, or unknown. Classify from the actual crop: full_body requires both feet
+close_up, hands_close_up, eyes_close_up, feet_close_up, detail, or unknown.
+Use the corresponding detail framing when only that feature is the subject.
+If the face or body orientation is outside the crop, return unknown for expression or angle.
+Classify from the actual crop: full_body requires both feet
 visible, american_shot includes the thighs through the knee region, half_body
 ends around the waist or hips, and close_up emphasizes the head and shoulders.
 Never infer body parts outside the crop. Use unknown for an ambiguous crop.
