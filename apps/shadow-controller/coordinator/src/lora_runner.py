@@ -225,7 +225,8 @@ def train(workspace, attempt):
         "output_model_destination": str(output),
         "concept_file_name": str(concepts_path),
         "sample_definition_file_name": str(samples_path),
-        "output_model_format": "SAFETENSORS",
+        "output_model_format": "COMFY_LORA" if config.model_type.name == "KREA_2"
+        else config.output_model_format.name,
         "save_every": 1,
         "backup_after": 1,
         "backup_after_unit": "STEP",
