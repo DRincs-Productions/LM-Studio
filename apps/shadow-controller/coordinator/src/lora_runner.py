@@ -1,5 +1,6 @@
 """Run the local OneTrainer installation under Shadow Controller."""
 import hashlib
+import gc
 import json
 import os
 from pathlib import Path
@@ -248,6 +249,17 @@ def train(workspace, attempt):
     if os.environ.get("SHADOW_LORA_EPOCH_BACKUPS") == "1":
         # Character datasets and settings are frozen within each workspace.
         config.clear_cache_before_training = False
+        if checkpoint:
+            saved = json.loads((checkpoint / "shadow-checkpoint.json").read_text(encoding="utf-8"))
+            if saved.get("epoch") == config.epochs and saved.get("epoch_step") == 0:
+                candidate = workspace / "epoch-candidates" / (
+                    f"epoch-{saved['epoch']:06d}-step-{saved['global_step']:010d}.safetensors"
+                )
+                if candidate.is_file():
+                    if (attempt / "pause").exists():
+                        return 75
+                    shutil.copyfile(candidate, output)
+                    return finish_export(workspace, attempt, output)
     backup_dir = attempt / "backup"
     backup_dir.mkdir(exist_ok=True)
     if checkpoint:
@@ -359,11 +371,20 @@ def train(workspace, attempt):
             )
             if candidate.is_file():
                 shutil.copyfile(candidate, output)
+    del save_backup, trainer, callbacks, commands
+    gc.collect()
+    torch.cuda.empty_cache()
+    return finish_export(workspace, attempt, output)
+
+
+def finish_export(workspace, attempt, output):
+    from safetensors import safe_open
+
+    if not output.is_file():
+        raise RuntimeError("OneTrainer completed without writing its final adapter")
     trigger = os.environ.get("SHADOW_LORA_VERSION_TRIGGER")
     if trigger:
         publish_epoch_adapters(workspace, attempt, trigger)
-    if not output.is_file():
-        raise RuntimeError("OneTrainer completed without writing its final adapter")
     with safe_open(output, framework="pt") as model:
         if not model.keys():
             raise RuntimeError("OneTrainer produced an empty adapter")
