@@ -375,7 +375,14 @@ impl Scheduler {
                 } else if status.code() == Some(75) {
                     (
                         "waiting",
-                        format!("Paused. Attempt log: {}", attempt.path.display()),
+                        if attempt.path.join("resource-pause").is_file() {
+                            format!(
+                                "Paused on low RAM or disk space. Attempt log: {}",
+                                attempt.path.display()
+                            )
+                        } else {
+                            format!("Paused. Attempt log: {}", attempt.path.display())
+                        },
                     )
                 } else {
                     (
@@ -439,6 +446,15 @@ impl Scheduler {
                     && probe_due(&mut self.next_probe)
                     && !resources_available(data, false);
                 if foreground || stopping || !eligible || pressure {
+                    if pressure {
+                        store
+                            .connection
+                            .lock()
+                            .map_err(|_| StoreError::LockPoisoned)?
+                            .execute("UPDATE lora_jobs SET paused=1 WHERE id=?1", [&attempt.id])
+                            .map_err(StoreError::from)?;
+                        fs::write(attempt.path.join("resource-pause"), [])?;
+                    }
                     fs::write(attempt.path.join("pause"), [])?;
                     attempt.deadline = Some(Instant::now() + Duration::from_secs(60));
                     set_state(
