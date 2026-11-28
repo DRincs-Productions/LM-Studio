@@ -244,6 +244,9 @@ def train(workspace, attempt):
         "multi_gpu": False,
     }, migrate=False)
     checkpoint = find_checkpoint(checkpoints, digest(workspace / "export.json"))
+    if os.environ.get("SHADOW_LORA_EPOCH_BACKUPS") == "1":
+        # Character datasets and settings are frozen within each workspace.
+        config.clear_cache_before_training = False
     backup_dir = attempt / "backup"
     backup_dir.mkdir(exist_ok=True)
     if checkpoint:
